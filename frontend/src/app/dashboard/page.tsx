@@ -9,7 +9,7 @@ import { EcuadorMap } from '@/components/ui/EcuadorMap';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
-import type { Project, Provider } from '@/types';
+import type { Project } from '@/types';
 
 interface DashboardProjectStat {
   id: string;
@@ -88,16 +88,21 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-xs text-ink-secondary">
-            Visión consolidada de proyectos, presupuestos y deuda con proveedores
+            Visión consolidada de proyectos y presupuestos
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + Nuevo proyecto
-        </button>
+        <div className="flex items-center gap-2">
+          <Link href="/proveedores" className="btn-secondary text-xs">
+            Ver proveedores
+          </Link>
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + Nuevo proyecto
+          </button>
+        </div>
       </div>
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
@@ -109,10 +114,10 @@ export default function DashboardPage() {
 
       {stats && (
         <>
-          {/* KPIs */}
-          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {/* KPIs compactos */}
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi
-              label="Proyectos activos"
+              label="Activos"
               value={String(stats.totals.activeCount)}
               hint={`${stats.projects.length} en total`}
               icon="🏗️"
@@ -120,7 +125,6 @@ export default function DashboardPage() {
             <Kpi
               label="Total contratado"
               value={formatCurrency(stats.totals.contractAmount)}
-              hint="Suma de contratos"
               icon="📑"
               tone="brand"
             />
@@ -135,7 +139,7 @@ export default function DashboardPage() {
               icon="💸"
             />
             <Kpi
-              label="Por pagar a proveedores"
+              label="Por pagar"
               value={formatCurrency(stats.totals.pendingOrders)}
               hint="Órdenes pendientes"
               icon="⏳"
@@ -143,33 +147,48 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Mapa Ecuador */}
-          <div className="mb-6">
-            <EcuadorMap projects={stats.projects as unknown as Project[]} />
+          {/* Layout principal: mapa (izquierda) + lista de proyectos (derecha) */}
+          <div className="grid gap-4 lg:grid-cols-[1.45fr_1fr]">
+            {/* Mapa */}
+            <div className="min-w-0">
+              <EcuadorMap
+                projects={stats.projects as unknown as Project[]}
+                compact
+              />
+            </div>
+
+            {/* Lista de proyectos */}
+            <div className="flex min-h-0 flex-col rounded-lg border border-surface-border bg-surface shadow-soft">
+              <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+                <h2 className="text-sm font-semibold">
+                  Proyectos ({stats.projects.length})
+                </h2>
+                <div className="text-[10px] uppercase tracking-wider text-ink-tertiary">
+                  Click para abrir
+                </div>
+              </div>
+              <div
+                className="flex-1 space-y-2 overflow-y-auto p-3"
+                style={{ maxHeight: '560px' }}
+              >
+                {stats.projects.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/40 p-6 text-center text-sm text-ink-secondary">
+                    Aún no hay proyectos. Crea el primero con{' '}
+                    <strong>+ Nuevo proyecto</strong>.
+                  </div>
+                ) : (
+                  stats.projects.map((p) => (
+                    <ProjectMiniCard
+                      key={p.id}
+                      project={p}
+                      onEdit={() => setEditingId(p.id)}
+                      onDelete={() => handleDelete(p.id, p.name)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
           </div>
-
-          {/* Avance por proyecto */}
-          <section className="mb-6">
-            <h2 className="mb-3 text-sm font-semibold">Avance por proyecto</h2>
-            {stats.projects.length === 0 ? (
-              <div className="card text-sm text-ink-secondary">
-                No hay proyectos todavía. Crea el primero para verlo aquí.
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {stats.projects.map((p) => (
-                  <ProjectProgressCard
-                    key={p.id}
-                    project={p}
-                    onEdit={() => setEditingId(p.id)}
-                    onDelete={() => handleDelete(p.id, p.name)}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <DebtSection />
         </>
       )}
 
@@ -215,13 +234,13 @@ function Kpi({
         <div className="text-xs text-ink-secondary">{label}</div>
         {icon && <div className="text-base opacity-70">{icon}</div>}
       </div>
-      <div className={`mt-1 text-2xl font-semibold tracking-tight ${valueColour}`}>{value}</div>
-      {hint && <div className="mt-0.5 text-[11px] text-ink-tertiary">{hint}</div>}
+      <div className={`mt-1 text-xl font-semibold tracking-tight ${valueColour}`}>{value}</div>
+      {hint && <div className="mt-0.5 text-[10px] text-ink-tertiary">{hint}</div>}
     </div>
   );
 }
 
-function ProjectProgressCard({
+function ProjectMiniCard({
   project,
   onEdit,
   onDelete,
@@ -232,19 +251,18 @@ function ProjectProgressCard({
 }) {
   const pctBudget = Math.round(project.progressBudget * 100);
   const isOver = project.budgeted > 0 && project.spent > project.budgeted;
-  const pctContract = Math.round(project.progressContract * 100);
 
   return (
-    <div className="card relative">
-      <div className="absolute right-2 top-2 flex gap-0.5">
+    <div className="group relative rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
+      <div className="absolute right-1.5 top-1.5 hidden gap-0.5 group-hover:flex">
         <button
           type="button"
           onClick={(e) => {
             e.preventDefault();
             onEdit();
           }}
-          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
-          title="Editar proyecto"
+          className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
+          title="Editar"
         >
           ✏️
         </button>
@@ -254,47 +272,48 @@ function ProjectProgressCard({
             e.preventDefault();
             onDelete();
           }}
-          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-          title="Eliminar proyecto"
+          className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+          title="Eliminar"
         >
           🗑️
         </button>
       </div>
-      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className="block">
-        <div className="flex items-start justify-between gap-3 pr-16">
+
+      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className="block pr-12">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">{project.name}</div>
-            <div className="text-xs text-ink-secondary">
+            <div className="truncate text-sm font-semibold text-ink-primary">
+              {project.name}
+            </div>
+            <div className="truncate text-[11px] text-ink-secondary">
               {project.code}
               {project.city ? ` · 📍 ${project.city}` : ''}
             </div>
           </div>
-          <span className={STATUS_CLASS[project.status]}>{STATUS_LABEL[project.status]}</span>
+          <span className={`${STATUS_CLASS[project.status]} shrink-0`}>
+            {STATUS_LABEL[project.status]}
+          </span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
-          <Stat label="Contratado" value={formatCurrency(project.contractAmount)} />
-          <Stat label="Ejecutado" value={formatCurrency(project.spent)} />
-          <Stat
-            label="Pendiente pago"
-            value={formatCurrency(project.pending)}
-            tone={project.pending > 0 ? 'danger' : 'default'}
-          />
+        <div className="mt-2 flex items-end justify-between text-[11px]">
+          <div>
+            <span className="text-ink-tertiary">Contratado</span>{' '}
+            <span className="font-medium">{formatCurrency(project.contractAmount)}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-ink-tertiary">Ejecutado</span>{' '}
+            <span className="font-medium">{formatCurrency(project.spent)}</span>
+          </div>
         </div>
 
-        <div className="mt-4">
-          <div className="mb-1 flex justify-between text-[11px]">
-            <span className="text-ink-secondary">
-              Ejecución vs presupuesto
-              {project.budgeted === 0 && (
-                <span className="ml-1 text-ink-tertiary">(sin rubros)</span>
-              )}
-            </span>
+        <div className="mt-2">
+          <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
+            <span>Avance vs presupuesto</span>
             <span className={`font-semibold ${isOver ? 'text-danger' : 'text-ink-primary'}`}>
-              {pctBudget}%
+              {project.budgeted > 0 ? `${pctBudget}%` : '—'}
             </span>
           </div>
-          <div className="relative h-2 overflow-hidden rounded-full bg-surface-muted">
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
             <div
               className={`h-full transition-all ${
                 isOver
@@ -308,91 +327,21 @@ function ProjectProgressCard({
           </div>
         </div>
 
-        <div className="mt-3">
-          <div className="mb-1 flex justify-between text-[11px]">
-            <span className="text-ink-secondary">Ejecución vs contrato</span>
-            <span className="font-semibold">{pctContract}%</span>
+        {project.pending > 0 && (
+          <div className="mt-2 flex items-center justify-between rounded-md bg-danger-soft px-2 py-1 text-[10px]">
+            <span className="text-danger">Pendiente pago</span>
+            <span className="font-semibold text-danger">
+              {formatCurrency(project.pending)}
+            </span>
           </div>
-          <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
-            <div
-              className="h-full bg-success transition-all"
-              style={{ width: `${Math.min(100, pctContract)}%` }}
-            />
-          </div>
-        </div>
+        )}
 
         {(project.startDate || project.endDate) && (
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-secondary">
-            <span>📅 {formatDate(project.startDate)} — {formatDate(project.endDate)}</span>
+          <div className="mt-1 text-[10px] text-ink-tertiary">
+            📅 {formatDate(project.startDate)} — {formatDate(project.endDate)}
           </div>
         )}
       </Link>
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  tone?: 'default' | 'danger';
-}) {
-  return (
-    <div className="rounded-md bg-surface-muted/60 p-2">
-      <div className="text-[10px] uppercase tracking-wider text-ink-secondary">{label}</div>
-      <div
-        className={`mt-0.5 font-semibold ${tone === 'danger' ? 'text-danger' : 'text-ink-primary'}`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function DebtSection() {
-  const { data } = useSWR<Provider[]>('/providers', apiGet);
-  const withDebt = data?.filter((p) => Number(p.totalDebt ?? 0) > 0) ?? [];
-  if (!data || withDebt.length === 0) return null;
-
-  return (
-    <section className="mt-8">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Proveedores con deuda</h2>
-        <Link href="/proveedores" className="text-xs text-brand hover:underline">
-          Ver todos →
-        </Link>
-      </div>
-      <div className="card overflow-x-auto">
-        <table className="table-default">
-          <thead>
-            <tr>
-              <th>Proveedor</th>
-              <th>Servicio</th>
-              <th className="text-right">Deuda total</th>
-              <th>En cuántos proyectos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {withDebt.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <Link href={`/proveedores/${p.id}`} className="font-medium text-brand hover:underline">
-                    {p.name}
-                  </Link>
-                </td>
-                <td className="text-xs">{p.service || '—'}</td>
-                <td className="text-right font-medium text-danger">
-                  {formatCurrency(Number(p.totalDebt ?? 0))}
-                </td>
-                <td className="text-xs">{Number(p.projectsWithDebtCount ?? 0)} proyecto(s)</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
   );
 }

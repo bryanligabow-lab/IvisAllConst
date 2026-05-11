@@ -13,6 +13,8 @@ import type { Project } from '@/types';
 
 interface Props {
   projects: Project[];
+  /** If true, hides the right-side city list to leave only the map. */
+  compact?: boolean;
 }
 
 interface CityGroup {
@@ -23,7 +25,7 @@ interface CityGroup {
   totalContract: number;
 }
 
-export function EcuadorMap({ projects }: Props) {
+export function EcuadorMap({ projects, compact = false }: Props) {
   const [hover, setHover] = useState<string | null>(null);
 
   const cities = useMemo<CityGroup[]>(() => {
@@ -66,7 +68,7 @@ export function EcuadorMap({ projects }: Props) {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
+      <div className={compact ? '' : 'grid gap-4 md:grid-cols-[1.4fr_1fr]'}>
         {/* MAPA */}
         <div
           className="relative overflow-hidden rounded-2xl border border-surface-border"
@@ -277,7 +279,8 @@ export function EcuadorMap({ projects }: Props) {
           </svg>
         </div>
 
-        {/* LISTA LATERAL */}
+        {/* LISTA LATERAL — solo si no es compact */}
+        {!compact && (
         <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
           {cities.length === 0 ? (
             <div className="rounded-lg border border-dashed border-surface-border bg-surface-muted/40 p-6 text-center text-xs text-ink-secondary">
@@ -328,6 +331,7 @@ export function EcuadorMap({ projects }: Props) {
             ))
           )}
         </div>
+        )}
       </div>
     </div>
   );
