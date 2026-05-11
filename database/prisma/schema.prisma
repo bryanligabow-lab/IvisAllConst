@@ -38,6 +38,8 @@ model User {
   createdPlanillas     Planilla[]               @relation("PlanillaCreatedBy")
   createdPaymentOrders PaymentOrder[]           @relation("PaymentOrderCreatedBy")
   createdProviders     Provider[]               @relation("ProviderCreatedBy")
+  createdEmployees     Employee[]               @relation("EmployeeCreatedBy")
+  createdProformas     Proforma[]               @relation("ProformaCreatedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -204,6 +206,8 @@ model Project {
   gastos        Gasto[]
   planillas     Planilla[]
   paymentOrders PaymentOrder[]
+  employees     Employee[]
+  proformas     Proforma[]
 
   @@index([code])
   @@index([status])
@@ -241,31 +245,36 @@ model Rubro {
 }
 
 model Gasto {
-  id              String    @id @default(uuid())
-  projectId       String    @map("project_id")
-  rubroId         String    @map("rubro_id")
-  description     String
-  invoiceNumber   String?   @map("invoice_number")
-  amount          Float
-  gastoDate       DateTime  @map("gasto_date")
-  attachmentUrl   String?   @map("attachment_url")
-  paymentOrderId  String?   @map("payment_order_id")
-  providerId      String?   @map("provider_id")
-  createdBy       String    @map("created_by")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  id             String    @id @default(uuid())
+  projectId      String    @map("project_id")
+  rubroId        String    @map("rubro_id")
+  description    String
+  invoiceNumber  String?   @map("invoice_number")
+  amount         Float
+  gastoDate      DateTime  @map("gasto_date")
+  attachmentUrl  String?   @map("attachment_url")
+  paymentOrderId String?   @map("payment_order_id")
+  providerId     String?   @map("provider_id")
+  employeeId     String?   @map("employee_id")
+  kind           String    @default("EXPENSE") // EXPENSE | PAYROLL | THIRD_PARTY
+  paymentMethod  String?   @map("payment_method")
+  createdBy      String    @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
 
-  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rubro         Rubro         @relation(fields: [rubroId], references: [id])
-  creator       User          @relation("GastoCreatedBy", fields: [createdBy], references: [id])
-  paymentOrder  PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
-  provider      Provider?     @relation(fields: [providerId], references: [id])
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro        Rubro         @relation(fields: [rubroId], references: [id])
+  creator      User          @relation("GastoCreatedBy", fields: [createdBy], references: [id])
+  paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+  provider     Provider?     @relation(fields: [providerId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
 
   @@index([projectId, gastoDate])
   @@index([rubroId])
   @@index([paymentOrderId])
   @@index([providerId])
+  @@index([employeeId])
   @@index([deletedAt])
   @@map("gastos")
 }
@@ -368,4 +377,83 @@ model Provider {
   @@index([name])
   @@index([deletedAt])
   @@map("providers")
+}
+
+model Employee {
+  id            String    @id @default(uuid())
+  fullName      String    @map("full_name")
+  cedula        String?   @unique
+  position      String?
+  monthlySalary Float     @default(0) @map("monthly_salary")
+  email         String?
+  phone         String?
+  hireDate      DateTime? @map("hire_date")
+  endDate       DateTime? @map("end_date")
+  status        String    @default("ACTIVE") // ACTIVE | INACTIVE
+  projectId     String?   @map("project_id")
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  project Project? @relation(fields: [projectId], references: [id])
+  creator User     @relation("EmployeeCreatedBy", fields: [createdBy], references: [id])
+  gastos  Gasto[]
+
+  @@index([fullName])
+  @@index([projectId])
+  @@index([deletedAt])
+  @@map("employees")
+}
+
+model Proforma {
+  id                String    @id @default(uuid())
+  number            String    @unique
+  date              DateTime
+  clientName        String    @map("client_name")
+  clientRuc         String?   @map("client_ruc")
+  clientAddress     String?   @map("client_address")
+  clientResponsible String?   @map("client_responsible")
+  projectLabel      String?   @map("project_label")
+  projectId         String?   @map("project_id")
+  ivaPercent        Float     @default(15) @map("iva_percent")
+  creditTerm        String?   @map("credit_term")
+  paymentTerms      String?   @map("payment_terms")
+  validity          String?
+  topClients        String?   @map("top_clients") // newline-separated
+  signerName        String?   @map("signer_name")
+  signerTitle       String?   @map("signer_title")
+  notes             String?
+  status            String    @default("DRAFT") // DRAFT | SENT | APPROVED | REJECTED
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  project Project?       @relation(fields: [projectId], references: [id])
+  creator User           @relation("ProformaCreatedBy", fields: [createdBy], references: [id])
+  items   ProformaItem[]
+
+  @@index([number])
+  @@index([date])
+  @@index([projectId])
+  @@index([deletedAt])
+  @@map("proformas")
+}
+
+model ProformaItem {
+  id          String   @id @default(uuid())
+  proformaId  String   @map("proforma_id")
+  orderIndex  Int      @default(0) @map("order_index")
+  quantity    Float
+  unit        String
+  description String
+  unitPrice   Float    @map("unit_price")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  proforma Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+
+  @@index([proformaId])
+  @@map("proforma_items")
 }

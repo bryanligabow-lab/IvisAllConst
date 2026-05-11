@@ -8,6 +8,7 @@ import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderModal';
 import { PaymentDialog } from '@/components/forms/PaymentDialog';
 import { PaymentTypePicker, type PaymentType } from '@/components/forms/PaymentTypePicker';
+import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
@@ -36,6 +37,7 @@ export default function OrdenesPage() {
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [showPayroll, setShowPayroll] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [payingOrder, setPayingOrder] = useState<PaymentOrder | null>(null);
 
@@ -43,8 +45,10 @@ export default function OrdenesPage() {
     setShowTypePicker(false);
     if (type === 'PROVIDER') {
       setShowCreate(true);
+    } else if (type === 'PAYROLL') {
+      setShowPayroll(true);
     }
-    // THIRD_PARTY y PAYROLL están deshabilitados en el picker (Tanda 2)
+    // THIRD_PARTY queda pendiente
   }
 
   async function handleDelete(order: PaymentOrder) {
@@ -92,6 +96,16 @@ export default function OrdenesPage() {
         open={showTypePicker}
         onClose={() => setShowTypePicker(false)}
         onChoose={handleTypeChosen}
+      />
+
+      <PayrollPaymentModal
+        open={showPayroll}
+        onClose={() => setShowPayroll(false)}
+        projectId={params.id}
+        onCreated={() => {
+          mutate();
+          mutateSummary();
+        }}
       />
 
       {summary && (

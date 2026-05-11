@@ -12,6 +12,8 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 const NAV_LINKS = [
   { href: ROUTES.DASHBOARD, label: 'Proyectos' },
   { href: ROUTES.PROVIDERS, label: 'Proveedores' },
+  { href: ROUTES.NOMINA, label: 'Nómina' },
+  { href: ROUTES.PROFORMAS, label: 'Proformas' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

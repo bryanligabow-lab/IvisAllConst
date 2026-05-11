@@ -30,6 +30,15 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   // providers
   { name: 'providers.read', resource: 'providers', action: 'read', description: 'Ver proveedores' },
   { name: 'providers.write', resource: 'providers', action: 'write', description: 'Crear/editar/eliminar proveedores' },
+  // employees + payroll
+  { name: 'employees.read', resource: 'employees', action: 'read', description: 'Ver empleados' },
+  { name: 'employees.write', resource: 'employees', action: 'write', description: 'Crear/editar/eliminar empleados' },
+  { name: 'payroll.read', resource: 'payroll', action: 'read', description: 'Ver pagos de nómina' },
+  { name: 'payroll.write', resource: 'payroll', action: 'write', description: 'Registrar pagos de nómina' },
+  // proformas
+  { name: 'proformas.read', resource: 'proformas', action: 'read', description: 'Ver proformas' },
+  { name: 'proformas.write', resource: 'proformas', action: 'write', description: 'Crear/editar/eliminar proformas' },
+  { name: 'proformas.export', resource: 'proformas', action: 'export', description: 'Exportar proformas (Excel/PDF)' },
 ];
 
 async function main() {
@@ -106,6 +115,13 @@ async function main() {
     'payment_orders.write',
     'providers.read',
     'providers.write',
+    'employees.read',
+    'employees.write',
+    'payroll.read',
+    'payroll.write',
+    'proformas.read',
+    'proformas.write',
+    'proformas.export',
   ];
   for (const p of allPermissions.filter((x) => userPermNames.includes(x.name))) {
     await prisma.rolePermission.upsert({

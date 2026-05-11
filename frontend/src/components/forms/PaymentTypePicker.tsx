@@ -30,7 +30,7 @@ const OPTIONS = [
     title: 'Pago de nómina',
     description: 'Sueldos, anticipos o liquidaciones a empleados registrados en el módulo de nómina.',
     icon: '👥',
-    available: false,
+    available: true,
   },
 ];
 

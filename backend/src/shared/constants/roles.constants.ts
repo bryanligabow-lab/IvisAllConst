@@ -36,6 +36,16 @@ export const PERMISSIONS = {
 
   PROVIDERS_READ: 'providers.read',
   PROVIDERS_WRITE: 'providers.write',
+
+  EMPLOYEES_READ: 'employees.read',
+  EMPLOYEES_WRITE: 'employees.write',
+
+  PAYROLL_READ: 'payroll.read',
+  PAYROLL_WRITE: 'payroll.write',
+
+  PROFORMAS_READ: 'proformas.read',
+  PROFORMAS_WRITE: 'proformas.write',
+  PROFORMAS_EXPORT: 'proformas.export',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

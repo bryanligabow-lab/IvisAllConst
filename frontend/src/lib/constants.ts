@@ -15,6 +15,8 @@ export const ROUTES = {
   PROJECT_ORDERS: (id: string) => `/projects/${id}/ordenes`,
   PROJECT_PROVIDERS: (id: string) => `/projects/${id}/proveedores`,
   PROVIDERS: '/proveedores',
+  NOMINA: '/nomina',
+  PROFORMAS: '/proformas',
 } as const;
 
 export const RUBRO_STATUS_LABEL = {

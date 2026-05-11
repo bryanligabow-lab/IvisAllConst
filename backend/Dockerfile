@@ -34,6 +34,7 @@ RUN apk add --no-cache openssl tini
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/assets ./assets
 COPY --from=builder /database /database
 COPY backend/package.json ./
 COPY backend/scripts/start.sh /usr/local/bin/start.sh
