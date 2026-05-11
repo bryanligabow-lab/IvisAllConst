@@ -7,10 +7,12 @@ import { ERRORS } from '../shared/constants/error-messages';
 
 function buildLimiter(def: RateLimitDef, opts: Partial<Options> = {}) {
   // Si hay Redis, usar store distribuido. Si no, store en memoria (dev).
-  const store = redis
+  const redisClient = redis;
+  const store = redisClient
     ? new RedisStore({
-        sendCommand: (...args: string[]) =>
-          redis.call(...(args as [string, ...string[]])) as Promise<unknown>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendCommand: ((...args: string[]) =>
+          redisClient.call(...(args as [string, ...string[]]))) as any,
         prefix: `rl:${def.prefix}:`,
       })
     : undefined;
