@@ -15,6 +15,11 @@ projectsRouter.get(
   requirePermission(PERMISSIONS.PROJECTS_READ),
   asyncHandler(ProjectsController.list),
 );
+projectsRouter.get(
+  '/stats/global',
+  requirePermission(PERMISSIONS.PROJECTS_READ),
+  asyncHandler(ProjectsController.globalStats),
+);
 projectsRouter.post(
   '/',
   requirePermission(PERMISSIONS.PROJECTS_CREATE),

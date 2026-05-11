@@ -7,6 +7,7 @@ import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderModal';
 import { PaymentDialog } from '@/components/forms/PaymentDialog';
+import { PaymentTypePicker, type PaymentType } from '@/components/forms/PaymentTypePicker';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
@@ -35,7 +36,16 @@ export default function OrdenesPage() {
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [showTypePicker, setShowTypePicker] = useState(false);
   const [payingOrder, setPayingOrder] = useState<PaymentOrder | null>(null);
+
+  function handleTypeChosen(type: PaymentType) {
+    setShowTypePicker(false);
+    if (type === 'PROVIDER') {
+      setShowCreate(true);
+    }
+    // THIRD_PARTY y PAYROLL están deshabilitados en el picker (Tanda 2)
+  }
 
   async function handleDelete(order: PaymentOrder) {
     const linkedExpenses = order.gastos?.length ?? 0;
@@ -65,7 +75,7 @@ export default function OrdenesPage() {
           Órdenes de pago {summary ? `— ${summary.project.name}` : ''}
         </h1>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => setShowTypePicker(true)}
           disabled={!summary}
           className="btn-primary disabled:opacity-50"
         >
@@ -77,6 +87,12 @@ export default function OrdenesPage() {
         Crea órdenes con fecha futura. Al pagar, puedes hacer pago total o registrar anticipos
         parciales. Cuando se complete el monto, la orden se cierra automáticamente.
       </p>
+
+      <PaymentTypePicker
+        open={showTypePicker}
+        onClose={() => setShowTypePicker(false)}
+        onChoose={handleTypeChosen}
+      />
 
       {summary && (
         <CreatePaymentOrderModal

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { apiPost, setAccessToken } from '@/lib/api';
 import { ROUTES } from '@/lib/constants';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const NAV_LINKS = [
   { href: ROUTES.DASHBOARD, label: 'Proyectos' },
@@ -95,11 +96,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div className="hidden text-right text-xs sm:block">
               <div className="font-medium text-ink-primary">{user.email}</div>
               <div className="text-ink-secondary">{user.roles.join(', ')}</div>
             </div>
+            <ThemeToggle />
             <button onClick={handleLogout} className="btn-secondary">
               Salir
             </button>

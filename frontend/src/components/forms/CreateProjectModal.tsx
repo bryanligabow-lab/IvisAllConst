@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiPost, ApiClientError } from '@/lib/api';
+import { ECUADOR_CITIES, findCity } from '@/lib/ecuador-cities';
 import type { Project } from '@/types';
 
 interface Props {
@@ -15,6 +16,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [contractor, setContractor] = useState('');
+  const [city, setCity] = useState('');
   const [contractAmount, setContractAmount] = useState('');
   const [advancePercent, setAdvancePercent] = useState('40');
   const [guaranteePercent, setGuaranteePercent] = useState('5');
@@ -27,6 +29,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     setCode('');
     setName('');
     setContractor('');
+    setCity('');
     setContractAmount('');
     setAdvancePercent('40');
     setGuaranteePercent('5');
@@ -40,10 +43,14 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     setSubmitting(true);
     setError(null);
     try {
+      const cityData = city ? findCity(city) : undefined;
       await apiPost<Project>('/projects', {
         code,
         name,
         contractor: contractor || undefined,
+        city: city || undefined,
+        latitude: cityData?.lat,
+        longitude: cityData?.lng,
         contractAmount: Number(contractAmount),
         advancePercent: Number(advancePercent),
         guaranteePercent: Number(guaranteePercent),
@@ -92,6 +99,17 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             className="input"
             placeholder="Urbanización Los Pinos — Fase 2"
           />
+        </Field>
+
+        <Field label="Ciudad" hint="Define el punto del mapa en el Dashboard">
+          <select value={city} onChange={(e) => setCity(e.target.value)} className="input">
+            <option value="">— Sin ubicación —</option>
+            {ECUADOR_CITIES.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name} · {c.province}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <div className="grid grid-cols-3 gap-3">

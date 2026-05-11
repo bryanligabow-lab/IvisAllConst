@@ -22,6 +22,11 @@ export class ProjectsController {
     return success(res, data);
   }
 
+  static async globalStats(_req: Request, res: Response): Promise<Response> {
+    const data = await ProjectsService.getGlobalStats();
+    return success(res, data);
+  }
+
   static async create(req: Request, res: Response): Promise<Response> {
     if (!req.user) throw new UnauthorizedError();
     const project = await ProjectsService.create(req.body, req.user.id);

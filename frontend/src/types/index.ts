@@ -8,6 +8,9 @@ export interface Project {
   name: string;
   contractor: string | null;
   description: string | null;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   contractAmount: string | number;
   advancePercent: string | number;
   guaranteePercent: string | number;

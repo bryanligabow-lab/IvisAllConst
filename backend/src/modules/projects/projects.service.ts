@@ -123,6 +123,9 @@ export class ProjectsService {
         name: dto.name,
         contractor: dto.contractor ?? null,
         description: dto.description ?? null,
+        city: dto.city ?? null,
+        latitude: dto.latitude ?? null,
+        longitude: dto.longitude ?? null,
         contractAmount: dto.contractAmount,
         advancePercent: dto.advancePercent ?? 40,
         guaranteePercent: dto.guaranteePercent ?? 5,
@@ -132,6 +135,111 @@ export class ProjectsService {
         createdBy,
       },
     });
+  }
+
+  /**
+   * Estadísticas globales (todos los proyectos del usuario) para el Dashboard.
+   * Devuelve un objeto por proyecto con totals + ciudad + estado, calculado en una sola query.
+   */
+  static async getGlobalStats() {
+    const projects = await prisma.project.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (projects.length === 0) {
+      return {
+        projects: [],
+        totals: {
+          contractAmount: 0,
+          budgeted: 0,
+          spent: 0,
+          balance: 0,
+          pendingOrders: 0,
+          activeCount: 0,
+        },
+      };
+    }
+
+    const projectIds = projects.map((p) => p.id);
+
+    const [budgetedAgg, spentAgg, ordersAgg] = await Promise.all([
+      prisma.rubro.groupBy({
+        by: ['projectId'],
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        _sum: { budgetedAmount: true },
+      }),
+      prisma.gasto.groupBy({
+        by: ['projectId'],
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        _sum: { amount: true },
+      }),
+      prisma.paymentOrder.findMany({
+        where: { projectId: { in: projectIds }, deletedAt: null, status: 'PENDING' },
+        include: { gastos: { where: { deletedAt: null }, select: { amount: true } } },
+      }),
+    ]);
+
+    const budgetedMap = new Map(budgetedAgg.map((b) => [b.projectId, Number(b._sum.budgetedAmount ?? 0)]));
+    const spentMap = new Map(spentAgg.map((s) => [s.projectId, Number(s._sum.amount ?? 0)]));
+
+    const pendingByProject = new Map<string, number>();
+    let globalPending = 0;
+    for (const o of ordersAgg) {
+      const paid = o.gastos.reduce((s, g) => s + g.amount, 0);
+      const remaining = Math.max(0, o.amount - paid);
+      pendingByProject.set(o.projectId, (pendingByProject.get(o.projectId) ?? 0) + remaining);
+      globalPending += remaining;
+    }
+
+    let totalContract = 0;
+    let totalBudgeted = 0;
+    let totalSpent = 0;
+    let activeCount = 0;
+
+    const enriched = projects.map((p) => {
+      const contractAmount = Number(p.contractAmount);
+      const budgeted = budgetedMap.get(p.id) ?? 0;
+      const spent = spentMap.get(p.id) ?? 0;
+      const pending = pendingByProject.get(p.id) ?? 0;
+      const progressContract = contractAmount > 0 ? spent / contractAmount : 0;
+      const progressBudget = budgeted > 0 ? spent / budgeted : 0;
+      totalContract += contractAmount;
+      totalBudgeted += budgeted;
+      totalSpent += spent;
+      if (p.status === 'ACTIVE') activeCount += 1;
+      return {
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        contractor: p.contractor,
+        city: p.city,
+        latitude: p.latitude,
+        longitude: p.longitude,
+        status: p.status,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        contractAmount,
+        budgeted,
+        spent,
+        pending,
+        balance: budgeted - spent,
+        progressContract: Math.min(1, progressContract),
+        progressBudget: Math.min(1, progressBudget),
+      };
+    });
+
+    return {
+      projects: enriched,
+      totals: {
+        contractAmount: totalContract,
+        budgeted: totalBudgeted,
+        spent: totalSpent,
+        balance: totalBudgeted - totalSpent,
+        pendingOrders: globalPending,
+        activeCount,
+      },
+    };
   }
 
   static async update(id: string, dto: UpdateProjectDto) {

@@ -185,6 +185,9 @@ model Project {
   name             String
   contractor       String?
   description      String?
+  city             String?
+  latitude         Float?
+  longitude        Float?
   contractAmount   Float     @default(0) @map("contract_amount")
   advancePercent   Float     @default(40) @map("advance_percent")
   guaranteePercent Float     @default(5) @map("guarantee_percent")
