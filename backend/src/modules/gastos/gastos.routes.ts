@@ -11,6 +11,7 @@ import { NotFoundError, UnauthorizedError } from '../../utils/errors';
 import { ERRORS, SUCCESS } from '../../shared/constants/error-messages';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { exportGastosExcel } from './gastos.excel';
 
 const createGastoSchema = z.object({
   projectId: z.string().uuid(),
@@ -29,6 +30,11 @@ const listQuerySchema = z.object({
   rubroId: z.string().uuid().optional(),
   page: z.coerce.number().int().positive().optional(),
   perPage: z.coerce.number().int().positive().max(100).optional(),
+});
+
+const exportQuerySchema = z.object({
+  projectId: z.string().uuid(),
+  rubroId: z.string().uuid().optional(),
 });
 
 export const gastosRouter = Router();
@@ -95,6 +101,19 @@ gastosRouter.patch(
       data: req.body,
     });
     return success(res, updated);
+  }),
+);
+
+gastosRouter.get(
+  '/export',
+  requirePermission(PERMISSIONS.GASTOS_READ),
+  validate(exportQuerySchema, 'query'),
+  asyncHandler(async (req, res) => {
+    await exportGastosExcel(
+      req.query.projectId as string,
+      req.query.rubroId as string | undefined,
+      res,
+    );
   }),
 );
 

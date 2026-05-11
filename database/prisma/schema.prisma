@@ -14,28 +14,29 @@ datasource db {
 // ============================================================
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  passwordHash    String    @map("password_hash")
-  firstName       String    @map("first_name")
-  lastName        String    @map("last_name")
-  avatarUrl       String?   @map("avatar_url")
-  emailVerified   Boolean   @default(false) @map("email_verified")
-  isActive        Boolean   @default(true) @map("is_active")
-  lastLoginAt     DateTime? @map("last_login_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  deletedAt       DateTime? @map("deleted_at")
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  avatarUrl     String?   @map("avatar_url")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
 
-  roles            UserRole[]
-  refreshTokens    RefreshToken[]
-  passwordResets   PasswordResetToken[]
-  emailVerifTokens EmailVerificationToken[]
-  auditLogs        AuditLog[]
-  assignedRoles    UserRole[]               @relation("AssignedBy")
-  createdProjects  Project[]                @relation("CreatedBy")
-  createdGastos    Gasto[]                  @relation("GastoCreatedBy")
-  createdPlanillas Planilla[]               @relation("PlanillaCreatedBy")
+  roles                UserRole[]
+  refreshTokens        RefreshToken[]
+  passwordResets       PasswordResetToken[]
+  emailVerifTokens     EmailVerificationToken[]
+  auditLogs            AuditLog[]
+  assignedRoles        UserRole[]               @relation("AssignedBy")
+  createdProjects      Project[]                @relation("CreatedBy")
+  createdGastos        Gasto[]                  @relation("GastoCreatedBy")
+  createdPlanillas     Planilla[]               @relation("PlanillaCreatedBy")
+  createdPaymentOrders PaymentOrder[]           @relation("PaymentOrderCreatedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -194,10 +195,11 @@ model Project {
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
 
-  creator   User       @relation("CreatedBy", fields: [createdBy], references: [id])
-  rubros    Rubro[]
-  gastos    Gasto[]
-  planillas Planilla[]
+  creator       User           @relation("CreatedBy", fields: [createdBy], references: [id])
+  rubros        Rubro[]
+  gastos        Gasto[]
+  planillas     Planilla[]
+  paymentOrders PaymentOrder[]
 
   @@index([code])
   @@index([status])
@@ -226,6 +228,7 @@ model Rubro {
   children      Rubro[]        @relation("RubroChildren")
   gastos        Gasto[]
   planillaItems PlanillaItem[]
+  paymentOrders PaymentOrder[]
 
   @@unique([projectId, code])
   @@index([projectId])
@@ -247,9 +250,10 @@ model Gasto {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rubro   Rubro   @relation(fields: [rubroId], references: [id])
-  creator User    @relation("GastoCreatedBy", fields: [createdBy], references: [id])
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro        Rubro         @relation(fields: [rubroId], references: [id])
+  creator      User          @relation("GastoCreatedBy", fields: [createdBy], references: [id])
+  paymentOrder PaymentOrder?
 
   @@index([projectId, gastoDate])
   @@index([rubroId])
@@ -303,4 +307,32 @@ model PlanillaItem {
   @@unique([planillaId, rubroId])
   @@index([planillaId])
   @@map("planilla_items")
+}
+
+model PaymentOrder {
+  id            String    @id @default(uuid())
+  projectId     String    @map("project_id")
+  rubroId       String    @map("rubro_id")
+  description   String
+  amount        Float
+  invoiceNumber String?   @map("invoice_number")
+  scheduledDate DateTime  @map("scheduled_date")
+  paidAt        DateTime? @map("paid_at")
+  status        String    @default("PENDING") // PENDING | PAID | CANCELLED
+  gastoId       String?   @unique @map("gasto_id")
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro   Rubro   @relation(fields: [rubroId], references: [id])
+  gasto   Gasto?  @relation(fields: [gastoId], references: [id])
+  creator User    @relation("PaymentOrderCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId, scheduledDate])
+  @@index([rubroId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("payment_orders")
 }

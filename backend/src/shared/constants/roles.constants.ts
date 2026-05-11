@@ -30,6 +30,9 @@ export const PERMISSIONS = {
   PLANILLAS_READ: 'planillas.read',
   PLANILLAS_WRITE: 'planillas.write',
   PLANILLAS_EXPORT: 'planillas.export',
+
+  PAYMENT_ORDERS_READ: 'payment_orders.read',
+  PAYMENT_ORDERS_WRITE: 'payment_orders.write',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

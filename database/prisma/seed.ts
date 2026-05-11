@@ -24,6 +24,9 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   { name: 'planillas.read', resource: 'planillas', action: 'read', description: 'Ver planillas' },
   { name: 'planillas.write', resource: 'planillas', action: 'write', description: 'Crear/editar planillas' },
   { name: 'planillas.export', resource: 'planillas', action: 'export', description: 'Exportar planillas a Excel' },
+  // payment orders
+  { name: 'payment_orders.read', resource: 'payment_orders', action: 'read', description: 'Ver órdenes de pago' },
+  { name: 'payment_orders.write', resource: 'payment_orders', action: 'write', description: 'Crear/pagar/eliminar órdenes de pago' },
 ];
 
 async function main() {
@@ -90,7 +93,15 @@ async function main() {
   }
 
   // user: lectura y registro de gastos
-  const userPermNames = ['projects.read', 'rubros.read', 'gastos.read', 'gastos.write', 'planillas.read'];
+  const userPermNames = [
+    'projects.read',
+    'rubros.read',
+    'gastos.read',
+    'gastos.write',
+    'planillas.read',
+    'payment_orders.read',
+    'payment_orders.write',
+  ];
   for (const p of allPermissions.filter((x) => userPermNames.includes(x.name))) {
     await prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId: user.id, permissionId: p.id } },

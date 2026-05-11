@@ -8,6 +8,7 @@ import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateGastoModal } from '@/components/forms/CreateGastoModal';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Gasto, ProjectSummary } from '@/types';
 
 export default function GastosPage() {
@@ -16,11 +17,11 @@ export default function GastosPage() {
     `/projects/${params.id}/summary`,
     apiGet,
   );
-  const {
-    data: gastos,
-    isLoading,
-    mutate: mutateGastos,
-  } = useSWR<Gasto[]>(`/gastos?projectId=${params.id}&perPage=50`, apiGet);
+  const [filterRubroId, setFilterRubroId] = useState('');
+  const gastosKey = filterRubroId
+    ? `/gastos?projectId=${params.id}&rubroId=${filterRubroId}&perPage=100`
+    : `/gastos?projectId=${params.id}&perPage=100`;
+  const { data: gastos, isLoading, mutate: mutateGastos } = useSWR<Gasto[]>(gastosKey, apiGet);
   const [showCreate, setShowCreate] = useState(false);
 
   async function handleDelete(gastoId: string, description: string) {
@@ -35,16 +36,63 @@ export default function GastosPage() {
     }
   }
 
+  async function handleExport() {
+    const token =
+      typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) : null;
+    const qs = new URLSearchParams({ projectId: params.id });
+    if (filterRubroId) qs.set('rubroId', filterRubroId);
+    const res = await fetch(`${API_BASE_URL}/gastos/export?${qs.toString()}`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      window.alert('No se pudo generar el Excel');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gastos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <AppShell>
       <ProjectTabs projectId={params.id} />
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-lg font-medium">
           Registro de gastos {summary ? `— ${summary.project.name}` : ''}
         </h1>
         <button onClick={() => setShowCreate(true)} className="btn-primary">
           + Nuevo gasto
+        </button>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <div className="flex-1 min-w-[220px]">
+          <label className="block text-xs text-ink-secondary mb-1">Filtrar por rubro</label>
+          <select
+            value={filterRubroId}
+            onChange={(e) => setFilterRubroId(e.target.value)}
+            className="input"
+            disabled={!summary}
+          >
+            <option value="">— Todos los rubros —</option>
+            {summary?.rubros.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.code}. {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button onClick={handleExport} disabled={!gastos || gastos.length === 0} className="btn-success disabled:opacity-50">
+          📊 Exportar a Excel
         </button>
       </div>
 
@@ -57,7 +105,9 @@ export default function GastosPage() {
       {gastos && (
         <div className="card">
           {gastos.length === 0 ? (
-            <div className="text-sm text-ink-secondary">Aún no hay gastos registrados.</div>
+            <div className="text-sm text-ink-secondary">
+              {filterRubroId ? 'No hay gastos en este rubro.' : 'Aún no hay gastos registrados.'}
+            </div>
           ) : (
             <ul className="space-y-2">
               {gastos.map((g) => (
@@ -67,7 +117,10 @@ export default function GastosPage() {
                     <div className="truncate text-sm">
                       {g.description}
                       {g.rubro && (
-                        <span className="text-ink-secondary"> · Rubro {g.rubro.code}</span>
+                        <span className="text-ink-secondary">
+                          {' · '}
+                          {g.rubro.code}. {g.rubro.name}
+                        </span>
                       )}
                     </div>
                     <div className="text-xs text-ink-secondary">
