@@ -16,11 +16,12 @@ import { paymentOrdersRouter } from './modules/payment-orders/payment-orders.rou
 import { providersRouter } from './modules/providers/providers.routes';
 import { employeesRouter } from './modules/employees/employees.routes';
 import { proformasRouter } from './modules/proformas/proformas.routes';
+import { clientsRouter } from './modules/clients/clients.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { failure } from './utils/apiResponse';
 import { ERRORS } from './shared/constants/error-messages';
 
-const BODY_LIMIT = '10mb';
+const BODY_LIMIT = '30mb'; // proforma con varias imágenes en base64
 
 export function buildApp() {
   const app = express();
@@ -61,6 +62,7 @@ export function buildApp() {
   app.use('/api/providers', providersRouter);
   app.use('/api/employees', employeesRouter);
   app.use('/api/proformas', proformasRouter);
+  app.use('/api/clients', clientsRouter);
 
   app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
 

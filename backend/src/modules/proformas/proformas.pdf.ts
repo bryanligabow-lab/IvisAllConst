@@ -28,6 +28,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     include: {
       project: { select: { name: true, code: true } },
       items: { orderBy: { orderIndex: 'asc' } },
+      images: { orderBy: { orderIndex: 'asc' } },
     },
   });
   if (!p) throw new NotFoundError('Proforma no encontrada');
@@ -309,6 +310,56 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     signY + 20,
     { width: totalsW, align: 'center' },
   );
+
+  // ===== Imágenes adjuntas (página nueva si hay) =====
+  if (p.images && p.images.length > 0) {
+    doc.addPage();
+    doc
+      .fillColor(RED)
+      .font('Helvetica-Bold')
+      .fontSize(16)
+      .text('Imágenes del producto / servicio', M, M);
+    doc
+      .moveTo(M, M + 22)
+      .lineTo(M + W, M + 22)
+      .lineWidth(1.5)
+      .strokeColor(RED)
+      .stroke();
+
+    let y = M + 38;
+    const colW = (W - 16) / 2; // 2 columnas
+    let col = 0;
+    for (const img of p.images) {
+      const imgBuf = Buffer.from(img.data);
+      const x = M + col * (colW + 16);
+      // Reservamos hasta 200px de alto por imagen + 30px de caption
+      try {
+        doc.image(imgBuf, x, y, { fit: [colW, 200], align: 'center' });
+      } catch {
+        doc
+          .fillColor(GRAY)
+          .fontSize(9)
+          .text('(No se pudo cargar la imagen)', x, y, { width: colW, align: 'center' });
+      }
+      if (img.caption) {
+        doc
+          .fillColor(GRAY)
+          .font('Helvetica-Oblique')
+          .fontSize(9)
+          .text(img.caption, x, y + 205, { width: colW, align: 'center' });
+      }
+      col++;
+      if (col === 2) {
+        col = 0;
+        y += 240;
+        // Si nos quedamos sin espacio en la página, otra página
+        if (y > PAGE_H - 260) {
+          doc.addPage();
+          y = M;
+        }
+      }
+    }
+  }
 
   doc.end();
 }

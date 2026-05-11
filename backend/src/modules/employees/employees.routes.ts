@@ -46,6 +46,49 @@ const payrollSchema = z.object({
 export const employeesRouter = Router();
 employeesRouter.use(authenticate);
 
+// Historial completo de pagos de nómina (todos los empleados o filtrado por proyecto)
+employeesRouter.get(
+  '/payroll-history',
+  requirePermission(PERMISSIONS.PAYROLL_READ),
+  asyncHandler(async (req, res) => {
+    const projectId =
+      typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+    const employeeId =
+      typeof req.query.employeeId === 'string' ? req.query.employeeId : undefined;
+
+    const payments = await prisma.gasto.findMany({
+      where: {
+        deletedAt: null,
+        kind: 'PAYROLL',
+        ...(projectId ? { projectId } : {}),
+        ...(employeeId ? { employeeId } : {}),
+      },
+      include: {
+        employee: { select: { id: true, fullName: true, position: true, cedula: true } },
+        project: { select: { id: true, name: true, code: true } },
+        rubro: { select: { code: true, name: true } },
+      },
+      orderBy: { gastoDate: 'desc' },
+    });
+
+    const total = payments.reduce((s, p) => s + Number(p.amount), 0);
+    const byEmployee = new Map<string, number>();
+    for (const p of payments) {
+      if (p.employeeId) {
+        byEmployee.set(p.employeeId, (byEmployee.get(p.employeeId) ?? 0) + Number(p.amount));
+      }
+    }
+
+    return success(res, {
+      payments,
+      total,
+      employeesPaid: byEmployee.size,
+      avgPerEmployee: byEmployee.size > 0 ? total / byEmployee.size : 0,
+    });
+  }),
+);
+
+
 employeesRouter.get(
   '/',
   requirePermission(PERMISSIONS.EMPLOYEES_READ),

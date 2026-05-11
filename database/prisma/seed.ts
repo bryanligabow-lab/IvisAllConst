@@ -39,6 +39,9 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   { name: 'proformas.read', resource: 'proformas', action: 'read', description: 'Ver proformas' },
   { name: 'proformas.write', resource: 'proformas', action: 'write', description: 'Crear/editar/eliminar proformas' },
   { name: 'proformas.export', resource: 'proformas', action: 'export', description: 'Exportar proformas (Excel/PDF)' },
+  // clients
+  { name: 'clients.read', resource: 'clients', action: 'read', description: 'Ver clientes' },
+  { name: 'clients.write', resource: 'clients', action: 'write', description: 'Crear/editar/eliminar clientes' },
 ];
 
 async function main() {
@@ -122,6 +125,8 @@ async function main() {
     'proformas.read',
     'proformas.write',
     'proformas.export',
+    'clients.read',
+    'clients.write',
   ];
   for (const p of allPermissions.filter((x) => userPermNames.includes(x.name))) {
     await prisma.rolePermission.upsert({

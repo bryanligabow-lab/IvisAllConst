@@ -40,6 +40,7 @@ model User {
   createdProviders     Provider[]               @relation("ProviderCreatedBy")
   createdEmployees     Employee[]               @relation("EmployeeCreatedBy")
   createdProformas     Proforma[]               @relation("ProformaCreatedBy")
+  createdClients       Client[]                 @relation("ClientCreatedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -410,6 +411,7 @@ model Proforma {
   id                String    @id @default(uuid())
   number            String    @unique
   date              DateTime
+  clientId          String?   @map("client_id")
   clientName        String    @map("client_name")
   clientRuc         String?   @map("client_ruc")
   clientAddress     String?   @map("client_address")
@@ -430,13 +432,16 @@ model Proforma {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   deletedAt         DateTime? @map("deleted_at")
 
-  project Project?       @relation(fields: [projectId], references: [id])
-  creator User           @relation("ProformaCreatedBy", fields: [createdBy], references: [id])
+  project Project?        @relation(fields: [projectId], references: [id])
+  client  Client?         @relation(fields: [clientId], references: [id])
+  creator User            @relation("ProformaCreatedBy", fields: [createdBy], references: [id])
   items   ProformaItem[]
+  images  ProformaImage[]
 
   @@index([number])
   @@index([date])
   @@index([projectId])
+  @@index([clientId])
   @@index([deletedAt])
   @@map("proformas")
 }
@@ -456,4 +461,42 @@ model ProformaItem {
 
   @@index([proformaId])
   @@map("proforma_items")
+}
+
+model Client {
+  id          String    @id @default(uuid())
+  name        String
+  ruc         String?
+  address     String?
+  responsible String?
+  email       String?
+  phone       String?
+  notes       String?
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  creator   User       @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  proformas Proforma[]
+
+  @@index([name])
+  @@index([deletedAt])
+  @@map("clients")
+}
+
+model ProformaImage {
+  id         String   @id @default(uuid())
+  proformaId String   @map("proforma_id")
+  orderIndex Int      @default(0) @map("order_index")
+  filename   String?
+  mimeType   String   @map("mime_type")
+  data       Bytes
+  caption    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  proforma Proforma @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+
+  @@index([proformaId])
+  @@map("proforma_images")
 }

@@ -46,6 +46,9 @@ export const PERMISSIONS = {
   PROFORMAS_READ: 'proformas.read',
   PROFORMAS_WRITE: 'proformas.write',
   PROFORMAS_EXPORT: 'proformas.export',
+
+  CLIENTS_READ: 'clients.read',
+  CLIENTS_WRITE: 'clients.write',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

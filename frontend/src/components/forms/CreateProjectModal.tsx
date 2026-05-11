@@ -1,18 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
-import { apiPost, ApiClientError } from '@/lib/api';
+import { apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { ECUADOR_CITIES, findCity } from '@/lib/ecuador-cities';
 import type { Project } from '@/types';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  initial?: Project | null; // si viene → modo edición
+  onSaved: () => void;
 }
 
-export function CreateProjectModal({ open, onClose, onCreated }: Props) {
+export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [contractor, setContractor] = useState('');
@@ -22,21 +23,39 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const [guaranteePercent, setGuaranteePercent] = useState('5');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [status, setStatus] = useState<Project['status']>('ACTIVE');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function reset() {
-    setCode('');
-    setName('');
-    setContractor('');
-    setCity('');
-    setContractAmount('');
-    setAdvancePercent('40');
-    setGuaranteePercent('5');
-    setStartDate('');
-    setEndDate('');
+  const isEdit = !!initial;
+
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setCode(initial.code);
+      setName(initial.name);
+      setContractor(initial.contractor ?? '');
+      setCity(initial.city ?? '');
+      setContractAmount(String(initial.contractAmount));
+      setAdvancePercent(String(initial.advancePercent));
+      setGuaranteePercent(String(initial.guaranteePercent));
+      setStartDate(initial.startDate ? initial.startDate.slice(0, 10) : '');
+      setEndDate(initial.endDate ? initial.endDate.slice(0, 10) : '');
+      setStatus(initial.status);
+    } else {
+      setCode('');
+      setName('');
+      setContractor('');
+      setCity('');
+      setContractAmount('');
+      setAdvancePercent('40');
+      setGuaranteePercent('5');
+      setStartDate('');
+      setEndDate('');
+      setStatus('ACTIVE');
+    }
     setError(null);
-  }
+  }, [open, initial]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,7 +63,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     setError(null);
     try {
       const cityData = city ? findCity(city) : undefined;
-      await apiPost<Project>('/projects', {
+      const payload = {
         code,
         name,
         contractor: contractor || undefined,
@@ -56,20 +75,24 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
         guaranteePercent: Number(guaranteePercent),
         startDate: startDate || undefined,
         endDate: endDate || undefined,
-        status: 'ACTIVE',
-      });
-      reset();
-      onCreated();
+        status,
+      };
+      if (initial?.id) {
+        await apiPatch<Project>(`/projects/${initial.id}`, payload);
+      } else {
+        await apiPost<Project>('/projects', payload);
+      }
+      onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Error al crear el proyecto');
+      setError(err instanceof ApiClientError ? err.message : 'Error al guardar el proyecto');
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nuevo proyecto">
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Editar proyecto' : 'Nuevo proyecto'}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código" required>
@@ -146,7 +169,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Inicio">
             <input
               type="date"
@@ -163,6 +186,19 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
               className="input"
             />
           </Field>
+          <Field label="Estado">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as Project['status'])}
+              className="input"
+            >
+              <option value="DRAFT">Borrador</option>
+              <option value="ACTIVE">Activo</option>
+              <option value="PAUSED">Pausado</option>
+              <option value="COMPLETED">Completado</option>
+              <option value="CANCELLED">Cancelado</option>
+            </select>
+          </Field>
         </div>
 
         {error && (
@@ -174,7 +210,7 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
             Cancelar
           </button>
           <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">
-            {submitting ? 'Creando…' : 'Crear proyecto'}
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear proyecto'}
           </button>
         </div>
       </form>

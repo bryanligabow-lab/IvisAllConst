@@ -12,6 +12,7 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     include: {
       project: { select: { name: true, code: true } },
       items: { orderBy: { orderIndex: 'asc' } },
+      images: { orderBy: { orderIndex: 'asc' } },
     },
   });
   if (!p) throw new NotFoundError('Proforma no encontrada');
@@ -190,6 +191,38 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
   sheet.getCell(row + 1, 6).value = p.signerTitle || 'Gerente General';
   sheet.getCell(row + 1, 6).alignment = { horizontal: 'center' };
   sheet.mergeCells(row + 1, 6, row + 1, 7);
+
+  // Imágenes adjuntas — hoja separada
+  if (p.images && p.images.length > 0) {
+    const imgSheet = wb.addWorksheet('Imágenes');
+    imgSheet.getCell('A1').value = `Imágenes adjuntas — Proforma ${p.number}`;
+    imgSheet.getCell('A1').font = { bold: true, size: 14, color: { argb: RED } };
+    imgSheet.mergeCells('A1:F1');
+
+    let imgRow = 3;
+    for (const img of p.images) {
+      const ext = (img.mimeType.split('/')[1] || 'png').toLowerCase();
+      const extension = ext === 'jpg' ? 'jpeg' : (ext as 'png' | 'jpeg' | 'gif');
+      try {
+        const imgId = wb.addImage({
+          buffer: Buffer.from(img.data) as unknown as ArrayBuffer,
+          extension,
+        });
+        imgSheet.addImage(imgId, {
+          tl: { col: 0, row: imgRow - 1 },
+          ext: { width: 360, height: 240 },
+        });
+      } catch {
+        imgSheet.getCell(imgRow, 1).value = '(No se pudo cargar la imagen)';
+      }
+      if (img.caption) {
+        imgSheet.getCell(imgRow + 13, 1).value = img.caption;
+        imgSheet.getCell(imgRow + 13, 1).font = { italic: true };
+        imgSheet.mergeCells(imgRow + 13, 1, imgRow + 13, 6);
+      }
+      imgRow += 16;
+    }
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   res.setHeader(

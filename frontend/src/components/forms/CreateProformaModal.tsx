@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
+import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
 import { apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Project } from '@/types';
@@ -12,6 +13,14 @@ interface Item {
   unit: string;
   description: string;
   unitPrice: string;
+}
+
+interface ImageItem {
+  preview: string; // base64 data URL
+  dataBase64: string; // sin prefix
+  mimeType: string;
+  filename: string;
+  caption: string;
 }
 
 interface Props {
@@ -24,8 +33,27 @@ const DEFAULT_TOP_CLIENTS = `GAD Canton El Empalme.
 Ambiesa S.A.
 Ministerio de Educación, coordinacion zonal`;
 
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4 MB por imagen
+const MAX_IMAGES = 6;
+
+function fileToBase64(file: File): Promise<{ dataUrl: string; dataBase64: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const dataBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+      resolve({ dataUrl, dataBase64 });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 export function CreateProformaModal({ open, onClose, onCreated }: Props) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [clientId, setClientId] = useState('');
+  const [showCreateClient, setShowCreateClient] = useState(false);
+  // snapshots editables del cliente (precargados al elegir uno)
   const [clientName, setClientName] = useState('');
   const [clientRuc, setClientRuc] = useState('');
   const [clientAddress, setClientAddress] = useState('');
@@ -42,14 +70,17 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
   const [items, setItems] = useState<Item[]>([
     { quantity: '1', unit: 'GBL', description: '', unitPrice: '' },
   ]);
+  const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: clients, mutate: mutateClients } = useSWR<Client[]>('/clients', apiGet);
   const { data: projects } = useSWR<Project[]>('/projects', apiGet);
 
   useEffect(() => {
     if (!open) return;
     setDate(new Date().toISOString().slice(0, 10));
+    setClientId('');
     setClientName('');
     setClientRuc('');
     setClientAddress('');
@@ -57,20 +88,60 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     setProjectId('');
     setProjectLabel('');
     setIvaPercent('15');
+    setCreditTerm('30 días');
+    setPaymentTerms('100% contraentrega');
+    setValidity('10 días');
+    setTopClients(DEFAULT_TOP_CLIENTS);
+    setSignerName('Gabriel Constantine L.');
+    setSignerTitle('Gerente General');
     setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '' }]);
+    setImages([]);
     setError(null);
   }, [open]);
+
+  // Cuando el usuario elige un cliente, pre-llenar campos
+  function selectClient(id: string) {
+    setClientId(id);
+    const c = clients?.find((x) => x.id === id);
+    if (c) {
+      setClientName(c.name);
+      setClientRuc(c.ruc ?? '');
+      setClientAddress(c.address ?? '');
+      setClientResponsible(c.responsible ?? '');
+    }
+  }
 
   function updateItem(idx: number, patch: Partial<Item>) {
     setItems((curr) => curr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
-
   function addItem() {
     setItems((c) => [...c, { quantity: '1', unit: 'GBL', description: '', unitPrice: '' }]);
   }
-
   function removeItem(idx: number) {
     setItems((c) => (c.length === 1 ? c : c.filter((_, i) => i !== idx)));
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files) return;
+    if (images.length + files.length > MAX_IMAGES) {
+      setError(`Solo puedes adjuntar hasta ${MAX_IMAGES} imágenes.`);
+      return;
+    }
+    const added: ImageItem[] = [];
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith('image/')) continue;
+      if (f.size > MAX_IMAGE_SIZE) {
+        setError(`"${f.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
+        continue;
+      }
+      const { dataUrl, dataBase64 } = await fileToBase64(f);
+      added.push({ preview: dataUrl, dataBase64, mimeType: f.type, filename: f.name, caption: '' });
+    }
+    setImages((c) => [...c, ...added]);
+  }
+
+  function removeImage(idx: number) {
+    setImages((c) => c.filter((_, i) => i !== idx));
   }
 
   const subtotal = items.reduce(
@@ -82,6 +153,10 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!clientName.trim()) {
+      setError('Selecciona o crea un cliente.');
+      return;
+    }
     if (items.some((it) => !it.description.trim())) {
       setError('Todos los ítems necesitan una descripción.');
       return;
@@ -91,6 +166,7 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     try {
       const payload = {
         date,
+        clientId: clientId || undefined,
         clientName,
         clientRuc: clientRuc || undefined,
         clientAddress: clientAddress || undefined,
@@ -110,6 +186,12 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           description: it.description,
           unitPrice: Number(it.unitPrice),
         })),
+        images: images.map((img) => ({
+          mimeType: img.mimeType,
+          dataBase64: img.dataBase64,
+          filename: img.filename,
+          caption: img.caption || undefined,
+        })),
       };
       const created = (await apiPost<{ id: string }>('/proformas', payload)) as { id: string };
       onCreated(created.id);
@@ -126,17 +208,42 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Cliente */}
         <div className="rounded-lg border border-surface-border p-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-secondary">
-            Cliente
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
+              Cliente
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreateClient(true)}
+              className="btn-secondary text-xs"
+            >
+              + Nuevo cliente
+            </button>
           </div>
-          <div className="space-y-3">
+          <Field label="Cliente guardado" hint="O escribe los datos manualmente abajo">
+            <select
+              value={clientId}
+              onChange={(e) => selectClient(e.target.value)}
+              className="input"
+            >
+              <option value="">— Sin cliente guardado (escribir manual) —</option>
+              {clients?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.ruc ? ` · RUC ${c.ruc}` : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <div className="mt-3 space-y-3">
             <Field label="Nombre / razón social" required>
               <input
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
                 required
                 className="input"
-                placeholder="IGLESIA DE JESUCRISTO DE LOS SANTOS DE LOS ULTIMOS DIAS"
+                placeholder="IGLESIA DE JESUCRISTO…"
               />
             </Field>
             <div className="grid grid-cols-2 gap-3">
@@ -267,6 +374,64 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           </div>
         </div>
 
+        {/* Imágenes */}
+        <div className="rounded-lg border border-surface-border p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
+              Imágenes del producto / servicio (opcional)
+            </div>
+            <label className="btn-secondary cursor-pointer text-xs">
+              + Subir imagen
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => handleFiles(e.target.files)}
+                className="hidden"
+              />
+            </label>
+          </div>
+          <p className="mb-2 text-[11px] text-ink-tertiary">
+            Hasta {MAX_IMAGES} imágenes · máximo 4 MB cada una · aparecerán al final del PDF y en
+            una hoja aparte del Excel.
+          </p>
+          {images.length === 0 ? (
+            <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/30 px-3 py-6 text-center text-xs text-ink-secondary">
+              Sin imágenes adjuntas
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              {images.map((img, idx) => (
+                <div key={idx} className="rounded-md border border-surface-border bg-surface p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.preview}
+                    alt={img.filename}
+                    className="h-24 w-full rounded object-cover"
+                  />
+                  <input
+                    value={img.caption}
+                    onChange={(e) =>
+                      setImages((c) =>
+                        c.map((x, i) => (i === idx ? { ...x, caption: e.target.value } : x)),
+                      )
+                    }
+                    placeholder="Pie de foto (opcional)"
+                    className="input mt-2 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(idx)}
+                    className="mt-1 w-full text-xs text-ink-secondary hover:text-danger"
+                  >
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Condiciones */}
         <div className="rounded-lg border border-surface-border p-3">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-secondary">
@@ -327,6 +492,15 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           </button>
         </div>
       </form>
+
+      <CreateClientModal
+        open={showCreateClient}
+        onClose={() => setShowCreateClient(false)}
+        onSaved={(c) => {
+          mutateClients();
+          selectClient(c.id);
+        }}
+      />
     </Modal>
   );
 }

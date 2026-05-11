@@ -65,6 +65,11 @@ export default function DashboardPage() {
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const { data: editingProject } = useSWR<Project>(
+    editingId ? `/projects/${editingId}` : null,
+    apiGet,
+  );
 
   async function handleDelete(id: string, name: string) {
     if (
@@ -153,7 +158,12 @@ export default function DashboardPage() {
             ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {stats.projects.map((p) => (
-                  <ProjectProgressCard key={p.id} project={p} onDelete={() => handleDelete(p.id, p.name)} />
+                  <ProjectProgressCard
+                    key={p.id}
+                    project={p}
+                    onEdit={() => setEditingId(p.id)}
+                    onDelete={() => handleDelete(p.id, p.name)}
+                  />
                 ))}
               </div>
             )}
@@ -166,7 +176,13 @@ export default function DashboardPage() {
       <CreateProjectModal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreated={() => mutate()}
+        onSaved={() => mutate()}
+      />
+      <CreateProjectModal
+        open={!!editingId && !!editingProject}
+        onClose={() => setEditingId(null)}
+        initial={editingProject}
+        onSaved={() => mutate()}
       />
     </AppShell>
   );
@@ -207,9 +223,11 @@ function Kpi({
 
 function ProjectProgressCard({
   project,
+  onEdit,
   onDelete,
 }: {
   project: DashboardProjectStat;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const pctBudget = Math.round(project.progressBudget * 100);
@@ -218,19 +236,32 @@ function ProjectProgressCard({
 
   return (
     <div className="card relative">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          onDelete();
-        }}
-        className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-        title="Eliminar proyecto"
-      >
-        🗑️
-      </button>
+      <div className="absolute right-2 top-2 flex gap-0.5">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            onEdit();
+          }}
+          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
+          title="Editar proyecto"
+        >
+          ✏️
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            onDelete();
+          }}
+          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+          title="Eliminar proyecto"
+        >
+          🗑️
+        </button>
+      </div>
       <Link href={ROUTES.PROJECT_BUDGET(project.id)} className="block">
-        <div className="flex items-start justify-between gap-3 pr-8">
+        <div className="flex items-start justify-between gap-3 pr-16">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{project.name}</div>
             <div className="text-xs text-ink-secondary">

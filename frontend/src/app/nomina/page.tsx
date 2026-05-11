@@ -9,13 +9,38 @@ import {
 } from '@/components/forms/CreateEmployeeModal';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
+
+interface PayrollHistoryEntry {
+  id: string;
+  description: string;
+  amount: number;
+  gastoDate: string;
+  employee: { id: string; fullName: string; position: string | null } | null;
+  project: { id: string; name: string; code: string };
+  rubro: { code: string; name: string };
+}
+interface PayrollHistory {
+  payments: PayrollHistoryEntry[];
+  total: number;
+  employeesPaid: number;
+  avgPerEmployee: number;
+}
 
 export default function NominaPage() {
   const { data, isLoading, mutate } = useSWR<Employee[]>('/employees', apiGet);
+  const { data: history, mutate: mutateHistory } = useSWR<PayrollHistory>(
+    '/employees/payroll-history',
+    apiGet,
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
+
+  function refresh() {
+    mutate();
+    mutateHistory();
+  }
 
   async function handleDelete(e: Employee) {
     if (!window.confirm(`¿Eliminar al empleado "${e.fullName}"?\n\nLos pagos ya registrados se conservan.`))
@@ -63,15 +88,17 @@ export default function NominaPage() {
       <CreateEmployeeModal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        onSaved={() => mutate()}
+        onSaved={refresh}
       />
       <CreateEmployeeModal
         open={!!editing}
         onClose={() => setEditing(null)}
         initial={editing}
-        onSaved={() => mutate()}
+        onSaved={refresh}
       />
-      <PayrollPaymentModal open={showPay} onClose={() => setShowPay(false)} onCreated={() => mutate()} />
+      <PayrollPaymentModal open={showPay} onClose={() => setShowPay(false)} onCreated={refresh} />
+
+      <PayrollHistorySection history={history} />
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
 
@@ -168,5 +195,50 @@ function Metric({
       </div>
       <div className={`mt-1 text-2xl font-semibold ${c}`}>{value}</div>
     </div>
+  );
+}
+
+function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
+  if (!history || history.payments.length === 0) return null;
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Historial de pagos de nómina</h2>
+        <div className="text-xs text-ink-secondary">
+          Total pagado: <span className="font-semibold text-ink-primary">{formatCurrency(history.total)}</span>{' '}
+          · {history.employeesPaid} {history.employeesPaid === 1 ? 'empleado' : 'empleados'} ·
+          promedio {formatCurrency(history.avgPerEmployee)}
+        </div>
+      </div>
+
+      <div className="card overflow-x-auto">
+        <table className="table-default">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Empleado</th>
+              <th>Cargo</th>
+              <th>Proyecto</th>
+              <th>Rubro</th>
+              <th>Descripción</th>
+              <th className="text-right">Monto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.payments.map((p) => (
+              <tr key={p.id}>
+                <td className="text-xs">{formatDate(p.gastoDate)}</td>
+                <td className="font-medium">{p.employee?.fullName ?? '—'}</td>
+                <td className="text-xs">{p.employee?.position ?? '—'}</td>
+                <td className="text-xs">{p.project.name}</td>
+                <td className="text-xs">{p.rubro.code}. {p.rubro.name}</td>
+                <td className="text-xs">{p.description}</td>
+                <td className="text-right font-semibold">{formatCurrency(Number(p.amount), true)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

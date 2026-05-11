@@ -19,10 +19,27 @@ const itemSchema = z.object({
   unitPrice: z.coerce.number().nonnegative(),
 });
 
+const imageSchema = z.object({
+  mimeType: z.string().regex(/^image\//, 'Tipo de imagen no válido'),
+  dataBase64: z.string().min(10), // raw base64 (without data:... prefix)
+  caption: z.string().max(200).optional(),
+  filename: z.string().max(200).optional(),
+});
+
+const DEFAULTS = {
+  creditTerm: '30 días',
+  paymentTerms: '100% contraentrega',
+  validity: '10 días',
+  topClients: 'GAD Canton El Empalme.\nAmbiesa S.A.\nMinisterio de Educación, coordinacion zonal',
+  signerName: 'Gabriel Constantine L.',
+  signerTitle: 'Gerente General',
+};
+
 const createSchema = z.object({
   number: z.string().min(1).max(40).optional(),
   date: z.coerce.date().optional(),
-  clientName: z.string().min(1).max(300),
+  clientId: z.string().uuid().optional().nullable(),
+  clientName: z.string().min(1).max(300).optional(), // optional if clientId provided
   clientRuc: z.string().max(40).optional(),
   clientAddress: z.string().max(500).optional(),
   clientResponsible: z.string().max(200).optional(),
@@ -32,12 +49,13 @@ const createSchema = z.object({
   creditTerm: z.string().max(200).optional(),
   paymentTerms: z.string().max(200).optional(),
   validity: z.string().max(200).optional(),
-  topClients: z.string().max(1000).optional(),
+  topClients: z.string().max(2000).optional(),
   signerName: z.string().max(200).optional(),
   signerTitle: z.string().max(200).optional(),
   notes: z.string().max(2000).optional(),
   status: z.enum(['DRAFT', 'SENT', 'APPROVED', 'REJECTED']).optional(),
   items: z.array(itemSchema).min(1, 'Agrega al menos un ítem'),
+  images: z.array(imageSchema).max(10).optional(),
 });
 
 const updateSchema = createSchema.partial().extend({
@@ -57,6 +75,16 @@ async function nextProformaNumber(): Promise<string> {
   return `${series}-${next}`;
 }
 
+function applyDefaults<T extends Record<string, unknown>>(body: T): T {
+  const out = { ...body };
+  for (const k of ['creditTerm', 'paymentTerms', 'validity', 'topClients', 'signerName', 'signerTitle'] as const) {
+    if (!out[k]) {
+      (out as Record<string, unknown>)[k] = DEFAULTS[k];
+    }
+  }
+  return out;
+}
+
 export const proformasRouter = Router();
 proformasRouter.use(authenticate);
 
@@ -68,19 +96,17 @@ proformasRouter.get(
       where: { deletedAt: null },
       include: {
         project: { select: { id: true, name: true, code: true } },
+        client: { select: { id: true, name: true, ruc: true } },
         items: true,
+        images: { select: { id: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-
-    // Compute totals for each
     const withTotals = items.map((p) => {
       const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
       const iva = subtotal * (p.ivaPercent / 100);
-      const total = subtotal + iva;
-      return { ...p, subtotal, iva, total };
+      return { ...p, subtotal, iva, total: subtotal + iva, imagesCount: p.images.length };
     });
-
     return success(res, withTotals);
   }),
 );
@@ -94,14 +120,33 @@ proformasRouter.get(
       where: { id: req.params.id, deletedAt: null },
       include: {
         project: { select: { id: true, name: true, code: true } },
+        client: { select: { id: true, name: true, ruc: true } },
         items: { orderBy: { orderIndex: 'asc' } },
+        images: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+        },
       },
     });
     if (!p) throw new NotFoundError('Proforma no encontrada');
     const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
     const iva = subtotal * (p.ivaPercent / 100);
-    const total = subtotal + iva;
-    return success(res, { ...p, subtotal, iva, total });
+    return success(res, { ...p, subtotal, iva, total: subtotal + iva });
+  }),
+);
+
+// Endpoint para servir una imagen individual (para previewing en frontend)
+proformasRouter.get(
+  '/:id/images/:imageId',
+  requirePermission(PERMISSIONS.PROFORMAS_READ),
+  asyncHandler(async (req, res) => {
+    const img = await prisma.proformaImage.findFirst({
+      where: { id: req.params.imageId, proformaId: req.params.id },
+    });
+    if (!img) throw new NotFoundError('Imagen no encontrada');
+    res.setHeader('Content-Type', img.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(img.data));
   }),
 );
 
@@ -112,26 +157,53 @@ proformasRouter.post(
   asyncHandler(async (req, res) => {
     if (!req.user) throw new UnauthorizedError();
     const number = req.body.number ?? (await nextProformaNumber());
+    const body = applyDefaults(req.body);
+
+    // Snapshot client info if clientId provided
+    let clientFields = {
+      clientName: body.clientName,
+      clientRuc: body.clientRuc,
+      clientAddress: body.clientAddress,
+      clientResponsible: body.clientResponsible,
+    };
+    if (body.clientId) {
+      const c = await prisma.client.findFirst({
+        where: { id: body.clientId as string, deletedAt: null },
+      });
+      if (!c) throw new BadRequestError('Cliente no encontrado');
+      clientFields = {
+        clientName: body.clientName || c.name,
+        clientRuc: body.clientRuc || c.ruc || undefined,
+        clientAddress: body.clientAddress || c.address || undefined,
+        clientResponsible: body.clientResponsible || c.responsible || undefined,
+      };
+    }
+    if (!clientFields.clientName) {
+      throw new BadRequestError('Debes indicar el nombre del cliente o seleccionar uno guardado');
+    }
+
+    const images = (body.images as z.infer<typeof imageSchema>[] | undefined) ?? [];
 
     const created = await prisma.proforma.create({
       data: {
         number,
-        date: req.body.date ?? new Date(),
-        clientName: req.body.clientName,
-        clientRuc: req.body.clientRuc || null,
-        clientAddress: req.body.clientAddress || null,
-        clientResponsible: req.body.clientResponsible || null,
-        projectId: req.body.projectId || null,
-        projectLabel: req.body.projectLabel || null,
-        ivaPercent: req.body.ivaPercent ?? 15,
-        creditTerm: req.body.creditTerm || null,
-        paymentTerms: req.body.paymentTerms || null,
-        validity: req.body.validity || null,
-        topClients: req.body.topClients || null,
-        signerName: req.body.signerName || null,
-        signerTitle: req.body.signerTitle || null,
-        notes: req.body.notes || null,
-        status: req.body.status ?? 'DRAFT',
+        date: body.date ?? new Date(),
+        clientId: (body.clientId as string | null) || null,
+        clientName: clientFields.clientName,
+        clientRuc: clientFields.clientRuc || null,
+        clientAddress: clientFields.clientAddress || null,
+        clientResponsible: clientFields.clientResponsible || null,
+        projectId: (body.projectId as string | null) || null,
+        projectLabel: body.projectLabel || null,
+        ivaPercent: body.ivaPercent ?? 15,
+        creditTerm: body.creditTerm,
+        paymentTerms: body.paymentTerms,
+        validity: body.validity,
+        topClients: body.topClients,
+        signerName: body.signerName,
+        signerTitle: body.signerTitle,
+        notes: body.notes || null,
+        status: body.status ?? 'DRAFT',
         createdBy: req.user.id,
         items: {
           create: req.body.items.map((it: z.infer<typeof itemSchema>, idx: number) => ({
@@ -142,8 +214,23 @@ proformasRouter.post(
             unitPrice: it.unitPrice,
           })),
         },
+        images: {
+          create: images.map((img, idx) => ({
+            orderIndex: idx,
+            mimeType: img.mimeType,
+            data: Buffer.from(img.dataBase64, 'base64'),
+            caption: img.caption || null,
+            filename: img.filename || null,
+          })),
+        },
       },
-      include: { items: { orderBy: { orderIndex: 'asc' } } },
+      include: {
+        items: { orderBy: { orderIndex: 'asc' } },
+        images: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+        },
+      },
     });
 
     return success(res, created, 201);
@@ -161,7 +248,7 @@ proformasRouter.patch(
     });
     if (!exists) throw new NotFoundError('Proforma no encontrada');
 
-    const { items, ...rest } = req.body;
+    const { items, images, ...rest } = req.body;
     const updated = await prisma.$transaction(async (tx) => {
       if (items !== undefined) {
         await tx.proformaItem.deleteMany({ where: { proformaId: req.params.id } });
@@ -176,13 +263,34 @@ proformasRouter.patch(
           })),
         });
       }
+      if (images !== undefined) {
+        await tx.proformaImage.deleteMany({ where: { proformaId: req.params.id } });
+        for (const [idx, img] of (images as z.infer<typeof imageSchema>[]).entries()) {
+          await tx.proformaImage.create({
+            data: {
+              proformaId: req.params.id,
+              orderIndex: idx,
+              mimeType: img.mimeType,
+              data: Buffer.from(img.dataBase64, 'base64'),
+              caption: img.caption || null,
+              filename: img.filename || null,
+            },
+          });
+        }
+      }
       const cleaned = Object.fromEntries(
         Object.entries(rest).filter(([, v]) => v !== undefined),
       );
       return tx.proforma.update({
         where: { id: req.params.id },
         data: cleaned,
-        include: { items: { orderBy: { orderIndex: 'asc' } } },
+        include: {
+          items: { orderBy: { orderIndex: 'asc' } },
+          images: {
+            orderBy: { orderIndex: 'asc' },
+            select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+          },
+        },
       });
     });
     return success(res, updated);
