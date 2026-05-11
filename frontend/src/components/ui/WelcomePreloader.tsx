@@ -27,16 +27,21 @@ export function WelcomePreloader() {
 
   if (!show) return null;
 
+  // detectar dark mode para que el preloader respete el tema
+  const isDark =
+    typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('dark');
+  const bg = isDark
+    ? 'radial-gradient(ellipse at center, #15151A 0%, #0F0F12 60%, #08080B 100%)'
+    : 'radial-gradient(ellipse at center, #FFFFFF 0%, #F7F5F2 60%, #EDE9E3 100%)';
+
   return (
     <div
       aria-hidden="true"
       className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-500 ${
         phase === 'leave' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
-      style={{
-        background:
-          'radial-gradient(ellipse at center, #FFFFFF 0%, #F7F5F2 60%, #EDE9E3 100%)',
-      }}
+      style={{ background: bg }}
     >
       {/* Acento de marca arriba */}
       <div className="absolute top-0 left-0 right-0 h-1 header-accent" />

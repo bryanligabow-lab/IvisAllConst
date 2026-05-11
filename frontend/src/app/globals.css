@@ -256,3 +256,126 @@ html.dark .bg-success-soft {
 html.dark .bg-warning-soft {
   background-color: rgba(199, 120, 0, 0.18) !important;
 }
+
+/* =================================================
+   GAPS DE DARK MODE — coberturas adicionales
+   ================================================= */
+
+/* Fondo común (literal bg-surface-muted) cuando se usa
+   con opacidades arbitrarias tipo /40, /30, /60 */
+html.dark [class*='bg-surface-muted/'] {
+  background-color: rgba(40, 40, 48, 0.45) !important;
+}
+
+/* Variantes de color brand-light con opacidades */
+html.dark [class*='bg-brand-light'],
+html.dark [class*='bg-brand/'] {
+  background-color: rgba(229, 91, 71, 0.16) !important;
+}
+
+/* Toda variante de "soft" oscurecida correctamente */
+html.dark [class*='bg-danger-soft'] {
+  background-color: rgba(126, 31, 31, 0.25) !important;
+}
+html.dark [class*='bg-success-soft'] {
+  background-color: rgba(27, 122, 82, 0.18) !important;
+}
+html.dark [class*='bg-warning-soft'] {
+  background-color: rgba(199, 120, 0, 0.18) !important;
+}
+
+/* Bordes punteados (vacíos, placeholders) */
+html.dark .border-dashed,
+html.dark .border-surface-border\/50,
+html.dark .border-surface-border\/60 {
+  border-color: #3A3A42 !important;
+}
+
+/* Texto danger/success/warning más legible en oscuro */
+html.dark .text-danger {
+  color: #FB7185 !important;
+}
+html.dark .text-success {
+  color: #4ADE80 !important;
+}
+html.dark .text-warning {
+  color: #FACC15 !important;
+}
+
+/* Inputs: <select> y <textarea> con .input ya cubiertos, pero
+   <option> dentro del select obedece al user-agent. Forzamos
+   color-scheme dark a nivel root para que el dropdown nativo
+   se renderice en oscuro. */
+html.dark select.input option {
+  background-color: #1A1A1F;
+  color: #E8E6E3;
+}
+
+/* Modal: el body de los modales hereda bg-surface pero queremos
+   asegurar que su texto interno se vea bien */
+html.dark [role='dialog'] {
+  color: #E8E6E3;
+}
+
+/* Tarjetas con bg-surface-muted/30 (usado en form-item placeholders) */
+html.dark .bg-surface-muted\/30,
+html.dark [class*='bg-surface-muted\\/30'] {
+  background-color: rgba(40, 40, 48, 0.3) !important;
+}
+
+/* "h1, h2, h3" sin color explícito deben ser legibles */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5 {
+  color: #E8E6E3;
+}
+
+/* Etiquetas, spans, p, divs sin color heredan body — pero por seguridad */
+html.dark label {
+  color: #E8E6E3;
+}
+
+/* Detalle <details><summary> en órdenes — legible */
+html.dark summary {
+  color: #9B9CA3;
+}
+html.dark summary:hover {
+  color: #E8E6E3;
+}
+
+/* Texto monoespaciado dentro de tablas — legible */
+html.dark table {
+  color: #E8E6E3;
+}
+
+/* Anclas (Link) y botones de texto enlace */
+html.dark a {
+  color: inherit;
+}
+html.dark a.text-brand,
+html.dark a:hover.text-brand {
+  color: #FB7B65 !important;
+}
+
+/* Login: panel derecho mantiene bg-surface oscuro
+   y card encima con borde sutil */
+html.dark main.bg-surface {
+  background-color: #0F0F12 !important;
+}
+
+/* Sombras premium — más profundas */
+html.dark .shadow-soft,
+html.dark .shadow-card,
+html.dark .shadow-elevated,
+html.dark .shadow-premium {
+  --tw-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* Hover sutiles para botones secundarios pequeños usados en filas
+   (ej: editar/eliminar en tablas y mini cards) */
+html.dark button.hover\:bg-surface-muted:hover {
+  background-color: rgba(60, 60, 70, 0.4) !important;
+}

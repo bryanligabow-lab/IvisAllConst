@@ -6,6 +6,11 @@ import Image from 'next/image';
 import { apiPost, setAccessToken } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { ROUTES } from '@/lib/constants';
+import {
+  IllustrationPlanning,
+  IllustrationBlueprint,
+  IllustrationSite,
+} from '@/components/ui/ConstructionIllustrations';
 
 interface LoginResponse {
   accessToken: string;
@@ -13,10 +18,10 @@ interface LoginResponse {
   userId: string;
 }
 
-// Imágenes de construcción de Unsplash (placeholders — reemplazables después)
+// Ilustraciones flat-cartoon de construcción (SVG inline, paleta CREACOM)
 const CAROUSEL_SLIDES = [
   {
-    img: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1400&q=80',
+    Illustration: IllustrationPlanning,
     title: 'Todos tus proyectos,',
     subtitle: 'en un solo lugar.',
     bullets: [
@@ -26,7 +31,7 @@ const CAROUSEL_SLIDES = [
     ],
   },
   {
-    img: 'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=1400&q=80',
+    Illustration: IllustrationBlueprint,
     title: 'Proveedores y nómina',
     subtitle: 'bajo control.',
     bullets: [
@@ -36,7 +41,7 @@ const CAROUSEL_SLIDES = [
     ],
   },
   {
-    img: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=1400&q=80',
+    Illustration: IllustrationSite,
     title: 'Vista global del país,',
     subtitle: 'detalle por proyecto.',
     bullets: [
@@ -123,23 +128,22 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Imagen central */}
-        <div className="relative my-6 flex-1">
-          {CAROUSEL_SLIDES.map((s, idx) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={s.img}
-              src={s.img}
-              alt="Proyecto de construcción"
-              className={`absolute inset-0 h-full w-full rounded-2xl object-cover shadow-2xl transition-opacity duration-700 ${
-                idx === slide ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          ))}
-          {/* Borde sutil */}
-          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/10" />
-          {/* Overlay degradado abajo para que el texto se lea bien */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 rounded-b-2xl bg-gradient-to-t from-black/55 to-transparent" />
+        {/* Ilustraciones SVG flat-cartoon (carrusel) */}
+        <div className="relative my-6 flex flex-1 items-center justify-center overflow-hidden rounded-2xl bg-white/[0.06] p-4 backdrop-blur-sm ring-1 ring-white/10">
+          {CAROUSEL_SLIDES.map((s, idx) => {
+            const Illustration = s.Illustration;
+            return (
+              <div
+                key={idx}
+                className={`absolute inset-4 flex items-center justify-center transition-opacity duration-700 ${
+                  idx === slide ? 'opacity-100' : 'opacity-0'
+                }`}
+                aria-hidden={idx !== slide}
+              >
+                <Illustration />
+              </div>
+            );
+          })}
         </div>
 
         {/* Dots del carrusel */}
