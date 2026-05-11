@@ -21,6 +21,10 @@ COPY --from=deps /database/node_modules /database/node_modules
 COPY database /database
 COPY backend .
 RUN npx prisma generate --schema=/database/prisma/schema.prisma
+# Sync generated client into /app/node_modules so backend can `import '@prisma/client'`.
+RUN rm -rf /app/node_modules/.prisma /app/node_modules/@prisma/client \
+ && cp -r /database/node_modules/.prisma /app/node_modules/.prisma \
+ && cp -r /database/node_modules/@prisma/client /app/node_modules/@prisma/client
 RUN npm run build
 
 # ---------- Producción ----------
