@@ -13,6 +13,8 @@ export const ROUTES = {
   PROJECT_EXPENSES: (id: string) => `/projects/${id}/gastos`,
   PROJECT_PLANILLAS: (id: string) => `/projects/${id}/planillas`,
   PROJECT_ORDERS: (id: string) => `/projects/${id}/ordenes`,
+  PROJECT_PROVIDERS: (id: string) => `/projects/${id}/proveedores`,
+  PROVIDERS: '/proveedores',
 } as const;
 
 export const RUBRO_STATUS_LABEL = {

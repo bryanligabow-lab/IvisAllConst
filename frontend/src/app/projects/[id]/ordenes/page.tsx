@@ -6,37 +6,22 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderModal';
-import { apiDelete, apiGet, apiPost, ApiClientError } from '@/lib/api';
+import { PaymentDialog } from '@/components/forms/PaymentDialog';
+import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
-import type { ProjectSummary } from '@/types';
+import type { PaymentOrder, ProjectSummary } from '@/types';
 
-type OrderStatus = 'PENDING' | 'PAID' | 'CANCELLED';
-interface PaymentOrder {
-  id: string;
-  projectId: string;
-  rubroId: string;
-  description: string;
-  amount: number;
-  invoiceNumber: string | null;
-  scheduledDate: string;
-  paidAt: string | null;
-  status: OrderStatus;
-  gastoId: string | null;
-  createdAt: string;
-  rubro?: { code: string; name: string };
-}
-
-const STATUS_LABEL: Record<OrderStatus, string> = {
+const STATUS_LABEL = {
   PENDING: 'Pendiente',
   PAID: 'Pagada',
   CANCELLED: 'Cancelada',
-};
+} as const;
 
-const STATUS_CLASS: Record<OrderStatus, string> = {
+const STATUS_CLASS = {
   PENDING: 'badge-warn',
   PAID: 'badge-ok',
   CANCELLED: 'badge-muted',
-};
+} as const;
 
 export default function OrdenesPage() {
   const params = useParams<{ id: string }>();
@@ -49,45 +34,21 @@ export default function OrdenesPage() {
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  async function markPaid(order: PaymentOrder) {
-    if (
-      !window.confirm(
-        `¿Marcar la orden "${order.description}" como pagada?\n\nMonto: ${formatCurrency(
-          Number(order.amount),
-          true,
-        )}\n\nSe registrará automáticamente como gasto en el rubro ${order.rubro?.code}. ${order.rubro?.name}.`,
-      )
-    )
-      return;
-    setBusyId(order.id);
-    try {
-      await apiPost(`/payment-orders/${order.id}/pay`, {});
-      mutate();
-      mutateSummary();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo marcar como pagada');
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const [payingOrder, setPayingOrder] = useState<PaymentOrder | null>(null);
 
   async function handleDelete(order: PaymentOrder) {
+    const linkedExpenses = order.gastos?.length ?? 0;
     const msg =
-      order.status === 'PAID'
-        ? `¿Eliminar la orden "${order.description}"?\n\nComo ya está pagada, también se borrará el gasto generado y el saldo del rubro se restaurará.`
+      linkedExpenses > 0
+        ? `¿Eliminar la orden "${order.description}"?\n\nSe borrarán también ${linkedExpenses} gasto(s) asociado(s) y el saldo del rubro se restaurará.`
         : `¿Eliminar la orden "${order.description}"?`;
     if (!window.confirm(msg)) return;
-    setBusyId(order.id);
     try {
       await apiDelete(`/payment-orders/${order.id}`);
       mutate();
       mutateSummary();
     } catch (err) {
       window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar la orden');
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -102,14 +63,18 @@ export default function OrdenesPage() {
         <h1 className="text-lg font-medium">
           Órdenes de pago {summary ? `— ${summary.project.name}` : ''}
         </h1>
-        <button onClick={() => setShowCreate(true)} disabled={!summary} className="btn-primary disabled:opacity-50">
+        <button
+          onClick={() => setShowCreate(true)}
+          disabled={!summary}
+          className="btn-primary disabled:opacity-50"
+        >
           + Nueva orden de pago
         </button>
       </div>
 
       <p className="mb-3 text-xs text-ink-secondary">
-        Crea órdenes con fecha futura. Al marcarlas como pagadas, se registran automáticamente
-        como gasto del rubro correspondiente.
+        Crea órdenes con fecha futura. Al pagar, puedes hacer pago total o registrar anticipos
+        parciales. Cuando se complete el monto, la orden se cierra automáticamente.
       </p>
 
       {summary && (
@@ -122,101 +87,166 @@ export default function OrdenesPage() {
         />
       )}
 
+      <PaymentDialog
+        open={!!payingOrder}
+        onClose={() => setPayingOrder(null)}
+        order={payingOrder}
+        onPaid={() => {
+          mutate();
+          mutateSummary();
+        }}
+      />
+
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-medium">Pendientes ({pending.length})</h2>
-        <div className="card">
-          {pending.length === 0 ? (
-            <div className="text-sm text-ink-secondary">No hay órdenes pendientes.</div>
-          ) : (
-            <ul className="space-y-2">
-              {pending.map((o) => (
-                <OrderRow
-                  key={o.id}
-                  order={o}
-                  busy={busyId === o.id}
-                  onPay={() => markPaid(o)}
-                  onDelete={() => handleDelete(o)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+        {pending.length === 0 ? (
+          <div className="card text-sm text-ink-secondary">No hay órdenes pendientes.</div>
+        ) : (
+          <div className="space-y-3">
+            {pending.map((o) => (
+              <OrderCard
+                key={o.id}
+                order={o}
+                statusLabel={STATUS_LABEL[o.status]}
+                statusClass={STATUS_CLASS[o.status]}
+                onPay={() => setPayingOrder(o)}
+                onDelete={() => handleDelete(o)}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       <section>
         <h2 className="mb-2 text-sm font-medium">Pagadas ({paid.length})</h2>
-        <div className="card">
-          {paid.length === 0 ? (
-            <div className="text-sm text-ink-secondary">Todavía no hay órdenes pagadas.</div>
-          ) : (
-            <ul className="space-y-2">
-              {paid.map((o) => (
-                <OrderRow
-                  key={o.id}
-                  order={o}
-                  busy={busyId === o.id}
-                  onPay={() => undefined}
-                  onDelete={() => handleDelete(o)}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+        {paid.length === 0 ? (
+          <div className="card text-sm text-ink-secondary">Todavía no hay órdenes pagadas.</div>
+        ) : (
+          <div className="space-y-3">
+            {paid.map((o) => (
+              <OrderCard
+                key={o.id}
+                order={o}
+                statusLabel={STATUS_LABEL[o.status]}
+                statusClass={STATUS_CLASS[o.status]}
+                onPay={() => setPayingOrder(o)}
+                onDelete={() => handleDelete(o)}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </AppShell>
   );
 }
 
-interface RowProps {
+interface CardProps {
   order: PaymentOrder;
-  busy: boolean;
+  statusLabel: string;
+  statusClass: string;
   onPay: () => void;
   onDelete: () => void;
 }
 
-function OrderRow({ order, busy, onPay, onDelete }: RowProps) {
+function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardProps) {
+  const total = Number(order.amount);
+  const paid = Number(order.paidAmount ?? 0);
+  const pending = Number(order.pendingAmount ?? Math.max(0, total - paid));
+  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   const isPending = order.status === 'PENDING';
+  const hasPartial = paid > 0 && pending > 0;
+
   return (
-    <li className="flex flex-wrap items-center gap-3 border-b border-surface-border py-2 last:border-0">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">
-          {order.description}
-          {order.rubro && (
-            <span className="text-ink-secondary">
-              {' · '}
-              {order.rubro.code}. {order.rubro.name}
-            </span>
+    <article className="card">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">{order.description}</div>
+          <div className="text-xs text-ink-secondary">
+            {order.rubro && (
+              <>
+                Rubro {order.rubro.code}. {order.rubro.name}
+                {' · '}
+              </>
+            )}
+            Programada: {formatDate(order.scheduledDate)}
+            {order.paidAt && ` · Pagada: ${formatDate(order.paidAt)}`}
+            {order.invoiceNumber && ` · Factura ${order.invoiceNumber}`}
+          </div>
+          {order.provider && (
+            <div className="mt-1 text-xs text-ink-secondary">
+              🏢 Proveedor: <span className="font-medium text-ink-primary">{order.provider.name}</span>
+              {order.provider.service ? ` · ${order.provider.service}` : ''}
+            </div>
           )}
         </div>
-        <div className="text-xs text-ink-secondary">
-          Programada: {formatDate(order.scheduledDate)}
-          {order.paidAt && ` · Pagada: ${formatDate(order.paidAt)}`}
-          {order.invoiceNumber && ` · Factura ${order.invoiceNumber}`}
+        <div className="text-right">
+          <div className="text-base font-medium">{formatCurrency(total, true)}</div>
+          <span className={statusClass}>{statusLabel}</span>
         </div>
-      </div>
-      <div className="shrink-0 text-sm font-medium">{formatCurrency(Number(order.amount), true)}</div>
-      <span className={`${STATUS_CLASS[order.status]} shrink-0`}>{STATUS_LABEL[order.status]}</span>
-      {isPending && (
-        <button
-          type="button"
-          onClick={onPay}
-          disabled={busy}
-          className="btn-success disabled:opacity-50"
-        >
-          {busy ? 'Pagando…' : 'Marcar como pagado'}
-        </button>
+      </header>
+
+      {(hasPartial || !isPending) && (
+        <div className="mt-3">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
+            <div
+              className={`h-full transition-all ${
+                pct >= 100 ? 'bg-success' : 'bg-brand'
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-xs text-ink-secondary">
+            <span>
+              Pagado: <span className="font-medium text-ink-primary">{formatCurrency(paid, true)}</span>
+            </span>
+            <span>
+              {isPending ? (
+                <>
+                  Pendiente:{' '}
+                  <span className="font-medium text-danger">{formatCurrency(pending, true)}</span>
+                </>
+              ) : (
+                <span className="font-medium text-success">{pct}%</span>
+              )}
+            </span>
+          </div>
+        </div>
       )}
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={busy}
-        className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger disabled:opacity-50"
-        title="Eliminar orden"
-      >
-        🗑️
-      </button>
-    </li>
+
+      {order.gastos && order.gastos.length > 1 && (
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer text-ink-secondary hover:text-ink-primary">
+            Ver {order.gastos.length} pagos registrados
+          </summary>
+          <ul className="mt-2 space-y-1 border-l-2 border-surface-border pl-3">
+            {order.gastos.map((g) => (
+              <li key={g.id} className="flex justify-between">
+                <span>
+                  {formatDate(g.gastoDate)} — {g.description}
+                </span>
+                <span className="font-medium">{formatCurrency(Number(g.amount), true)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      <footer className="mt-4 flex flex-wrap justify-end gap-2">
+        {isPending && (
+          <button onClick={onPay} className="btn-success">
+            {hasPartial ? '💰 Pagar saldo' : '💰 Marcar como pagado'}
+          </button>
+        )}
+        <button
+          onClick={onDelete}
+          className="btn-secondary text-danger hover:bg-danger-soft"
+          title="Eliminar orden"
+        >
+          🗑️ Eliminar
+        </button>
+      </footer>
+    </article>
   );
 }

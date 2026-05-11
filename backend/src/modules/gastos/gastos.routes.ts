@@ -16,6 +16,7 @@ import { exportGastosExcel } from './gastos.excel';
 const createGastoSchema = z.object({
   projectId: z.string().uuid(),
   rubroId: z.string().uuid(),
+  providerId: z.string().uuid().optional().nullable(),
   description: z.string().min(1).max(300),
   invoiceNumber: z.string().max(80).optional(),
   amount: z.coerce.number().positive(),
@@ -58,7 +59,11 @@ gastosRouter.get(
         skip,
         take,
         orderBy: { gastoDate: 'desc' },
-        include: { rubro: { select: { code: true, name: true } } },
+        include: {
+          rubro: { select: { code: true, name: true } },
+          provider: { select: { id: true, name: true, service: true } },
+          paymentOrder: { select: { id: true, description: true } },
+        },
       }),
       prisma.gasto.count({ where }),
     ]);
@@ -79,8 +84,13 @@ gastosRouter.post(
     });
     if (!rubro) throw new NotFoundError(ERRORS.RUBRO_NOT_IN_PROJECT);
 
+    const { providerId, ...rest } = req.body;
     const created = await prisma.gasto.create({
-      data: { ...req.body, createdBy: req.user.id },
+      data: {
+        ...rest,
+        providerId: providerId || null,
+        createdBy: req.user.id,
+      },
     });
     return success(res, created, 201);
   }),

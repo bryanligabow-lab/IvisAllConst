@@ -62,7 +62,44 @@ export interface Gasto {
   invoiceNumber: string | null;
   amount: string | number;
   gastoDate: string;
+  providerId?: string | null;
+  paymentOrderId?: string | null;
   rubro?: { code: string; name: string };
+  provider?: { id: string; name: string; service?: string | null } | null;
+  paymentOrder?: { id: string; description: string } | null;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  ruc: string | null;
+  phone: string | null;
+  email: string | null;
+  service: string | null;
+  totalSpent?: number;
+  totalDebt?: number;
+  pendingOrdersCount?: number;
+  projectsWithDebtCount?: number;
+}
+
+export type PaymentOrderStatus = 'PENDING' | 'PAID' | 'CANCELLED';
+
+export interface PaymentOrder {
+  id: string;
+  projectId: string;
+  rubroId: string;
+  providerId: string | null;
+  description: string;
+  amount: number;
+  invoiceNumber: string | null;
+  scheduledDate: string;
+  paidAt: string | null;
+  status: PaymentOrderStatus;
+  paidAmount: number;
+  pendingAmount: number;
+  rubro?: { code: string; name: string };
+  provider?: { id: string; name: string; ruc?: string | null; service?: string | null } | null;
+  gastos?: Array<{ id: string; amount: number; gastoDate: string; description: string }>;
 }
 
 export interface Planilla {

@@ -8,7 +8,7 @@ import { CreateProjectModal } from '@/components/forms/CreateProjectModal';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
-import type { Project } from '@/types';
+import type { Project, Provider } from '@/types';
 
 const STATUS_LABEL: Record<Project['status'], string> = {
   DRAFT: 'Borrador',
@@ -65,6 +65,8 @@ export default function DashboardPage() {
               <div className="card text-sm text-ink-secondary">No hay proyectos todavía.</div>
             )}
           </div>
+
+          <DebtSection />
         </>
       )}
 
@@ -97,6 +99,54 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
       <div className="mt-1 text-xl font-medium">{value}</div>
       {sub && <div className="text-xs text-ink-secondary">{sub}</div>}
     </div>
+  );
+}
+
+function DebtSection() {
+  const { data } = useSWR<Provider[]>('/providers', apiGet);
+  const withDebt = data?.filter((p) => Number(p.totalDebt ?? 0) > 0) ?? [];
+  if (!data || withDebt.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium">Proveedores con deuda</h2>
+        <Link href="/proveedores" className="text-xs text-brand hover:underline">
+          Ver todos →
+        </Link>
+      </div>
+      <div className="card overflow-x-auto">
+        <table className="table-default">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Servicio</th>
+              <th className="text-right">Deuda total</th>
+              <th>En cuántos proyectos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {withDebt.map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <Link
+                    href={`/proveedores/${p.id}`}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                </td>
+                <td className="text-xs">{p.service || '—'}</td>
+                <td className="text-right font-medium text-danger">
+                  {formatCurrency(Number(p.totalDebt ?? 0))}
+                </td>
+                <td className="text-xs">{Number(p.projectsWithDebtCount ?? 0)} proyecto(s)</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

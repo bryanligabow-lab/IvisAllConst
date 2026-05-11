@@ -14,6 +14,7 @@ export function ProjectTabs({ projectId }: ProjectTabsProps) {
     { href: ROUTES.PROJECT_BUDGET(projectId), label: 'Presupuesto' },
     { href: ROUTES.PROJECT_EXPENSES(projectId), label: 'Gastos' },
     { href: ROUTES.PROJECT_ORDERS(projectId), label: 'Órdenes de pago' },
+    { href: ROUTES.PROJECT_PROVIDERS(projectId), label: 'Proveedores' },
     { href: ROUTES.PROJECT_PLANILLAS(projectId), label: 'Planillas' },
   ];
 

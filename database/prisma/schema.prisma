@@ -37,6 +37,7 @@ model User {
   createdGastos        Gasto[]                  @relation("GastoCreatedBy")
   createdPlanillas     Planilla[]               @relation("PlanillaCreatedBy")
   createdPaymentOrders PaymentOrder[]           @relation("PaymentOrderCreatedBy")
+  createdProviders     Provider[]               @relation("ProviderCreatedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -237,26 +238,31 @@ model Rubro {
 }
 
 model Gasto {
-  id            String    @id @default(uuid())
-  projectId     String    @map("project_id")
-  rubroId       String    @map("rubro_id")
-  description   String
-  invoiceNumber String?   @map("invoice_number")
-  amount        Float
-  gastoDate     DateTime  @map("gasto_date")
-  attachmentUrl String?   @map("attachment_url")
-  createdBy     String    @map("created_by")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  id              String    @id @default(uuid())
+  projectId       String    @map("project_id")
+  rubroId         String    @map("rubro_id")
+  description     String
+  invoiceNumber   String?   @map("invoice_number")
+  amount          Float
+  gastoDate       DateTime  @map("gasto_date")
+  attachmentUrl   String?   @map("attachment_url")
+  paymentOrderId  String?   @map("payment_order_id")
+  providerId      String?   @map("provider_id")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
 
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rubro        Rubro         @relation(fields: [rubroId], references: [id])
-  creator      User          @relation("GastoCreatedBy", fields: [createdBy], references: [id])
-  paymentOrder PaymentOrder?
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro         Rubro         @relation(fields: [rubroId], references: [id])
+  creator       User          @relation("GastoCreatedBy", fields: [createdBy], references: [id])
+  paymentOrder  PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
+  provider      Provider?     @relation(fields: [providerId], references: [id])
 
   @@index([projectId, gastoDate])
   @@index([rubroId])
+  @@index([paymentOrderId])
+  @@index([providerId])
   @@index([deletedAt])
   @@map("gastos")
 }
@@ -313,26 +319,49 @@ model PaymentOrder {
   id            String    @id @default(uuid())
   projectId     String    @map("project_id")
   rubroId       String    @map("rubro_id")
+  providerId    String?   @map("provider_id")
   description   String
   amount        Float
   invoiceNumber String?   @map("invoice_number")
   scheduledDate DateTime  @map("scheduled_date")
   paidAt        DateTime? @map("paid_at")
   status        String    @default("PENDING") // PENDING | PAID | CANCELLED
-  gastoId       String?   @unique @map("gasto_id")
   createdBy     String    @map("created_by")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rubro   Rubro   @relation(fields: [rubroId], references: [id])
-  gasto   Gasto?  @relation(fields: [gastoId], references: [id])
-  creator User    @relation("PaymentOrderCreatedBy", fields: [createdBy], references: [id])
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro    Rubro     @relation(fields: [rubroId], references: [id])
+  provider Provider? @relation(fields: [providerId], references: [id])
+  creator  User      @relation("PaymentOrderCreatedBy", fields: [createdBy], references: [id])
+  gastos   Gasto[]
 
   @@index([projectId, scheduledDate])
   @@index([rubroId])
+  @@index([providerId])
   @@index([status])
   @@index([deletedAt])
   @@map("payment_orders")
+}
+
+model Provider {
+  id        String    @id @default(uuid())
+  name      String
+  ruc       String?
+  phone     String?
+  email     String?
+  service   String?
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  creator       User           @relation("ProviderCreatedBy", fields: [createdBy], references: [id])
+  gastos        Gasto[]
+  paymentOrders PaymentOrder[]
+
+  @@index([name])
+  @@index([deletedAt])
+  @@map("providers")
 }

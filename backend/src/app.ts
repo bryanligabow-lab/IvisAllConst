@@ -13,6 +13,7 @@ import { rubrosRouter } from './modules/rubros/rubros.routes';
 import { gastosRouter } from './modules/gastos/gastos.routes';
 import { planillasRouter } from './modules/planillas/planillas.routes';
 import { paymentOrdersRouter } from './modules/payment-orders/payment-orders.routes';
+import { providersRouter } from './modules/providers/providers.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { failure } from './utils/apiResponse';
 import { ERRORS } from './shared/constants/error-messages';
@@ -55,6 +56,7 @@ export function buildApp() {
   app.use('/api/gastos', gastosRouter);
   app.use('/api/planillas', planillasRouter);
   app.use('/api/payment-orders', paymentOrdersRouter);
+  app.use('/api/providers', providersRouter);
 
   app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
 

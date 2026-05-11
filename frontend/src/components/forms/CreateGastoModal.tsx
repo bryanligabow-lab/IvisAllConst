@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
+import { ProviderSelector } from '@/components/forms/ProviderSelector';
 import { apiPost, ApiClientError } from '@/lib/api';
 import type { Gasto, RubroSummary } from '@/types';
 
@@ -15,6 +16,7 @@ interface Props {
 
 export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }: Props) {
   const [rubroId, setRubroId] = useState('');
+  const [providerId, setProviderId] = useState('');
   const [description, setDescription] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -24,6 +26,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
 
   function reset() {
     setRubroId('');
+    setProviderId('');
     setDescription('');
     setInvoiceNumber('');
     setAmount('');
@@ -43,6 +46,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
       await apiPost<Gasto>('/gastos', {
         projectId,
         rubroId,
+        providerId: providerId || undefined,
         description,
         invoiceNumber: invoiceNumber || undefined,
         amount: Number(amount),
@@ -118,6 +122,8 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
             placeholder="001-001-000123"
           />
         </Field>
+
+        <ProviderSelector value={providerId} onChange={setProviderId} />
 
         {error && (
           <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>

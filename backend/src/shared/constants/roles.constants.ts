@@ -33,6 +33,9 @@ export const PERMISSIONS = {
 
   PAYMENT_ORDERS_READ: 'payment_orders.read',
   PAYMENT_ORDERS_WRITE: 'payment_orders.write',
+
+  PROVIDERS_READ: 'providers.read',
+  PROVIDERS_WRITE: 'providers.write',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

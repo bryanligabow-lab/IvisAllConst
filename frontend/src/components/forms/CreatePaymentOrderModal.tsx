@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
+import { ProviderSelector } from '@/components/forms/ProviderSelector';
 import { apiPost, ApiClientError } from '@/lib/api';
 import type { RubroSummary } from '@/types';
 
@@ -15,6 +16,7 @@ interface Props {
 
 export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCreated }: Props) {
   const [rubroId, setRubroId] = useState('');
+  const [providerId, setProviderId] = useState('');
   const [description, setDescription] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -30,6 +32,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
 
   function reset() {
     setRubroId('');
+    setProviderId('');
     setDescription('');
     setInvoiceNumber('');
     setAmount('');
@@ -49,6 +52,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
       await apiPost('/payment-orders', {
         projectId,
         rubroId,
+        providerId: providerId || undefined,
         description,
         invoiceNumber: invoiceNumber || undefined,
         amount: Number(amount),
@@ -124,6 +128,8 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             placeholder="001-001-000123"
           />
         </Field>
+
+        <ProviderSelector value={providerId} onChange={setProviderId} />
 
         <p className="text-xs text-ink-secondary">
           La orden queda en estado <strong>pendiente</strong> hasta que pulses{' '}
