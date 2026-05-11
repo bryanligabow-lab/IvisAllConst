@@ -1,0 +1,306 @@
+// IvisAllConst — Esquema de base de datos
+// Producción: PostgreSQL (Railway lo provee vía DATABASE_URL).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH / RBAC
+// ============================================================
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  avatarUrl       String?   @map("avatar_url")
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  isActive        Boolean   @default(true) @map("is_active")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  roles            UserRole[]
+  refreshTokens    RefreshToken[]
+  passwordResets   PasswordResetToken[]
+  emailVerifTokens EmailVerificationToken[]
+  auditLogs        AuditLog[]
+  assignedRoles    UserRole[]               @relation("AssignedBy")
+  createdProjects  Project[]                @relation("CreatedBy")
+  createdGastos    Gasto[]                  @relation("GastoCreatedBy")
+  createdPlanillas Planilla[]               @relation("PlanillaCreatedBy")
+
+  @@index([email])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedBy String?  @map("assigned_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assigner User? @relation("AssignedBy", fields: [assignedBy], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  deviceInfo String?   @map("device_info")
+  ipAddress  String?   @map("ip_address")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_tokens")
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  email     String
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  success   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email, createdAt])
+  @@index([ipAddress, createdAt])
+  @@map("login_attempts")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  oldValues  String?  @map("old_values") // JSON serializado
+  newValues  String?  @map("new_values") // JSON serializado
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// DOMINIO — Gestión de obra
+// SQLite no soporta enums; usamos String con validación en zod.
+// ============================================================
+
+model Project {
+  id               String    @id @default(uuid())
+  code             String    @unique
+  name             String
+  contractor       String?
+  description      String?
+  contractAmount   Float     @default(0) @map("contract_amount")
+  advancePercent   Float     @default(40) @map("advance_percent")
+  guaranteePercent Float     @default(5) @map("guarantee_percent")
+  startDate        DateTime? @map("start_date")
+  endDate          DateTime? @map("end_date")
+  status           String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED
+  createdBy        String    @map("created_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  creator   User       @relation("CreatedBy", fields: [createdBy], references: [id])
+  rubros    Rubro[]
+  gastos    Gasto[]
+  planillas Planilla[]
+
+  @@index([code])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("projects")
+}
+
+model Rubro {
+  id             String    @id @default(uuid())
+  projectId      String    @map("project_id")
+  code           String
+  name           String
+  unit           String?
+  quantity       Float     @default(0)
+  unitPrice      Float     @default(0) @map("unit_price")
+  budgetedAmount Float     @default(0) @map("budgeted_amount")
+  orderIndex     Int       @default(0) @map("order_index")
+  parentId       String?   @map("parent_id")
+  isGroup        Boolean   @default(false) @map("is_group")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent        Rubro?         @relation("RubroChildren", fields: [parentId], references: [id])
+  children      Rubro[]        @relation("RubroChildren")
+  gastos        Gasto[]
+  planillaItems PlanillaItem[]
+
+  @@unique([projectId, code])
+  @@index([projectId])
+  @@index([parentId])
+  @@map("rubros")
+}
+
+model Gasto {
+  id            String    @id @default(uuid())
+  projectId     String    @map("project_id")
+  rubroId       String    @map("rubro_id")
+  description   String
+  invoiceNumber String?   @map("invoice_number")
+  amount        Float
+  gastoDate     DateTime  @map("gasto_date")
+  attachmentUrl String?   @map("attachment_url")
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro   Rubro   @relation(fields: [rubroId], references: [id])
+  creator User    @relation("GastoCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId, gastoDate])
+  @@index([rubroId])
+  @@index([deletedAt])
+  @@map("gastos")
+}
+
+model Planilla {
+  id                  String    @id @default(uuid())
+  projectId           String    @map("project_id")
+  number              Int
+  title               String
+  periodStart         DateTime  @map("period_start")
+  periodEnd           DateTime  @map("period_end")
+  status              String    @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | PAID | CANCELLED
+  totalCurrent        Float     @default(0) @map("total_current")
+  totalPrevious       Float     @default(0) @map("total_previous")
+  totalAccumulated    Float     @default(0) @map("total_accumulated")
+  advanceAmortization Float     @default(0) @map("advance_amortization")
+  guaranteeRetention  Float     @default(0) @map("guarantee_retention")
+  netPayable          Float     @default(0) @map("net_payable")
+  createdBy           String    @map("created_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  deletedAt           DateTime? @map("deleted_at")
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User           @relation("PlanillaCreatedBy", fields: [createdBy], references: [id])
+  items   PlanillaItem[]
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@map("planillas")
+}
+
+model PlanillaItem {
+  id                String   @id @default(uuid())
+  planillaId        String   @map("planilla_id")
+  rubroId           String   @map("rubro_id")
+  executedQuantity  Float    @default(0) @map("executed_quantity")
+  currentAmount     Float    @default(0) @map("current_amount")
+  previousAmount    Float    @default(0) @map("previous_amount")
+  accumulatedAmount Float    @default(0) @map("accumulated_amount")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  planilla Planilla @relation(fields: [planillaId], references: [id], onDelete: Cascade)
+  rubro    Rubro    @relation(fields: [rubroId], references: [id])
+
+  @@unique([planillaId, rubroId])
+  @@index([planillaId])
+  @@map("planilla_items")
+}

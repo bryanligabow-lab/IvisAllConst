@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ivisallconst
+          POSTGRES_PASSWORD: ivisallconst
+          POSTGRES_DB: ivisallconst_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ivisallconst"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ivisallconst:ivisallconst@localhost:5432/ivisallconst_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET || 'test-access-secret-must-be-at-least-32-chars-aaa' }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET || 'test-refresh-secret-must-be-at-least-32-chars-bbb' }}
+      CORS_ORIGIN: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --workspaces --if-present
+      - run: npx prisma generate --schema=database/prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema=database/prisma/schema.prisma
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint --if-present
+      - name: Typecheck backend
+        working-directory: backend
+        run: npm run typecheck
+      - name: Test backend
+        working-directory: backend
+        run: npm test --if-present
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+      - name: Audit
+        run: npm audit --audit-level=high || true
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci --workspaces --if-present
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api

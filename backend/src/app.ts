@@ -1,0 +1,62 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { env } from './config/env';
+import { requestLogger } from './middleware/requestLogger';
+import { errorHandler } from './middleware/errorHandler';
+import { generalLimiter } from './middleware/rateLimiter';
+import { authRouter } from './modules/auth/auth.routes';
+import { usersRouter } from './modules/users/users.routes';
+import { projectsRouter } from './modules/projects/projects.routes';
+import { rubrosRouter } from './modules/rubros/rubros.routes';
+import { gastosRouter } from './modules/gastos/gastos.routes';
+import { planillasRouter } from './modules/planillas/planillas.routes';
+import { healthRouter } from './modules/health/health.routes';
+import { failure } from './utils/apiResponse';
+import { ERRORS } from './shared/constants/error-messages';
+
+const BODY_LIMIT = '10mb';
+
+export function buildApp() {
+  const app = express();
+
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  app.use(
+    cors({
+      origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()),
+      credentials: true,
+    }),
+  );
+
+  app.use(express.json({ limit: BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+  app.use(cookieParser());
+  app.use(requestLogger);
+
+  // Health primero (sin rate limit) para los probes
+  app.use('/api/health', healthRouter);
+
+  app.use('/api', generalLimiter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/users', usersRouter);
+  app.use('/api/projects', projectsRouter);
+  app.use('/api/rubros', rubrosRouter);
+  app.use('/api/gastos', gastosRouter);
+  app.use('/api/planillas', planillasRouter);
+
+  app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
+
+  app.use(errorHandler);
+
+  return app;
+}

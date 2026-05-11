@@ -1,0 +1,25 @@
+{
+  "name": "ivisallconst",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestión de proyectos de construcción",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "database"
+  ],
+  "scripts": {
+    "dev": "docker compose up",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run migrate -w database",
+    "db:seed": "npm run seed -w database",
+    "db:studio": "npm run studio -w database"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
