@@ -220,18 +220,18 @@ export default function LoginPage() {
       {/* ============ Panel derecho (formulario) ============ */}
       <main className="relative flex flex-1 items-center justify-center bg-surface p-6 lg:rounded-l-[36px]">
         {/* Logo superior — visible en todos los breakpoints, arriba del card */}
-        <div className="absolute left-1/2 top-6 -translate-x-1/2 lg:top-10">
+        <div className="absolute left-1/2 top-4 -translate-x-1/2 lg:top-8">
           <Image
             src="/logo-creacom.png"
             alt="CREACOM"
-            width={200}
-            height={80}
+            width={360}
+            height={144}
             priority
-            className="h-12 w-auto drop-shadow-[0_4px_12px_rgba(199,62,44,0.15)] md:h-14"
+            className="h-24 w-auto drop-shadow-[0_6px_18px_rgba(199,62,44,0.2)] md:h-28 lg:h-32"
           />
         </div>
 
-        <div className="mt-24 w-full max-w-md lg:mt-20">
+        <div className="mt-40 w-full max-w-md lg:mt-36">
           <div className="rounded-2xl border border-surface-border bg-surface p-8 shadow-premium">
             <div className="mb-6 text-center">
               <h1 className="text-2xl font-semibold tracking-tight text-ink-primary">
