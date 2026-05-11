@@ -71,12 +71,17 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   doc
     .fillColor(RED)
     .font('Helvetica-Bold')
-    .fontSize(36)
-    .text('PROFORMA', rightX - 200, headerY + 4, { width: 200, align: 'right' });
+    .fontSize(32)
+    .text('PROFORMA', rightX - 260, headerY + 8, { width: 260, align: 'right', lineBreak: false });
   doc
     .fillColor(DARK)
+    .font('Helvetica-Bold')
     .fontSize(10)
-    .text(`No. ${p.number}`, rightX - 200, headerY + 44, { width: 200, align: 'right' });
+    .text(`No. ${p.number}`, rightX - 260, headerY + 50, {
+      width: 260,
+      align: 'right',
+      lineBreak: false,
+    });
 
   // Línea separadora
   doc
