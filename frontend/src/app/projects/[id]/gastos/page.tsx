@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateGastoModal } from '@/components/forms/CreateGastoModal';
-import { apiGet } from '@/lib/api';
+import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Gasto, ProjectSummary } from '@/types';
 
@@ -22,6 +22,18 @@ export default function GastosPage() {
     mutate: mutateGastos,
   } = useSWR<Gasto[]>(`/gastos?projectId=${params.id}&perPage=50`, apiGet);
   const [showCreate, setShowCreate] = useState(false);
+
+  async function handleDelete(gastoId: string, description: string) {
+    if (!window.confirm(`¿Eliminar el gasto "${description}"?\n\nEl saldo del rubro se restaurará.`))
+      return;
+    try {
+      await apiDelete(`/gastos/${gastoId}`);
+      mutateGastos();
+      mutateSummary();
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar el gasto');
+    }
+  }
 
   return (
     <AppShell>
@@ -66,6 +78,14 @@ export default function GastosPage() {
                   <div className="shrink-0 text-sm font-medium text-danger">
                     -{formatCurrency(Number(g.amount), true)}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(g.id, g.description)}
+                    className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                    title="Eliminar gasto"
+                  >
+                    🗑️
+                  </button>
                 </li>
               ))}
             </ul>

@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePlanillaModal } from '@/components/forms/CreatePlanillaModal';
-import { apiGet } from '@/lib/api';
+import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Planilla, PlanillaStatus, ProjectSummary } from '@/types';
@@ -59,6 +59,21 @@ export default function PlanillasPage() {
     mutate: mutatePlanillas,
   } = useSWR<Planilla[]>(`/planillas?projectId=${params.id}`, apiGet);
   const [showCreate, setShowCreate] = useState(false);
+
+  async function handleDelete(planillaId: string, label: string) {
+    if (
+      !window.confirm(
+        `¿Eliminar la planilla "${label}"?\n\nSe borrarán también sus ítems. No se puede deshacer.`,
+      )
+    )
+      return;
+    try {
+      await apiDelete(`/planillas/${planillaId}`);
+      mutatePlanillas();
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar la planilla');
+    }
+  }
 
   return (
     <AppShell>
@@ -113,6 +128,14 @@ export default function PlanillasPage() {
                 <span className={STATUS_CLASS[p.status]}>{STATUS_LABEL[p.status]}</span>
                 <button onClick={() => downloadExcel(p.id)} className="btn-success">
                   Exportar Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(p.id, `Planilla #${p.number} — ${p.title}`)}
+                  className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                  title="Eliminar planilla"
+                >
+                  🗑️
                 </button>
               </div>
             </header>

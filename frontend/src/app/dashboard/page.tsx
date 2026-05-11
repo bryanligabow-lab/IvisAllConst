@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProjectModal } from '@/components/forms/CreateProjectModal';
-import { apiGet } from '@/lib/api';
+import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import type { Project } from '@/types';
@@ -21,6 +21,21 @@ const STATUS_LABEL: Record<Project['status'], string> = {
 export default function DashboardPage() {
   const { data, error, isLoading, mutate } = useSWR<Project[]>('/projects', apiGet);
   const [showCreate, setShowCreate] = useState(false);
+
+  async function handleDelete(project: Project) {
+    if (
+      !window.confirm(
+        `¿Eliminar el proyecto "${project.name}"?\n\nSe borrarán también todos sus rubros, gastos y planillas. Esta acción no se puede deshacer.`,
+      )
+    )
+      return;
+    try {
+      await apiDelete(`/projects/${project.id}`);
+      mutate();
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar el proyecto');
+    }
+  }
 
   return (
     <AppShell>
@@ -44,7 +59,7 @@ export default function DashboardPage() {
           <h2 className="mt-6 mb-3 text-sm font-medium">Proyectos</h2>
           <div className="space-y-3">
             {data.map((p) => (
-              <ProjectCard key={p.id} project={p} />
+              <ProjectCard key={p.id} project={p} onDelete={() => handleDelete(p)} />
             ))}
             {data.length === 0 && (
               <div className="card text-sm text-ink-secondary">No hay proyectos todavía.</div>
@@ -85,28 +100,40 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project, onDelete }: { project: Project; onDelete: () => void }) {
   const contract = Number(project.contractAmount);
   return (
-    <Link
-      href={ROUTES.PROJECT_BUDGET(project.id)}
-      className="block rounded-lg border border-surface-border bg-surface px-5 py-4 transition-colors hover:border-ink-tertiary"
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-sm font-medium">{project.name}</div>
-          <div className="text-xs text-ink-secondary">
-            {project.code} {project.contractor ? `· Contratante: ${project.contractor}` : ''}
+    <div className="relative rounded-lg border border-surface-border bg-surface transition-colors hover:border-ink-tertiary">
+      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className="block px-5 py-4">
+        <div className="flex items-start justify-between gap-4 pr-10">
+          <div>
+            <div className="text-sm font-medium">{project.name}</div>
+            <div className="text-xs text-ink-secondary">
+              {project.code} {project.contractor ? `· Contratante: ${project.contractor}` : ''}
+            </div>
           </div>
+          <span className="badge-muted">{STATUS_LABEL[project.status]}</span>
         </div>
-        <span className="badge-muted">{STATUS_LABEL[project.status]}</span>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-secondary">
-        <span>💰 {formatCurrency(contract)}</span>
-        <span>
-          📅 {formatDate(project.startDate)} — {formatDate(project.endDate)}
-        </span>
-      </div>
-    </Link>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-secondary">
+          <span>💰 {formatCurrency(contract)}</span>
+          <span>
+            📅 {formatDate(project.startDate)} — {formatDate(project.endDate)}
+          </span>
+        </div>
+      </Link>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete();
+        }}
+        className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+        aria-label="Eliminar proyecto"
+        title="Eliminar proyecto"
+      >
+        🗑️
+      </button>
+    </div>
   );
 }
