@@ -10,7 +10,8 @@ import { ROUTES } from '@/lib/constants';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const NAV_LINKS = [
-  { href: ROUTES.DASHBOARD, label: 'Proyectos' },
+  { href: ROUTES.DASHBOARD, label: 'Inicio' },
+  { href: ROUTES.PROYECTOS_REPORT, label: 'Proyectos' },
   { href: ROUTES.PROVIDERS, label: 'Proveedores' },
   { href: ROUTES.CLIENTES, label: 'Clientes' },
   { href: ROUTES.NOMINA, label: 'Nómina' },
@@ -81,7 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {NAV_LINKS.map((l) => {
               const active =
                 l.href === ROUTES.DASHBOARD
-                  ? pathname.startsWith('/dashboard') || pathname.startsWith('/projects')
+                  ? pathname === '/dashboard' || pathname.startsWith('/projects/')
                   : pathname.startsWith(l.href);
               return (
                 <Link

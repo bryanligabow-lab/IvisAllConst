@@ -156,6 +156,8 @@ export class ProjectsService {
           spent: 0,
           balance: 0,
           pendingOrders: 0,
+          planillado: 0,
+          porCobrar: 0,
           activeCount: 0,
         },
       };
@@ -163,7 +165,7 @@ export class ProjectsService {
 
     const projectIds = projects.map((p) => p.id);
 
-    const [budgetedAgg, spentAgg, ordersAgg] = await Promise.all([
+    const [budgetedAgg, spentAgg, ordersAgg, planillasAll] = await Promise.all([
       prisma.rubro.groupBy({
         by: ['projectId'],
         where: { projectId: { in: projectIds }, deletedAt: null },
@@ -177,6 +179,15 @@ export class ProjectsService {
       prisma.paymentOrder.findMany({
         where: { projectId: { in: projectIds }, deletedAt: null, status: 'PENDING' },
         include: { gastos: { where: { deletedAt: null }, select: { amount: true } } },
+      }),
+      prisma.planilla.findMany({
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        select: {
+          projectId: true,
+          status: true,
+          totalCurrent: true,
+          netPayable: true,
+        },
       }),
     ]);
 
@@ -192,6 +203,25 @@ export class ProjectsService {
       globalPending += remaining;
     }
 
+    // Planillado: suma de totalCurrent de planillas APPROVED o PAID
+    // Por cobrar: suma de netPayable de planillas SUBMITTED o APPROVED (no PAID)
+    const planilladoByProject = new Map<string, number>();
+    const porCobrarByProject = new Map<string, number>();
+    let globalPlanillado = 0;
+    let globalPorCobrar = 0;
+    for (const pl of planillasAll) {
+      const current = Number(pl.totalCurrent);
+      const net = Number(pl.netPayable);
+      if (pl.status === 'APPROVED' || pl.status === 'PAID') {
+        planilladoByProject.set(pl.projectId, (planilladoByProject.get(pl.projectId) ?? 0) + current);
+        globalPlanillado += current;
+      }
+      if (pl.status === 'SUBMITTED' || pl.status === 'APPROVED') {
+        porCobrarByProject.set(pl.projectId, (porCobrarByProject.get(pl.projectId) ?? 0) + net);
+        globalPorCobrar += net;
+      }
+    }
+
     let totalContract = 0;
     let totalBudgeted = 0;
     let totalSpent = 0;
@@ -202,6 +232,8 @@ export class ProjectsService {
       const budgeted = budgetedMap.get(p.id) ?? 0;
       const spent = spentMap.get(p.id) ?? 0;
       const pending = pendingByProject.get(p.id) ?? 0;
+      const planillado = planilladoByProject.get(p.id) ?? 0;
+      const porCobrar = porCobrarByProject.get(p.id) ?? 0;
       const progressContract = contractAmount > 0 ? spent / contractAmount : 0;
       const progressBudget = budgeted > 0 ? spent / budgeted : 0;
       totalContract += contractAmount;
@@ -223,6 +255,8 @@ export class ProjectsService {
         budgeted,
         spent,
         pending,
+        planillado,
+        porCobrar,
         balance: budgeted - spent,
         progressContract: Math.min(1, progressContract),
         progressBudget: Math.min(1, progressBudget),
@@ -237,6 +271,8 @@ export class ProjectsService {
         spent: totalSpent,
         balance: totalBudgeted - totalSpent,
         pendingOrders: globalPending,
+        planillado: globalPlanillado,
+        porCobrar: globalPorCobrar,
         activeCount,
       },
     };

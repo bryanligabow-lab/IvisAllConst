@@ -6,6 +6,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { createProjectSchema, updateProjectSchema, idParamSchema } from './projects.validation';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
+import { exportProjectsReport } from './projects.excel';
 
 export const projectsRouter = Router();
 projectsRouter.use(authenticate);
@@ -19,6 +20,13 @@ projectsRouter.get(
   '/stats/global',
   requirePermission(PERMISSIONS.PROJECTS_READ),
   asyncHandler(ProjectsController.globalStats),
+);
+projectsRouter.get(
+  '/report/export',
+  requirePermission(PERMISSIONS.PROJECTS_READ),
+  asyncHandler(async (_req, res) => {
+    await exportProjectsReport(res);
+  }),
 );
 projectsRouter.post(
   '/',
