@@ -10,12 +10,24 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/e
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 
+export const PAYMENT_METHODS = [
+  'CASH',
+  'TRANSFER',
+  'CHECK',
+  'CREDIT_CARD',
+  'DEBIT_CARD',
+  'OTHER',
+] as const;
+
 const createSchema = z.object({
   projectId: z.string().uuid(),
   rubroId: z.string().uuid(),
-  providerId: z.string().uuid().optional().nullable(),
+  providerId: z.string().uuid({ message: 'El proveedor es obligatorio' }),
   description: z.string().min(1).max(300),
   invoiceNumber: z.string().max(80).optional(),
+  paymentMethod: z.enum(PAYMENT_METHODS, {
+    errorMap: () => ({ message: 'El método de pago es obligatorio' }),
+  }),
   amount: z.coerce.number().positive(),
   scheduledDate: z.coerce.date(),
 });
@@ -79,13 +91,20 @@ paymentOrdersRouter.post(
     });
     if (!rubro) throw new NotFoundError('El rubro no pertenece al proyecto');
 
+    // Validar que el proveedor exista y no esté borrado
+    const provider = await prisma.provider.findFirst({
+      where: { id: req.body.providerId, deletedAt: null },
+    });
+    if (!provider) throw new NotFoundError('Proveedor no encontrado');
+
     const created = await prisma.paymentOrder.create({
       data: {
         projectId: req.body.projectId,
         rubroId: req.body.rubroId,
-        providerId: req.body.providerId || null,
+        providerId: req.body.providerId,
         description: req.body.description,
         invoiceNumber: req.body.invoiceNumber,
+        paymentMethod: req.body.paymentMethod,
         amount: req.body.amount,
         scheduledDate: req.body.scheduledDate,
         createdBy: req.user.id,

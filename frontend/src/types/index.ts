@@ -83,6 +83,13 @@ export interface Provider {
 }
 
 export type PaymentOrderStatus = 'PENDING' | 'PAID' | 'CANCELLED';
+export type PaymentMethodValue =
+  | 'CASH'
+  | 'TRANSFER'
+  | 'CHECK'
+  | 'CREDIT_CARD'
+  | 'DEBIT_CARD'
+  | 'OTHER';
 
 export interface PaymentOrder {
   id: string;
@@ -92,6 +99,7 @@ export interface PaymentOrder {
   description: string;
   amount: number;
   invoiceNumber: string | null;
+  paymentMethod: PaymentMethodValue | null;
   scheduledDate: string;
   paidAt: string | null;
   status: PaymentOrderStatus;

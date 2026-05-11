@@ -11,21 +11,25 @@ interface Props {
   value: string;
   onChange: (id: string) => void;
   label?: string;
+  required?: boolean;
 }
 
-export function ProviderSelector({ value, onChange, label = 'Proveedor' }: Props) {
+export function ProviderSelector({ value, onChange, label = 'Proveedor', required = false }: Props) {
   const { data: providers, mutate } = useSWR<Provider[]>('/providers', apiGet);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <Field label={label}>
+    <Field label={label} required={required}>
       <div className="flex gap-2">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          required={required}
           className="input flex-1"
         >
-          <option value="">— Sin proveedor —</option>
+          <option value="">
+            {required ? '— Selecciona un proveedor —' : '— Sin proveedor —'}
+          </option>
           {providers?.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}

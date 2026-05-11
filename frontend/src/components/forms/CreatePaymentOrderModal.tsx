@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
 import { apiPost, ApiClientError } from '@/lib/api';
-import type { RubroSummary } from '@/types';
+import { PAYMENT_METHODS } from '@/lib/constants';
+import type { PaymentMethodValue, RubroSummary } from '@/types';
 
 interface Props {
   open: boolean;
@@ -17,6 +18,7 @@ interface Props {
 export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCreated }: Props) {
   const [rubroId, setRubroId] = useState('');
   const [providerId, setProviderId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue | ''>('');
   const [description, setDescription] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -33,6 +35,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
   function reset() {
     setRubroId('');
     setProviderId('');
+    setPaymentMethod('');
     setDescription('');
     setInvoiceNumber('');
     setAmount('');
@@ -46,13 +49,22 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
       setError('Selecciona un rubro');
       return;
     }
+    if (!providerId) {
+      setError('Debes seleccionar un proveedor antes de crear la orden');
+      return;
+    }
+    if (!paymentMethod) {
+      setError('Selecciona el método de pago');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       await apiPost('/payment-orders', {
         projectId,
         rubroId,
-        providerId: providerId || undefined,
+        providerId,
+        paymentMethod,
         description,
         invoiceNumber: invoiceNumber || undefined,
         amount: Number(amount),
@@ -82,6 +94,24 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             {rubros.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.code}. {r.name} (saldo ${r.balance.toFixed(2)})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <ProviderSelector value={providerId} onChange={setProviderId} required />
+
+        <Field label="Método de pago" required>
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethodValue | '')}
+            required
+            className="input"
+          >
+            <option value="">— Selecciona un método —</option>
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.icon} {m.label}
               </option>
             ))}
           </select>
@@ -128,8 +158,6 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             placeholder="001-001-000123"
           />
         </Field>
-
-        <ProviderSelector value={providerId} onChange={setProviderId} />
 
         <p className="text-xs text-ink-secondary">
           La orden queda en estado <strong>pendiente</strong> hasta que pulses{' '}

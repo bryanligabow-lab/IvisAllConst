@@ -23,3 +23,23 @@ export const RUBRO_STATUS_LABEL = {
   danger: 'Excedido',
   exhausted: 'Agotado',
 } as const;
+
+export const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Efectivo', icon: '💵' },
+  { value: 'TRANSFER', label: 'Transferencia bancaria', icon: '🏦' },
+  { value: 'CHECK', label: 'Cheque', icon: '📄' },
+  { value: 'CREDIT_CARD', label: 'Tarjeta de crédito', icon: '💳' },
+  { value: 'DEBIT_CARD', label: 'Tarjeta de débito', icon: '💳' },
+  { value: 'OTHER', label: 'Otro', icon: '•' },
+] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value'];
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  CASH: 'Efectivo',
+  TRANSFER: 'Transferencia',
+  CHECK: 'Cheque',
+  CREDIT_CARD: 'Tarjeta de crédito',
+  DEBIT_CARD: 'Tarjeta de débito',
+  OTHER: 'Otro',
+};

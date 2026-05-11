@@ -323,6 +323,7 @@ model PaymentOrder {
   description   String
   amount        Float
   invoiceNumber String?   @map("invoice_number")
+  paymentMethod String?   @map("payment_method") // CASH | TRANSFER | CHECK | CREDIT_CARD | DEBIT_CARD | OTHER
   scheduledDate DateTime  @map("scheduled_date")
   paidAt        DateTime? @map("paid_at")
   status        String    @default("PENDING") // PENDING | PAID | CANCELLED

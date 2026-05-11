@@ -9,6 +9,7 @@ import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderMo
 import { PaymentDialog } from '@/components/forms/PaymentDialog';
 import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
 import type { PaymentOrder, ProjectSummary } from '@/types';
 
 const STATUS_LABEL = {
@@ -178,6 +179,11 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardPro
             <div className="mt-1 text-xs text-ink-secondary">
               🏢 Proveedor: <span className="font-medium text-ink-primary">{order.provider.name}</span>
               {order.provider.service ? ` · ${order.provider.service}` : ''}
+            </div>
+          )}
+          {order.paymentMethod && (
+            <div className="mt-0.5 text-xs text-ink-secondary">
+              💳 Método: <span className="font-medium text-ink-primary">{PAYMENT_METHOD_LABEL[order.paymentMethod]}</span>
             </div>
           )}
         </div>
