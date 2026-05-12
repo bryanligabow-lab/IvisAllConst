@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { apiGet, apiPost, apiDelete, ApiClientError } from '@/lib/api';
 import { CreateUserModal } from '@/components/forms/CreateUserModal';
+import { EditUserModal } from '@/components/forms/EditUserModal';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { Modal } from '@/components/ui/Modal';
 
@@ -24,6 +25,7 @@ export default function DirectorioPage() {
   const { data: users, mutate } = useSWR<DirectoryUser[]>('/users', apiGet);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<DirectoryUser | null>(null);
   const [deleting, setDeleting] = useState<DirectoryUser | null>(null);
   const [resetting, setResetting] = useState<DirectoryUser | null>(null);
   const [resetResult, setResetResult] = useState<string | null>(null);
@@ -157,7 +159,13 @@ export default function DirectorioPage() {
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('es-EC') : '—'}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        onClick={() => setEditing(u)}
+                        className="rounded-md bg-red-600 px-2 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                      >
+                        Editar
+                      </button>
                       <button
                         onClick={() => doReset(u, 'password')}
                         className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
@@ -193,6 +201,13 @@ export default function DirectorioPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => void mutate()}
+      />
+
+      <EditUserModal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        user={editing}
+        onSaved={() => void mutate()}
       />
 
       <DeleteConfirmDialog

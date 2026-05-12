@@ -55,8 +55,8 @@ const CAROUSEL_SLIDES = [
 export default function LoginPage() {
   const router = useRouter();
   const loadMe = useAuthStore((s) => s.loadMe);
-  const [email, setEmail] = useState('admin@ivisallconst.local');
-  const [password, setPassword] = useState('Admin123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
