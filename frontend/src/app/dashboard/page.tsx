@@ -255,7 +255,7 @@ function ProjectMiniCard({
 
   return (
     <div className="group relative rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
-      <div className="absolute right-1.5 top-1.5 hidden gap-0.5 group-hover:flex">
+      <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
         <button
           type="button"
           onClick={(e) => {

@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
-import { apiGet } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/format';
 import { API_BASE_URL, ROUTES, STORAGE_KEYS } from '@/lib/constants';
 import type { Project } from '@/types';
@@ -75,8 +76,9 @@ async function downloadReport() {
 }
 
 export default function ProyectosReportPage() {
-  const { data, isLoading, error } = useSWR<Stats>('/projects/stats/global', apiGet);
+  const { data, isLoading, error, mutate } = useSWR<Stats>('/projects/stats/global', apiGet);
   const [filter, setFilter] = useState<'ALL' | Project['status']>('ALL');
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   const filteredProjects =
     data?.projects.filter((p) => filter === 'ALL' || p.status === filter) ?? [];
@@ -165,12 +167,13 @@ export default function ProyectosReportPage() {
                   <th className="text-right">Planillado</th>
                   <th className="text-right">Por cobrar</th>
                   <th className="text-right">Por pagar</th>
+                  <th className="w-12"></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProjects.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-10 text-center text-sm text-ink-secondary">
+                    <td colSpan={11} className="py-10 text-center text-sm text-ink-secondary">
                       No hay proyectos para el filtro seleccionado.
                     </td>
                   </tr>
@@ -208,6 +211,16 @@ export default function ProyectosReportPage() {
                       >
                         {formatCurrency(p.pending)}
                       </td>
+                      <td className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setPendingDelete({ id: p.id, name: p.name })}
+                          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                          title="Eliminar proyecto"
+                        >
+                          🗑️
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -235,6 +248,7 @@ export default function ProyectosReportPage() {
                     <td className="text-right font-bold text-danger">
                       {formatCurrency(filteredProjects.reduce((s, p) => s + p.pending, 0))}
                     </td>
+                    <td></td>
                   </tr>
                 </tfoot>
               )}
@@ -250,6 +264,19 @@ export default function ProyectosReportPage() {
           </p>
         </>
       )}
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `el proyecto "${pendingDelete.name}"` : ''}
+        warning="Se borrarán también todos sus rubros, gastos, planillas, órdenes y proformas asociadas."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/projects/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
+        }}
+      />
     </AppShell>
   );
 }

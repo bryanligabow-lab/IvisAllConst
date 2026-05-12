@@ -37,6 +37,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/assets ./assets
 COPY --from=builder /database /database
 COPY backend/package.json ./
+COPY backend/scripts /app/scripts
 COPY backend/scripts/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 EXPOSE 4000
