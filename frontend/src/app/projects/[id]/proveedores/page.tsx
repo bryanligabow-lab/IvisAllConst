@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
+import { CreateProviderModal } from '@/components/forms/CreateProviderModal';
 import { apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { ProjectSummary, Provider } from '@/types';
@@ -15,30 +17,55 @@ export default function ProjectProvidersPage() {
     `/projects/${params.id}/summary`,
     apiGet,
   );
-  const { data: providers, isLoading } = useSWR<Provider[]>(
+  const { data: providers, isLoading, mutate } = useSWR<Provider[]>(
     `/providers?projectId=${params.id}`,
     apiGet,
   );
+  const { data: allProviders, mutate: mutateAll } = useSWR<Provider[]>(
+    '/providers',
+    apiGet,
+  );
+  const [showCreate, setShowCreate] = useState(false);
 
   return (
     <AppShell>
       <ProjectTabs projectId={params.id} />
 
-      <div className="mb-4">
-        <h1 className="text-lg font-medium">
-          Proveedores del proyecto {summary ? `— ${summary.project.name}` : ''}
-        </h1>
-        <p className="mt-1 text-xs text-ink-secondary">
-          Lista de proveedores con gastos u órdenes registrados en este proyecto.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-medium">
+            Proveedores del proyecto {summary ? `— ${summary.project.name}` : ''}
+          </h1>
+          <p className="mt-1 text-xs text-ink-secondary">
+            Lista de proveedores con gastos u órdenes registrados en este proyecto.
+            {allProviders && (
+              <span className="ml-2 text-ink-tertiary">
+                Catálogo global: {allProviders.length} proveedor{allProviders.length === 1 ? '' : 'es'}.
+              </span>
+            )}
+          </p>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
+          + Nuevo proveedor
+        </button>
       </div>
+
+      <CreateProviderModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onSaved={() => {
+          void mutate();
+          void mutateAll();
+        }}
+      />
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
 
       {providers && providers.length === 0 && (
         <div className="card text-sm text-ink-secondary">
-          Aún no hay proveedores con actividad en este proyecto. Asigna un proveedor al crear un
-          gasto o una orden de pago.
+          Aún no hay proveedores con actividad en este proyecto. Crea uno con{' '}
+          <strong>+ Nuevo proveedor</strong> y después asígnalo al registrar un gasto o una orden
+          de pago.
         </div>
       )}
 

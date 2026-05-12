@@ -49,12 +49,26 @@ export class PlanillasService {
     };
   }
 
-  /** Suma acumulada por rubro de las planillas anteriores aprobadas/pagadas. */
-  private static async getPreviousAccumulatedByRubro(projectId: string): Promise<Map<string, number>> {
+  /**
+   * Suma acumulada por rubro de las planillas anteriores. Incluye todos los
+   * estados excepto CANCELLED — un borrador también cuenta para que las
+   * cifras se vean correctas mientras se redacta el siguiente período.
+   * Si `beforeNumber` se pasa, sólo se consideran planillas cuyo número es
+   * estrictamente menor.
+   */
+  private static async getPreviousAccumulatedByRubro(
+    projectId: string,
+    beforeNumber?: number,
+  ): Promise<Map<string, number>> {
     const items = await prisma.planillaItem.findMany({
       where: {
         rubroId: { not: undefined },
-        planilla: { projectId, deletedAt: null, status: { in: ['APPROVED', 'PAID'] } },
+        planilla: {
+          projectId,
+          deletedAt: null,
+          status: { not: 'CANCELLED' },
+          ...(beforeNumber !== undefined ? { number: { lt: beforeNumber } } : {}),
+        },
       },
       select: { rubroId: true, currentAmount: true },
     });
@@ -63,6 +77,58 @@ export class PlanillasService {
       map.set(it.rubroId, (map.get(it.rubroId) ?? 0) + Number(it.currentAmount));
     }
     return map;
+  }
+
+  /**
+   * Recomputa los totales (previous / accumulated / amortización / fondo
+   * garantía / total a pagar) de TODAS las planillas no canceladas de un
+   * proyecto, en orden cronológico. Se llama después de crear o cambiar
+   * el estado de una planilla para mantener todo coherente.
+   */
+  static async recomputeProjectTotals(projectId: string): Promise<void> {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+    });
+    if (!project) return;
+
+    const advancePct = Number(project.advancePercent);
+    const guaranteePct = Number(project.guaranteePercent);
+
+    const planillas = await prisma.planilla.findMany({
+      where: { projectId, deletedAt: null, status: { not: 'CANCELLED' } },
+      orderBy: { number: 'asc' },
+      include: { items: true },
+    });
+
+    // Tracks cumulative per rubro across planillas processed so far.
+    const cumulative = new Map<string, number>();
+
+    for (const p of planillas) {
+      let totalCurrent = 0;
+      let totalPrevious = 0;
+      for (const it of p.items) {
+        const prev = cumulative.get(it.rubroId) ?? 0;
+        const cur = Number(it.currentAmount);
+        const newAccum = prev + cur;
+        totalCurrent += cur;
+        totalPrevious += prev;
+        cumulative.set(it.rubroId, newAccum);
+        await prisma.planillaItem.update({
+          where: { id: it.id },
+          data: { previousAmount: prev, accumulatedAmount: newAccum },
+        });
+      }
+      const totals = this.computeTotals(
+        totalCurrent,
+        totalPrevious,
+        advancePct,
+        guaranteePct,
+      );
+      await prisma.planilla.update({
+        where: { id: p.id },
+        data: totals,
+      });
+    }
   }
 
   static async list(projectId: string) {
@@ -123,7 +189,7 @@ export class PlanillasService {
       Number(project.guaranteePercent),
     );
 
-    return prisma.planilla.create({
+    const created = await prisma.planilla.create({
       data: {
         projectId: input.projectId,
         number: nextNumber,
@@ -136,18 +202,27 @@ export class PlanillasService {
       },
       include: { items: true },
     });
+
+    // Recompute all planillas to keep cumulative figures coherent.
+    await this.recomputeProjectTotals(input.projectId);
+
+    return created;
   }
 
   static async updateStatus(id: string, status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'CANCELLED') {
-    await this.getById(id);
-    return prisma.planilla.update({ where: { id }, data: { status } });
+    const existing = await this.getById(id);
+    const updated = await prisma.planilla.update({ where: { id }, data: { status } });
+    // Status changes can affect downstream "planilla anterior" totals.
+    await this.recomputeProjectTotals(existing.projectId);
+    return updated;
   }
 
   static async softDelete(id: string) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     await prisma.planilla.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+    await this.recomputeProjectTotals(existing.projectId);
   }
 }
