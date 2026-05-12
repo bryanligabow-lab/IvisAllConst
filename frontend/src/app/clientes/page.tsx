@@ -4,28 +4,15 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/format';
 
 export default function ClientesPage() {
   const { data, isLoading, mutate } = useSWR<Client[]>('/clients', apiGet);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
-
-  async function handleDelete(c: Client) {
-    if (
-      !window.confirm(
-        `¿Eliminar al cliente "${c.name}"?\n\nLas proformas existentes se conservan pero quedan sin cliente asociado.`,
-      )
-    )
-      return;
-    try {
-      await apiDelete(`/clients/${c.id}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
 
   const totalProf = data?.reduce((s, c) => s + (c.proformasCount ?? 0), 0) ?? 0;
   const totalAmount = data?.reduce((s, c) => s + Number(c.proformasTotal ?? 0), 0) ?? 0;
@@ -59,6 +46,19 @@ export default function ClientesPage() {
         onClose={() => setEditing(null)}
         initial={editing}
         onSaved={() => mutate()}
+      />
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `al cliente "${pendingDelete.name}"` : ''}
+        warning="Las proformas existentes se conservan pero quedan sin cliente asociado."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/clients/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
+        }}
       />
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
@@ -105,7 +105,7 @@ export default function ClientesPage() {
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleDelete(c)}
+                        onClick={() => setPendingDelete(c)}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                         title="Eliminar"
                       >

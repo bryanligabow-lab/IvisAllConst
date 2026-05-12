@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateRubroModal } from '@/components/forms/CreateRubroModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
+import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { RUBRO_STATUS_LABEL } from '@/lib/constants';
 import type { ProjectSummary, RubroStatus } from '@/types';
@@ -25,21 +26,7 @@ export default function PresupuestoPage() {
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
-
-  async function handleDelete(rubroId: string, name: string) {
-    if (
-      !window.confirm(
-        `¿Eliminar el rubro "${name}"?\n\nSi tiene gastos asociados, no se podrá eliminar.`,
-      )
-    )
-      return;
-    try {
-      await apiDelete(`/rubros/${rubroId}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar el rubro');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <AppShell>
@@ -73,6 +60,19 @@ export default function PresupuestoPage() {
             projectId={params.id}
             nextOrderIndex={data.rubros.length}
             onCreated={() => mutate()}
+          />
+
+          <DeleteConfirmDialog
+            open={!!pendingDelete}
+            onClose={() => setPendingDelete(null)}
+            itemLabel={pendingDelete ? `el rubro "${pendingDelete.name}"` : ''}
+            warning="Si tiene gastos asociados, no se podrá eliminar."
+            onConfirm={async (code) => {
+              if (!pendingDelete) return;
+              await apiDelete(`/rubros/${pendingDelete.id}`, { deleteCode: code });
+              await mutate();
+              setPendingDelete(null);
+            }}
           />
 
           <div className="card overflow-x-auto">
@@ -120,7 +120,7 @@ export default function PresupuestoPage() {
                     <td>
                       <button
                         type="button"
-                        onClick={() => handleDelete(r.id, r.name)}
+                        onClick={() => setPendingDelete({ id: r.id, name: r.name })}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                         title="Eliminar rubro"
                       >

@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePlanillaModal } from '@/components/forms/CreatePlanillaModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Planilla, PlanillaStatus, ProjectSummary } from '@/types';
@@ -59,21 +60,7 @@ export default function PlanillasPage() {
     mutate: mutatePlanillas,
   } = useSWR<Planilla[]>(`/planillas?projectId=${params.id}`, apiGet);
   const [showCreate, setShowCreate] = useState(false);
-
-  async function handleDelete(planillaId: string, label: string) {
-    if (
-      !window.confirm(
-        `¿Eliminar la planilla "${label}"?\n\nSe borrarán también sus ítems. No se puede deshacer.`,
-      )
-    )
-      return;
-    try {
-      await apiDelete(`/planillas/${planillaId}`);
-      mutatePlanillas();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar la planilla');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   return (
     <AppShell>
@@ -131,7 +118,7 @@ export default function PlanillasPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(p.id, `Planilla #${p.number} — ${p.title}`)}
+                  onClick={() => setPendingDelete({ id: p.id, label: `Planilla #${p.number} — ${p.title}` })}
                   className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                   title="Eliminar planilla"
                 >
@@ -161,6 +148,19 @@ export default function PlanillasPage() {
           </article>
         ))}
       </div>
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `la planilla "${pendingDelete.label}"` : ''}
+        warning="Se borrarán también todos sus ítems."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/planillas/${pendingDelete.id}`, { deleteCode: code });
+          await mutatePlanillas();
+          setPendingDelete(null);
+        }}
+      />
     </AppShell>
   );
 }

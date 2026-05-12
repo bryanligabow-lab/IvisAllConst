@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProjectModal } from '@/components/forms/CreateProjectModal';
 import { EcuadorMap } from '@/components/ui/EcuadorMap';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import type { Project } from '@/types';
@@ -71,20 +72,7 @@ export default function DashboardPage() {
     apiGet,
   );
 
-  async function handleDelete(id: string, name: string) {
-    if (
-      !window.confirm(
-        `¿Eliminar el proyecto "${name}"?\n\nSe borrarán también todos sus rubros, gastos y planillas. Esta acción no se puede deshacer.`,
-      )
-    )
-      return;
-    try {
-      await apiDelete(`/projects/${id}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar el proyecto');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <AppShell>
@@ -182,7 +170,7 @@ export default function DashboardPage() {
                       key={p.id}
                       project={p}
                       onEdit={() => setEditingId(p.id)}
-                      onDelete={() => handleDelete(p.id, p.name)}
+                      onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
                     />
                   ))
                 )}
@@ -202,6 +190,19 @@ export default function DashboardPage() {
         onClose={() => setEditingId(null)}
         initial={editingProject}
         onSaved={() => mutate()}
+      />
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `el proyecto "${pendingDelete.name}"` : ''}
+        warning="Se borrarán también todos sus rubros, gastos y planillas."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/projects/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
+        }}
       />
     </AppShell>
   );

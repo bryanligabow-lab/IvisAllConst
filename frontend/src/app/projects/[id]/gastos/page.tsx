@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateGastoModal } from '@/components/forms/CreateGastoModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
+import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Gasto, ProjectSummary } from '@/types';
@@ -23,18 +24,7 @@ export default function GastosPage() {
     : `/gastos?projectId=${params.id}&perPage=100`;
   const { data: gastos, isLoading, mutate: mutateGastos } = useSWR<Gasto[]>(gastosKey, apiGet);
   const [showCreate, setShowCreate] = useState(false);
-
-  async function handleDelete(gastoId: string, description: string) {
-    if (!window.confirm(`¿Eliminar el gasto "${description}"?\n\nEl saldo del rubro se restaurará.`))
-      return;
-    try {
-      await apiDelete(`/gastos/${gastoId}`);
-      mutateGastos();
-      mutateSummary();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar el gasto');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; description: string } | null>(null);
 
   async function handleExport() {
     const token =
@@ -133,7 +123,7 @@ export default function GastosPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleDelete(g.id, g.description)}
+                    onClick={() => setPendingDelete({ id: g.id, description: g.description })}
                     className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                     title="Eliminar gasto"
                   >
@@ -145,6 +135,19 @@ export default function GastosPage() {
           )}
         </div>
       )}
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `el gasto "${pendingDelete.description}"` : ''}
+        warning="El saldo del rubro se restaurará automáticamente."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/gastos/${pendingDelete.id}`, { deleteCode: code });
+          await Promise.all([mutateGastos(), mutateSummary()]);
+          setPendingDelete(null);
+        }}
+      />
 
       {summary && (
         <CreateGastoModal

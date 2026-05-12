@@ -8,7 +8,8 @@ import {
   type Employee,
 } from '@/components/forms/CreateEmployeeModal';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate } from '@/lib/format';
 
 interface PayrollHistoryEntry {
@@ -36,21 +37,11 @@ export default function NominaPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Employee | null>(null);
 
   function refresh() {
     mutate();
     mutateHistory();
-  }
-
-  async function handleDelete(e: Employee) {
-    if (!window.confirm(`¿Eliminar al empleado "${e.fullName}"?\n\nLos pagos ya registrados se conservan.`))
-      return;
-    try {
-      await apiDelete(`/employees/${e.id}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar');
-    }
   }
 
   const active = data?.filter((e) => e.status === 'ACTIVE') ?? [];
@@ -97,6 +88,19 @@ export default function NominaPage() {
         onSaved={refresh}
       />
       <PayrollPaymentModal open={showPay} onClose={() => setShowPay(false)} onCreated={refresh} />
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `al empleado "${pendingDelete.fullName}"` : ''}
+        warning="Los pagos ya registrados se conservan."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/employees/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
+        }}
+      />
 
       <PayrollHistorySection history={history} />
 
@@ -150,7 +154,7 @@ export default function NominaPage() {
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleDelete(e)}
+                        onClick={() => setPendingDelete(e)}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                         title="Eliminar"
                       >

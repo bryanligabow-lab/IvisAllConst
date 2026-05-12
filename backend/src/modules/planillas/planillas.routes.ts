@@ -4,6 +4,7 @@ import { PlanillasService } from './planillas.service';
 import { exportPlanillaExcel } from './planillas.excel';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { success } from '../../utils/apiResponse';
@@ -81,6 +82,7 @@ planillasRouter.patch(
 planillasRouter.delete(
   '/:id',
   requirePermission(PERMISSIONS.PLANILLAS_WRITE),
+  requireDeleteCode,
   validate(idParamSchema, 'params'),
   asyncHandler(async (req, res) => {
     await PlanillasService.softDelete(req.params.id);

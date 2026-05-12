@@ -19,6 +19,7 @@ export const ROUTES = {
   PROFORMAS: '/proformas',
   CLIENTES: '/clientes',
   PROYECTOS_REPORT: '/proyectos',
+  DIRECTORIO: '/directorio',
 } as const;
 
 export const RUBRO_STATUS_LABEL = {

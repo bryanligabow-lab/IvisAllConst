@@ -9,7 +9,8 @@ import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderMo
 import { PaymentDialog } from '@/components/forms/PaymentDialog';
 import { PaymentTypePicker, type PaymentType } from '@/components/forms/PaymentTypePicker';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
 import type { PaymentOrder, ProjectSummary } from '@/types';
@@ -51,21 +52,7 @@ export default function OrdenesPage() {
     // THIRD_PARTY queda pendiente
   }
 
-  async function handleDelete(order: PaymentOrder) {
-    const linkedExpenses = order.gastos?.length ?? 0;
-    const msg =
-      linkedExpenses > 0
-        ? `¿Eliminar la orden "${order.description}"?\n\nSe borrarán también ${linkedExpenses} gasto(s) asociado(s) y el saldo del rubro se restaurará.`
-        : `¿Eliminar la orden "${order.description}"?`;
-    if (!window.confirm(msg)) return;
-    try {
-      await apiDelete(`/payment-orders/${order.id}`);
-      mutate();
-      mutateSummary();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar la orden');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<PaymentOrder | null>(null);
 
   const pending = orders?.filter((o) => o.status === 'PENDING') ?? [];
   const paid = orders?.filter((o) => o.status === 'PAID') ?? [];
@@ -128,6 +115,23 @@ export default function OrdenesPage() {
         }}
       />
 
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `la orden "${pendingDelete.description}"` : ''}
+        warning={
+          pendingDelete && (pendingDelete.gastos?.length ?? 0) > 0
+            ? `Se borrarán también ${pendingDelete.gastos!.length} gasto(s) asociado(s) y el saldo del rubro se restaurará.`
+            : undefined
+        }
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/payment-orders/${pendingDelete.id}`, { deleteCode: code });
+          await Promise.all([mutate(), mutateSummary()]);
+          setPendingDelete(null);
+        }}
+      />
+
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
 
       <section className="mb-6">
@@ -143,7 +147,7 @@ export default function OrdenesPage() {
                 statusLabel={STATUS_LABEL[o.status]}
                 statusClass={STATUS_CLASS[o.status]}
                 onPay={() => setPayingOrder(o)}
-                onDelete={() => handleDelete(o)}
+                onDelete={() => setPendingDelete(o)}
               />
             ))}
           </div>
@@ -163,7 +167,7 @@ export default function OrdenesPage() {
                 statusLabel={STATUS_LABEL[o.status]}
                 statusClass={STATUS_CLASS[o.status]}
                 onPay={() => setPayingOrder(o)}
-                onDelete={() => handleDelete(o)}
+                onDelete={() => setPendingDelete(o)}
               />
             ))}
           </div>

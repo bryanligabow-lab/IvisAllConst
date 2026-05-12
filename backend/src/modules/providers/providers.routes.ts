@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { success } from '../../utils/apiResponse';
@@ -257,6 +258,7 @@ providersRouter.patch(
 providersRouter.delete(
   '/:id',
   requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  requireDeleteCode,
   validate(idParamSchema, 'params'),
   asyncHandler(async (req, res) => {
     await prisma.provider.update({

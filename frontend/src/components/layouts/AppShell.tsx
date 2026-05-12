@@ -16,6 +16,7 @@ const NAV_LINKS = [
   { href: ROUTES.CLIENTES, label: 'Clientes' },
   { href: ROUTES.NOMINA, label: 'Nómina' },
   { href: ROUTES.PROFORMAS, label: 'Proformas' },
+  { href: ROUTES.DIRECTORIO, label: 'Directorio' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

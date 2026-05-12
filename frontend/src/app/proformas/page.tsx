@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProformaModal } from '@/components/forms/CreateProformaModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate } from '@/lib/format';
 
 interface ProformaListItem {
@@ -39,16 +40,7 @@ export default function ProformasPage() {
   const router = useRouter();
   const { data, isLoading, mutate } = useSWR<ProformaListItem[]>('/proformas', apiGet);
   const [showCreate, setShowCreate] = useState(false);
-
-  async function handleDelete(p: ProformaListItem) {
-    if (!window.confirm(`¿Eliminar la proforma ${p.number} de ${p.clientName}?`)) return;
-    try {
-      await apiDelete(`/proformas/${p.id}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; number: string; clientName: string } | null>(null);
 
   return (
     <AppShell>
@@ -70,6 +62,18 @@ export default function ProformasPage() {
         onCreated={(id) => {
           mutate();
           router.push(`/proformas/${id}`);
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `la proforma ${pendingDelete.number} de ${pendingDelete.clientName}` : ''}
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/proformas/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
         }}
       />
 
@@ -121,7 +125,7 @@ export default function ProformasPage() {
                         👁️
                       </Link>
                       <button
-                        onClick={() => handleDelete(p)}
+                        onClick={() => setPendingDelete({ id: p.id, number: p.number, clientName: p.clientName })}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                         title="Eliminar"
                       >

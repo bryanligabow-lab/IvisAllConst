@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { success } from '../../utils/apiResponse';
@@ -210,6 +211,7 @@ paymentOrdersRouter.post(
 paymentOrdersRouter.delete(
   '/:id',
   requirePermission(PERMISSIONS.PAYMENT_ORDERS_WRITE),
+  requireDeleteCode,
   validate(idParamSchema, 'params'),
   asyncHandler(async (req, res) => {
     const order = await prisma.paymentOrder.findFirst({

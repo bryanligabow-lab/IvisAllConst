@@ -5,7 +5,8 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProviderModal } from '@/components/forms/CreateProviderModal';
-import { apiDelete, apiGet, ApiClientError } from '@/lib/api';
+import { apiDelete, apiGet } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/format';
 import type { Provider } from '@/types';
 
@@ -13,21 +14,7 @@ export default function ProvidersPage() {
   const { data: providers, isLoading, mutate } = useSWR<Provider[]>('/providers', apiGet);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Provider | null>(null);
-
-  async function handleDelete(p: Provider) {
-    if (
-      !window.confirm(
-        `¿Eliminar el proveedor "${p.name}"?\n\nSus gastos y órdenes existentes se mantendrán pero quedarán sin proveedor asociado.`,
-      )
-    )
-      return;
-    try {
-      await apiDelete(`/providers/${p.id}`);
-      mutate();
-    } catch (err) {
-      window.alert(err instanceof ApiClientError ? err.message : 'No se pudo eliminar');
-    }
-  }
+  const [pendingDelete, setPendingDelete] = useState<Provider | null>(null);
 
   const totalDebt = providers?.reduce((s, p) => s + Number(p.totalDebt ?? 0), 0) ?? 0;
   const totalSpent = providers?.reduce((s, p) => s + Number(p.totalSpent ?? 0), 0) ?? 0;
@@ -66,6 +53,19 @@ export default function ProvidersPage() {
         onClose={() => setEditing(null)}
         initial={editing}
         onSaved={() => mutate()}
+      />
+
+      <DeleteConfirmDialog
+        open={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        itemLabel={pendingDelete ? `al proveedor "${pendingDelete.name}"` : ''}
+        warning="Sus gastos y órdenes existentes se mantendrán sin proveedor asociado."
+        onConfirm={async (code) => {
+          if (!pendingDelete) return;
+          await apiDelete(`/providers/${pendingDelete.id}`, { deleteCode: code });
+          await mutate();
+          setPendingDelete(null);
+        }}
       />
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
@@ -124,7 +124,7 @@ export default function ProvidersPage() {
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleDelete(p)}
+                        onClick={() => setPendingDelete(p)}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                         title="Eliminar"
                       >

@@ -83,4 +83,8 @@ export const apiPost = <T>(path: string, data: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data) });
 export const apiPatch = <T>(path: string, data: unknown) =>
   apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(data) });
-export const apiDelete = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' });
+export const apiDelete = <T>(path: string, opts?: { deleteCode?: string }) =>
+  apiFetch<T>(path, {
+    method: 'DELETE',
+    headers: opts?.deleteCode ? { 'X-Delete-Code': opts.deleteCode } : undefined,
+  });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ProjectsController } from './projects.controller';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { createProjectSchema, updateProjectSchema, idParamSchema } from './projects.validation';
@@ -56,6 +57,7 @@ projectsRouter.patch(
 projectsRouter.delete(
   '/:id',
   requirePermission(PERMISSIONS.PROJECTS_DELETE),
+  requireDeleteCode,
   validate(idParamSchema, 'params'),
   asyncHandler(ProjectsController.remove),
 );
