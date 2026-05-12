@@ -165,6 +165,14 @@ async function main() {
   });
 
   // ---------- Proyectos demo ----------
+  // Only seed demo projects when explicitly requested. In production we want
+  // the system to ship empty.
+  if (process.env.SEED_DEMO_DATA !== '1') {
+    console.log('  (SEED_DEMO_DATA != 1, skipping demo project creation)');
+    console.log('✅ Seed completado');
+    return;
+  }
+
   await seedProject(adminUser.id, {
     code: 'TEC-URB-MM-003-2025',
     name: 'Mundo Mágico en Rosedales 2 — Fase 1',
