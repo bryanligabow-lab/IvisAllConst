@@ -117,7 +117,7 @@ usersRouter.post(
               roles: {
                 create: roleIds.map((roleId) => ({
                   roleId,
-                  assignedById: req.user!.id,
+                  assignedBy: req.user!.id,
                 })),
               },
             }
@@ -212,7 +212,7 @@ usersRouter.patch(
             data: roleIds.map((roleId) => ({
               userId: req.params.id,
               roleId,
-              assignedById: req.user!.id,
+              assignedBy: req.user!.id,
             })),
             skipDuplicates: true,
           });
