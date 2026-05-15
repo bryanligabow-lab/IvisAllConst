@@ -21,6 +21,13 @@ export const createProjectSchema = z.object({
   contractAmount: z.coerce.number().nonnegative(),
   advancePercent: z.coerce.number().min(0).max(100).default(40),
   guaranteePercent: z.coerce.number().min(0).max(100).default(5),
+  // IVA
+  vatPercent: z.coerce.number().min(0).max(100).default(15).optional(),
+  vatIncluded: z.coerce.boolean().default(false).optional(),
+  // Retenciones (cuando el cliente es agente de retención)
+  isWithholdingAgent: z.coerce.boolean().default(false).optional(),
+  vatRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
+  incomeRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
   status: projectStatusSchema.optional(),

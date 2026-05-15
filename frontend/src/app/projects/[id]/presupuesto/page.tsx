@@ -54,6 +54,68 @@ export default function PresupuestoPage() {
             </button>
           </div>
 
+          {/* Breakdown IVA + retenciones */}
+          <div className="card mb-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div>
+                <div className="text-xs uppercase text-ink-tertiary">Base sin IVA</div>
+                <div className="text-base font-medium">
+                  {formatCurrency(data.project.contractBase, true)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-ink-tertiary">
+                  IVA {data.project.vatPercent}%
+                </div>
+                <div className="text-base font-medium">
+                  {formatCurrency(data.project.contractVatAmount, true)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-ink-tertiary">Total con IVA</div>
+                <div className="text-base font-medium text-brand">
+                  {formatCurrency(data.project.contractGross, true)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-ink-tertiary">
+                  {data.project.isWithholdingAgent ? 'Neto a recibir' : 'Sin retenciones'}
+                </div>
+                <div className="text-base font-medium">
+                  {formatCurrency(data.project.netReceivable, true)}
+                </div>
+              </div>
+            </div>
+            {data.project.isWithholdingAgent && (
+              <div className="mt-3 grid grid-cols-2 gap-4 border-t border-border pt-3 text-xs md:grid-cols-3">
+                <div>
+                  <span className="text-ink-tertiary">Retención IVA</span>{' '}
+                  <span className="text-ink-secondary">
+                    ({data.project.vatRetentionPercent}% del IVA)
+                  </span>
+                  <div className="font-medium text-danger">
+                    − {formatCurrency(data.project.vatRetention, true)}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-ink-tertiary">Retención Renta</span>{' '}
+                  <span className="text-ink-secondary">
+                    ({data.project.incomeRetentionPercent}% de la base)
+                  </span>
+                  <div className="font-medium text-danger">
+                    − {formatCurrency(data.project.incomeRetention, true)}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-ink-tertiary">Total retenciones</span>
+                  <div className="font-medium text-danger">
+                    − {formatCurrency(data.project.totalRetentions, true)}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <CreateRubroModal
             open={showCreate}
             onClose={() => setShowCreate(false)}

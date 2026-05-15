@@ -21,6 +21,13 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [contractAmount, setContractAmount] = useState('');
   const [advancePercent, setAdvancePercent] = useState('40');
   const [guaranteePercent, setGuaranteePercent] = useState('5');
+  // IVA
+  const [vatPercent, setVatPercent] = useState('15');
+  const [vatIncluded, setVatIncluded] = useState(false);
+  // Retenciones
+  const [isWithholdingAgent, setIsWithholdingAgent] = useState(false);
+  const [vatRetentionPercent, setVatRetentionPercent] = useState('70');
+  const [incomeRetentionPercent, setIncomeRetentionPercent] = useState('2');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [status, setStatus] = useState<Project['status']>('ACTIVE');
@@ -39,6 +46,11 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setContractAmount(String(initial.contractAmount));
       setAdvancePercent(String(initial.advancePercent));
       setGuaranteePercent(String(initial.guaranteePercent));
+      setVatPercent(String(initial.vatPercent ?? 15));
+      setVatIncluded(Boolean(initial.vatIncluded));
+      setIsWithholdingAgent(Boolean(initial.isWithholdingAgent));
+      setVatRetentionPercent(String(initial.vatRetentionPercent ?? 70));
+      setIncomeRetentionPercent(String(initial.incomeRetentionPercent ?? 2));
       setStartDate(initial.startDate ? initial.startDate.slice(0, 10) : '');
       setEndDate(initial.endDate ? initial.endDate.slice(0, 10) : '');
       setStatus(initial.status);
@@ -50,6 +62,11 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setContractAmount('');
       setAdvancePercent('40');
       setGuaranteePercent('5');
+      setVatPercent('15');
+      setVatIncluded(false);
+      setIsWithholdingAgent(false);
+      setVatRetentionPercent('70');
+      setIncomeRetentionPercent('2');
       setStartDate('');
       setEndDate('');
       setStatus('ACTIVE');
@@ -73,6 +90,11 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
         contractAmount: Number(contractAmount),
         advancePercent: Number(advancePercent),
         guaranteePercent: Number(guaranteePercent),
+        vatPercent: Number(vatPercent),
+        vatIncluded,
+        isWithholdingAgent,
+        vatRetentionPercent: isWithholdingAgent ? Number(vatRetentionPercent) : 0,
+        incomeRetentionPercent: isWithholdingAgent ? Number(incomeRetentionPercent) : 0,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         status,
@@ -168,6 +190,82 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
             />
           </Field>
         </div>
+
+        {/* IVA */}
+        <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <legend className="px-1 text-xs font-medium text-ink-secondary">IVA</legend>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="IVA %" hint="15% por defecto en Ecuador">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={vatPercent}
+                onChange={(e) => setVatPercent(e.target.value)}
+                className="input"
+              />
+            </Field>
+            <Field label="¿Los valores que ingresas son…?">
+              <select
+                value={vatIncluded ? 'gross' : 'net'}
+                onChange={(e) => setVatIncluded(e.target.value === 'gross')}
+                className="input"
+              >
+                <option value="net">Sin IVA (valor base)</option>
+                <option value="gross">Con IVA incluido</option>
+              </select>
+            </Field>
+            <Field label=" " hint={vatIncluded ? 'Se descompone IVA del valor.' : 'Se suma IVA al final.'}>
+              <div className="input bg-bg text-xs leading-[1.8] text-ink-secondary">
+                {contractAmount
+                  ? vatIncluded
+                    ? `Base: ${(Number(contractAmount) / (1 + Number(vatPercent) / 100)).toFixed(2)}`
+                    : `Con IVA: ${(Number(contractAmount) * (1 + Number(vatPercent) / 100)).toFixed(2)}`
+                  : '—'}
+              </div>
+            </Field>
+          </div>
+        </fieldset>
+
+        {/* Retenciones */}
+        <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <legend className="px-1 text-xs font-medium text-ink-secondary">Retenciones del cliente</legend>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={isWithholdingAgent}
+              onChange={(e) => setIsWithholdingAgent(e.target.checked)}
+            />
+            El cliente es <strong>agente de retención</strong> (retiene IVA y/o Renta)
+          </label>
+          {isWithholdingAgent && (
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <Field label="% retención IVA" hint="Típico: 30 / 70 / 100">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={vatRetentionPercent}
+                  onChange={(e) => setVatRetentionPercent(e.target.value)}
+                  className="input"
+                />
+              </Field>
+              <Field label="% retención Renta" hint="Típico: 1 / 1,75 / 2 / 8 / 10">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={incomeRetentionPercent}
+                  onChange={(e) => setIncomeRetentionPercent(e.target.value)}
+                  className="input"
+                />
+              </Field>
+            </div>
+          )}
+        </fieldset>
 
         <div className="grid grid-cols-3 gap-3">
           <Field label="Inicio">

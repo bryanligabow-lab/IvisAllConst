@@ -92,6 +92,30 @@ export class ProjectsService {
     const contractAmount = Number(project.contractAmount);
     const advanceAmount = contractAmount * (Number(project.advancePercent) / 100);
 
+    // ----- Cálculos de IVA y retenciones -----
+    const vatPercent = Number(project.vatPercent ?? 15);
+    const vatIncluded = Boolean(project.vatIncluded);
+    const isWithholdingAgent = Boolean(project.isWithholdingAgent);
+    const vatRetentionPercent = Number(project.vatRetentionPercent ?? 0);
+    const incomeRetentionPercent = Number(project.incomeRetentionPercent ?? 0);
+
+    // Base sin IVA y valor con IVA según cómo el usuario ingresó el contrato.
+    const contractBase = vatIncluded
+      ? contractAmount / (1 + vatPercent / 100)
+      : contractAmount;
+    const contractVatAmount = contractBase * (vatPercent / 100);
+    const contractGross = contractBase + contractVatAmount;
+
+    // Retenciones esperadas (solo si el cliente es agente de retención).
+    const vatRetention = isWithholdingAgent
+      ? contractVatAmount * (vatRetentionPercent / 100)
+      : 0;
+    const incomeRetention = isWithholdingAgent
+      ? contractBase * (incomeRetentionPercent / 100)
+      : 0;
+    const totalRetentions = vatRetention + incomeRetention;
+    const netReceivable = contractGross - totalRetentions;
+
     return {
       project: {
         id: project.id,
@@ -102,6 +126,19 @@ export class ProjectsService {
         advancePercent: Number(project.advancePercent),
         advanceAmount,
         guaranteePercent: Number(project.guaranteePercent),
+        vatPercent,
+        vatIncluded,
+        isWithholdingAgent,
+        vatRetentionPercent,
+        incomeRetentionPercent,
+        // Valores derivados:
+        contractBase,
+        contractVatAmount,
+        contractGross,
+        vatRetention,
+        incomeRetention,
+        totalRetentions,
+        netReceivable,
         startDate: project.startDate,
         endDate: project.endDate,
         status: project.status,
@@ -129,6 +166,11 @@ export class ProjectsService {
         contractAmount: dto.contractAmount,
         advancePercent: dto.advancePercent ?? 40,
         guaranteePercent: dto.guaranteePercent ?? 5,
+        vatPercent: dto.vatPercent ?? 15,
+        vatIncluded: dto.vatIncluded ?? false,
+        isWithholdingAgent: dto.isWithholdingAgent ?? false,
+        vatRetentionPercent: dto.vatRetentionPercent ?? 0,
+        incomeRetentionPercent: dto.incomeRetentionPercent ?? 0,
         startDate: dto.startDate ?? null,
         endDate: dto.endDate ?? null,
         status: dto.status ?? 'DRAFT',

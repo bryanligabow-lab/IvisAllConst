@@ -196,6 +196,13 @@ model Project {
   contractAmount   Float     @default(0) @map("contract_amount")
   advancePercent   Float     @default(40) @map("advance_percent")
   guaranteePercent Float     @default(5) @map("guarantee_percent")
+  // IVA — los presupuestos se ingresan como base o ya incluido.
+  vatPercent       Float     @default(15) @map("vat_percent")
+  vatIncluded      Boolean   @default(false) @map("vat_included")
+  // Retenciones cuando el cliente es agente de retención.
+  isWithholdingAgent     Boolean @default(false) @map("is_withholding_agent")
+  vatRetentionPercent    Float   @default(0) @map("vat_retention_percent")
+  incomeRetentionPercent Float   @default(0) @map("income_retention_percent")
   startDate        DateTime? @map("start_date")
   endDate          DateTime? @map("end_date")
   status           String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED
