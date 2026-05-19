@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { apiGet } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 
 interface ProviderDetail {
@@ -172,7 +172,7 @@ export default function ProviderDetailPage() {
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td>{formatDate(o.scheduledDate)}</td>
+                    <td>{formatCalendarDate(o.scheduledDate)}</td>
                     <td>{o.description}</td>
                     <td className="text-xs">{o.project.name}</td>
                     <td>
@@ -221,7 +221,7 @@ export default function ProviderDetailPage() {
               <tbody>
                 {gastos.map((g) => (
                   <tr key={g.id}>
-                    <td>{formatDate(g.gastoDate)}</td>
+                    <td>{formatCalendarDate(g.gastoDate)}</td>
                     <td>{g.description}</td>
                     <td className="text-xs">{g.project.name}</td>
                     <td className="text-xs">

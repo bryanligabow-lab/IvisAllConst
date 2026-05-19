@@ -8,7 +8,7 @@ import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProformaModal } from '@/components/forms/CreateProformaModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 
 interface ProformaListItem {
   id: string;
@@ -103,7 +103,7 @@ export default function ProformasPage() {
               {data.map((p) => (
                 <tr key={p.id}>
                   <td className="font-medium">{p.number}</td>
-                  <td className="text-xs">{formatDate(p.date)}</td>
+                  <td className="text-xs">{formatCalendarDate(p.date)}</td>
                   <td>
                     <Link href={`/proformas/${p.id}`} className="font-medium text-brand hover:underline">
                       {p.clientName}

@@ -8,7 +8,7 @@ import { CreateProjectModal } from '@/components/forms/CreateProjectModal';
 import { EcuadorMap } from '@/components/ui/EcuadorMap';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import type { Project } from '@/types';
 
@@ -339,7 +339,7 @@ function ProjectMiniCard({
 
         {(project.startDate || project.endDate) && (
           <div className="mt-1 text-[10px] text-ink-tertiary">
-            📅 {formatDate(project.startDate)} — {formatDate(project.endDate)}
+            📅 {formatCalendarDate(project.startDate)} — {formatCalendarDate(project.endDate)}
           </div>
         )}
       </Link>

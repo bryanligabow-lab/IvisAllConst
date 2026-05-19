@@ -10,6 +10,7 @@ import { success } from '../../utils/apiResponse';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 
 export const PAYMENT_METHODS = [
   'CASH',
@@ -30,7 +31,7 @@ const createSchema = z.object({
     errorMap: () => ({ message: 'El método de pago es obligatorio' }),
   }),
   amount: z.coerce.number().positive(),
-  scheduledDate: z.coerce.date(),
+  scheduledDate: calendarDateSchema,
 });
 
 const listQuerySchema = z.object({

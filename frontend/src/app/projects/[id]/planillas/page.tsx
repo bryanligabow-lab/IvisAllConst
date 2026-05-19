@@ -8,7 +8,7 @@ import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePlanillaModal } from '@/components/forms/CreatePlanillaModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Planilla, PlanillaStatus, ProjectSummary } from '@/types';
 
@@ -108,7 +108,7 @@ export default function PlanillasPage() {
                   Planilla #{p.number} — {p.title}
                 </div>
                 <div className="text-xs text-ink-secondary">
-                  Período: {formatDate(p.periodStart)} — {formatDate(p.periodEnd)}
+                  Período: {formatCalendarDate(p.periodStart)} — {formatCalendarDate(p.periodEnd)}
                 </div>
               </div>
               <div className="flex items-center gap-2">

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 
 export { idParamSchema, type IdParamDto } from '../../shared/dto/id-param.dto';
 
@@ -28,8 +29,8 @@ export const createProjectSchema = z.object({
   isWithholdingAgent: z.coerce.boolean().default(false).optional(),
   vatRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
   incomeRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
-  startDate: z.coerce.date().optional(),
-  endDate: z.coerce.date().optional(),
+  startDate: calendarDateSchema.optional(),
+  endDate: calendarDateSchema.optional(),
   status: projectStatusSchema.optional(),
 });
 

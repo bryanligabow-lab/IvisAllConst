@@ -5,7 +5,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { apiGet } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 
 interface ProformaDetail {
@@ -84,7 +84,7 @@ export default function ProformaDetailPage() {
             Proforma <span className="text-brand">{data.number}</span>
           </h1>
           <p className="text-xs text-ink-secondary">
-            {formatDate(data.date)} · {data.clientName}
+            {formatCalendarDate(data.date)} · {data.clientName}
             {data.projectLabel ? ` · ${data.projectLabel}` : ''}
           </p>
         </div>
@@ -118,7 +118,7 @@ export default function ProformaDetailPage() {
           </div>
         </div>
         <div className="mb-4 h-0.5 bg-brand" />
-        <div className="mb-5 text-right text-xs text-ink-secondary">{formatDate(data.date)}</div>
+        <div className="mb-5 text-right text-xs text-ink-secondary">{formatCalendarDate(data.date)}</div>
 
         <div className="mb-6 grid grid-cols-2 gap-6 text-xs">
           <div>

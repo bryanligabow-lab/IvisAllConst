@@ -10,7 +10,7 @@ import {
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 
 interface PayrollHistoryEntry {
   id: string;
@@ -231,7 +231,7 @@ function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
           <tbody>
             {history.payments.map((p) => (
               <tr key={p.id}>
-                <td className="text-xs">{formatDate(p.gastoDate)}</td>
+                <td className="text-xs">{formatCalendarDate(p.gastoDate)}</td>
                 <td className="font-medium">{p.employee?.fullName ?? '—'}</td>
                 <td className="text-xs">{p.employee?.position ?? '—'}</td>
                 <td className="text-xs">{p.project.name}</td>

@@ -10,6 +10,7 @@ import { success } from '../../utils/apiResponse';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 import { exportProformaExcel } from './proformas.excel';
 import { exportProformaPdf } from './proformas.pdf';
 
@@ -38,7 +39,7 @@ const DEFAULTS = {
 
 const createSchema = z.object({
   number: z.string().min(1).max(40).optional(),
-  date: z.coerce.date().optional(),
+  date: calendarDateSchema.optional(),
   clientId: z.string().uuid().optional().nullable(),
   clientName: z.string().min(1).max(300).optional(), // optional if clientId provided
   clientRuc: z.string().max(40).optional(),

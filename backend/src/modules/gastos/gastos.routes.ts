@@ -12,6 +12,7 @@ import { NotFoundError, UnauthorizedError } from '../../utils/errors';
 import { ERRORS, SUCCESS } from '../../shared/constants/error-messages';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 import { exportGastosExcel } from './gastos.excel';
 
 const createGastoSchema = z.object({
@@ -21,7 +22,7 @@ const createGastoSchema = z.object({
   description: z.string().min(1).max(300),
   invoiceNumber: z.string().max(80).optional(),
   amount: z.coerce.number().positive(),
-  gastoDate: z.coerce.date(),
+  gastoDate: calendarDateSchema,
   attachmentUrl: z.string().url().max(2000).optional(),
 });
 

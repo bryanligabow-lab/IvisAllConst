@@ -10,6 +10,7 @@ import { success } from '../../utils/apiResponse';
 import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 
 const createSchema = z.object({
   fullName: z.string().min(1).max(200),
@@ -18,8 +19,8 @@ const createSchema = z.object({
   monthlySalary: z.coerce.number().nonnegative().default(0),
   email: z.string().email().max(200).optional().or(z.literal('')),
   phone: z.string().max(40).optional().nullable(),
-  hireDate: z.coerce.date().optional().nullable(),
-  endDate: z.coerce.date().optional().nullable(),
+  hireDate: calendarDateSchema.optional().nullable(),
+  endDate: calendarDateSchema.optional().nullable(),
   projectId: z.string().uuid().optional().nullable(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
 });
@@ -41,7 +42,7 @@ const payrollSchema = z.object({
     'OTHER',
   ]),
   description: z.string().max(300).optional(),
-  paidAt: z.coerce.date().optional(),
+  paidAt: calendarDateSchema.optional(),
 });
 
 export const employeesRouter = Router();

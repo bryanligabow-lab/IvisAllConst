@@ -8,7 +8,7 @@ import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateGastoModal } from '@/components/forms/CreateGastoModal';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import type { Gasto, ProjectSummary } from '@/types';
 
@@ -114,7 +114,7 @@ export default function GastosPage() {
                       )}
                     </div>
                     <div className="text-xs text-ink-secondary">
-                      {formatDate(g.gastoDate)}
+                      {formatCalendarDate(g.gastoDate)}
                       {g.invoiceNumber && ` · Factura ${g.invoiceNumber}`}
                     </div>
                   </div>

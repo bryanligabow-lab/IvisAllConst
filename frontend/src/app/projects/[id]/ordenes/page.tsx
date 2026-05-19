@@ -11,7 +11,7 @@ import { PaymentTypePicker, type PaymentType } from '@/components/forms/PaymentT
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatCalendarDate } from '@/lib/format';
 import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
 import type { PaymentOrder, ProjectSummary } from '@/types';
 
@@ -205,7 +205,7 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardPro
                 {' · '}
               </>
             )}
-            Programada: {formatDate(order.scheduledDate)}
+            Programada: {formatCalendarDate(order.scheduledDate)}
             {order.paidAt && ` · Pagada: ${formatDate(order.paidAt)}`}
             {order.invoiceNumber && ` · Factura ${order.invoiceNumber}`}
           </div>
@@ -264,7 +264,7 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardPro
             {order.gastos.map((g) => (
               <li key={g.id} className="flex justify-between">
                 <span>
-                  {formatDate(g.gastoDate)} — {g.description}
+                  {formatCalendarDate(g.gastoDate)} — {g.description}
                 </span>
                 <span className="font-medium">{formatCurrency(Number(g.amount), true)}</span>
               </li>

@@ -12,6 +12,7 @@ import { UnauthorizedError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { SUCCESS } from '../../shared/constants/error-messages';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { calendarDateSchema } from '../../shared/utils/date.util';
 
 const planillaItemSchema = z.object({
   rubroId: z.string().uuid(),
@@ -23,8 +24,8 @@ const planillaItemSchema = z.object({
 const createPlanillaSchema = z.object({
   projectId: z.string().uuid(),
   title: z.string().min(1).max(200),
-  periodStart: z.coerce.date(),
-  periodEnd: z.coerce.date(),
+  periodStart: calendarDateSchema,
+  periodEnd: calendarDateSchema,
   items: z.array(planillaItemSchema).min(1),
 });
 
