@@ -19,6 +19,8 @@ const createRubroSchema = z.object({
   unit: z.string().max(20).optional(),
   quantity: z.coerce.number().nonnegative().default(0),
   unitPrice: z.coerce.number().nonnegative().default(0),
+  utilityPercent: z.coerce.number().min(0).max(100).default(0).optional(),
+  includesVat: z.coerce.boolean().default(false).optional(),
   budgetedAmount: z.coerce.number().nonnegative(),
   orderIndex: z.coerce.number().int().nonnegative().default(0),
   parentId: z.string().uuid().optional(),

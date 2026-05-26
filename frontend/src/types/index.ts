@@ -32,6 +32,8 @@ export interface RubroSummary {
   unit: string | null;
   quantity: number;
   unitPrice: number;
+  utilityPercent?: number;
+  includesVat?: boolean;
   budgetedAmount: number;
   spent: number;
   balance: number;

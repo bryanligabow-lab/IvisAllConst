@@ -121,6 +121,7 @@ export default function PresupuestoPage() {
             onClose={() => setShowCreate(false)}
             projectId={params.id}
             nextOrderIndex={data.rubros.length}
+            projectVatPercent={data.project.vatPercent}
             onCreated={() => mutate()}
           />
 
@@ -169,7 +170,23 @@ export default function PresupuestoPage() {
                     <td>{r.unit ?? '—'}</td>
                     <td>{r.quantity || '—'}</td>
                     <td>{r.unitPrice ? formatCurrency(r.unitPrice) : '—'}</td>
-                    <td>{formatCurrency(r.budgetedAmount)}</td>
+                    <td>
+                      {formatCurrency(r.budgetedAmount)}
+                      {(r.utilityPercent ?? 0) > 0 || r.includesVat ? (
+                        <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-ink-tertiary">
+                          {(r.utilityPercent ?? 0) > 0 && (
+                            <span className="rounded bg-warning-soft px-1.5 py-0.5 text-warning">
+                              +Util {r.utilityPercent}%
+                            </span>
+                          )}
+                          {r.includesVat && (
+                            <span className="rounded bg-brand-soft px-1.5 py-0.5 text-brand">
+                              +IVA
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
+                    </td>
                     <td>{formatCurrency(r.spent)}</td>
                     <td className={r.balance < 0 ? 'text-danger' : ''}>{formatCurrency(r.balance)}</td>
                     <td>

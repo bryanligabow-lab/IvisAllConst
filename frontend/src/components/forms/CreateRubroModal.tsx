@@ -9,6 +9,8 @@ interface Props {
   onClose: () => void;
   projectId: string;
   nextOrderIndex?: number;
+  /** IVA % vigente del proyecto (15 por defecto). */
+  projectVatPercent?: number;
   onCreated: () => void;
 }
 
@@ -17,6 +19,7 @@ export function CreateRubroModal({
   onClose,
   projectId,
   nextOrderIndex = 0,
+  projectVatPercent = 15,
   onCreated,
 }: Props) {
   const [code, setCode] = useState('');
@@ -24,20 +27,31 @@ export function CreateRubroModal({
   const [unit, setUnit] = useState('');
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
+  const [utilityPercent, setUtilityPercent] = useState('0');
+  const [includesVat, setIncludesVat] = useState(false);
   const [budgetedAmount, setBudgetedAmount] = useState('');
   const [touchedBudget, setTouchedBudget] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Autocomputar presupuestado = cantidad × precio, salvo que el usuario lo edite a mano.
+  // Derivados — se recalculan en cada render.
+  const q = parseFloat(quantity);
+  const p = parseFloat(unitPrice);
+  const u = parseFloat(utilityPercent);
+  const subtotal = !Number.isNaN(q) && !Number.isNaN(p) ? q * p : 0;
+  const utilityAmount = subtotal * ((Number.isFinite(u) ? u : 0) / 100);
+  const baseConUtilidad = subtotal + utilityAmount;
+  const vatAmount = includesVat
+    ? baseConUtilidad * ((projectVatPercent || 0) / 100)
+    : 0;
+  const computedTotal = baseConUtilidad + vatAmount;
+
+  // Auto-llenar el monto presupuestado cuando cambian los componentes,
+  // a menos que el usuario lo haya tocado manualmente.
   useEffect(() => {
     if (touchedBudget) return;
-    const q = parseFloat(quantity);
-    const p = parseFloat(unitPrice);
-    if (!Number.isNaN(q) && !Number.isNaN(p)) {
-      setBudgetedAmount((q * p).toFixed(2));
-    }
-  }, [quantity, unitPrice, touchedBudget]);
+    if (computedTotal > 0) setBudgetedAmount(computedTotal.toFixed(2));
+  }, [computedTotal, touchedBudget]);
 
   function reset() {
     setCode('');
@@ -45,6 +59,8 @@ export function CreateRubroModal({
     setUnit('');
     setQuantity('');
     setUnitPrice('');
+    setUtilityPercent('0');
+    setIncludesVat(false);
     setBudgetedAmount('');
     setTouchedBudget(false);
     setError(null);
@@ -62,6 +78,8 @@ export function CreateRubroModal({
         unit: unit || undefined,
         quantity: quantity ? Number(quantity) : 0,
         unitPrice: unitPrice ? Number(unitPrice) : 0,
+        utilityPercent: utilityPercent ? Number(utilityPercent) : 0,
+        includesVat,
         budgetedAmount: Number(budgetedAmount),
         orderIndex: nextOrderIndex,
       });
@@ -74,6 +92,9 @@ export function CreateRubroModal({
       setSubmitting(false);
     }
   }
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 
   return (
     <Modal open={open} onClose={onClose} title="Añadir rubro al presupuesto">
@@ -136,6 +157,67 @@ export function CreateRubroModal({
           </Field>
         </div>
 
+        <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <legend className="px-1 text-xs font-medium text-ink-secondary">
+            Margen + IVA del rubro
+          </legend>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Utilidad %" hint="Se suma al subtotal antes del IVA.">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={utilityPercent}
+                onChange={(e) => {
+                  setUtilityPercent(e.target.value);
+                  setTouchedBudget(false);
+                }}
+                className="input"
+              />
+            </Field>
+            <Field label={`¿Sumar IVA ${projectVatPercent}% al final?`}>
+              <select
+                value={includesVat ? 'yes' : 'no'}
+                onChange={(e) => {
+                  setIncludesVat(e.target.value === 'yes');
+                  setTouchedBudget(false);
+                }}
+                className="input"
+              >
+                <option value="no">No — el monto NO incluye IVA</option>
+                <option value="yes">Sí — sumar IVA al total</option>
+              </select>
+            </Field>
+          </div>
+
+          {/* Desglose del cálculo */}
+          {subtotal > 0 && (
+            <div className="mt-2 space-y-1 rounded-md bg-bg px-3 py-2 text-xs text-ink-secondary">
+              <div className="flex justify-between">
+                <span>Subtotal (cantidad × precio)</span>
+                <span>{fmt(subtotal)}</span>
+              </div>
+              {utilityAmount > 0 && (
+                <div className="flex justify-between">
+                  <span>+ Utilidad {utilityPercent}%</span>
+                  <span>{fmt(utilityAmount)}</span>
+                </div>
+              )}
+              {includesVat && vatAmount > 0 && (
+                <div className="flex justify-between">
+                  <span>+ IVA {projectVatPercent}%</span>
+                  <span>{fmt(vatAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-border pt-1 font-medium text-ink-primary">
+                <span>= Total calculado</span>
+                <span>{fmt(computedTotal)}</span>
+              </div>
+            </div>
+          )}
+        </fieldset>
+
         <Field label="Monto presupuestado total" required>
           <input
             type="number"
@@ -150,7 +232,8 @@ export function CreateRubroModal({
             className="input"
           />
           <p className="mt-1 text-xs text-ink-secondary">
-            Se calcula automático (cantidad × precio). Puedes ajustarlo a mano si difiere del contrato.
+            Se calcula automático (cantidad × precio + utilidad{includesVat ? ' + IVA' : ''}). Puedes
+            ajustarlo a mano si difiere del contrato.
           </p>
         </Field>
 

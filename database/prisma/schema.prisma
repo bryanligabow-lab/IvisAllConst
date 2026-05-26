@@ -254,6 +254,10 @@ model Rubro {
   unit           String?
   quantity       Float     @default(0)
   unitPrice      Float     @default(0) @map("unit_price")
+  // % de utilidad sobre cantidad × precio (margen de ganancia incluido en el presupuesto).
+  utilityPercent Float     @default(0) @map("utility_percent")
+  // Si true, al monto presupuestado se le agrega el IVA del proyecto al calcular reportes.
+  includesVat    Boolean   @default(false) @map("includes_vat")
   budgetedAmount Float     @default(0) @map("budgeted_amount")
   orderIndex     Int       @default(0) @map("order_index")
   parentId       String?   @map("parent_id")

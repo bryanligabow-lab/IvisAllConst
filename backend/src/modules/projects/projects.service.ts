@@ -81,6 +81,8 @@ export class ProjectsService {
         unit: r.unit,
         quantity: Number(r.quantity),
         unitPrice: Number(r.unitPrice),
+        utilityPercent: Number(r.utilityPercent ?? 0),
+        includesVat: Boolean(r.includesVat),
         budgetedAmount: budgeted,
         spent,
         balance,
