@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ProjectsController } from './projects.controller';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { loadProjectScope, requireProjectAccess } from '../../middleware/projectScope';
 import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -15,6 +16,9 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/e
 
 export const projectsRouter = Router();
 projectsRouter.use(authenticate);
+projectsRouter.use(loadProjectScope);
+
+const accessByParamId = requireProjectAccess((req) => req.params.id);
 
 projectsRouter.get(
   '/',
@@ -43,12 +47,14 @@ projectsRouter.get(
   '/:id',
   requirePermission(PERMISSIONS.PROJECTS_READ),
   validate(idParamSchema, 'params'),
+  accessByParamId,
   asyncHandler(ProjectsController.get),
 );
 projectsRouter.get(
   '/:id/summary',
   requirePermission(PERMISSIONS.PROJECTS_READ),
   validate(idParamSchema, 'params'),
+  accessByParamId,
   asyncHandler(ProjectsController.summary),
 );
 projectsRouter.patch(
@@ -99,6 +105,7 @@ projectsRouter.get(
   '/:id/documents',
   requirePermission(PERMISSIONS.PROJECTS_READ),
   validate(idParamSchema, 'params'),
+  accessByParamId,
   asyncHandler(async (req, res) => {
     const project = await prisma.project.findFirst({
       where: { id: req.params.id, deletedAt: null },
@@ -185,6 +192,7 @@ projectsRouter.post(
 projectsRouter.get(
   '/:id/documents/:docId',
   requirePermission(PERMISSIONS.PROJECTS_READ),
+  accessByParamId,
   asyncHandler(async (req, res) => {
     const doc = await prisma.projectDocument.findFirst({
       where: { id: req.params.docId, projectId: req.params.id, deletedAt: null },

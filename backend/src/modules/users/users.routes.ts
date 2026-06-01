@@ -61,9 +61,12 @@ usersRouter.get(
         emailVerified: true,
         lastLoginAt: true,
         roles: { select: { role: { select: { id: true, name: true } } } },
+        projectAssignments: { select: { projectId: true } },
       },
     });
-    return success(res, user);
+    if (!user) throw new NotFoundError('Usuario no encontrado');
+    const { projectAssignments, ...rest } = user;
+    return success(res, { ...rest, projectIds: projectAssignments.map((a) => a.projectId) });
   }),
 );
 
@@ -78,6 +81,8 @@ const createUserSchema = z.object({
   lastName: z.string().min(1).max(80),
   password: z.string().min(8).max(120),
   roleIds: z.array(z.string().uuid()).optional(),
+  // Proyectos asignados (relevante para el rol operador).
+  projectIds: z.array(z.string().uuid()).optional(),
 });
 
 usersRouter.post(
@@ -85,12 +90,13 @@ usersRouter.post(
   requirePermission(PERMISSIONS.USERS_CREATE),
   validate(createUserSchema),
   asyncHandler(async (req, res) => {
-    const { email, firstName, lastName, password, roleIds } = req.body as {
+    const { email, firstName, lastName, password, roleIds, projectIds } = req.body as {
       email: string;
       firstName: string;
       lastName: string;
       password: string;
       roleIds?: string[];
+      projectIds?: string[];
     };
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -117,6 +123,16 @@ usersRouter.post(
               roles: {
                 create: roleIds.map((roleId) => ({
                   roleId,
+                  assignedBy: req.user!.id,
+                })),
+              },
+            }
+          : {}),
+        ...(projectIds && projectIds.length
+          ? {
+              projectAssignments: {
+                create: projectIds.map((projectId) => ({
+                  projectId,
                   assignedBy: req.user!.id,
                 })),
               },
@@ -184,6 +200,7 @@ const updateUserSchema = z.object({
   lastName: z.string().min(1).max(80).optional(),
   isActive: z.boolean().optional(),
   roleIds: z.array(z.string().uuid()).optional(),
+  projectIds: z.array(z.string().uuid()).optional(),
 });
 
 usersRouter.patch(
@@ -192,11 +209,12 @@ usersRouter.patch(
   validate(idParamSchema, 'params'),
   validate(updateUserSchema),
   asyncHandler(async (req, res) => {
-    const { roleIds, ...rest } = req.body as {
+    const { roleIds, projectIds, ...rest } = req.body as {
       firstName?: string;
       lastName?: string;
       isActive?: boolean;
       roleIds?: string[];
+      projectIds?: string[];
     };
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -212,6 +230,19 @@ usersRouter.patch(
             data: roleIds.map((roleId) => ({
               userId: req.params.id,
               roleId,
+              assignedBy: req.user!.id,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+      if (Array.isArray(projectIds)) {
+        await tx.projectAssignment.deleteMany({ where: { userId: req.params.id } });
+        if (projectIds.length) {
+          await tx.projectAssignment.createMany({
+            data: projectIds.map((projectId) => ({
+              userId: req.params.id,
+              projectId,
               assignedBy: req.user!.id,
             })),
             skipDuplicates: true,

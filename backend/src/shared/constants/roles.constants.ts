@@ -7,6 +7,8 @@ export const ROLES = {
   SUPER_ADMIN: 'super_admin',
   ADMIN: 'admin',
   USER: 'user',
+  // Residente de obra: acceso acotado y limitado a sus proyectos asignados.
+  OPERADOR: 'operador',
 } as const;
 export type RoleName = (typeof ROLES)[keyof typeof ROLES];
 
@@ -33,6 +35,8 @@ export const PERMISSIONS = {
 
   PAYMENT_ORDERS_READ: 'payment_orders.read',
   PAYMENT_ORDERS_WRITE: 'payment_orders.write',
+  // Aprobar/pagar/eliminar órdenes (separado de crear): el operador NO lo tiene.
+  PAYMENT_ORDERS_APPROVE: 'payment_orders.approve',
 
   PROVIDERS_READ: 'providers.read',
   PROVIDERS_WRITE: 'providers.write',
@@ -49,6 +53,14 @@ export const PERMISSIONS = {
 
   CLIENTS_READ: 'clients.read',
   CLIENTS_WRITE: 'clients.write',
+
+  // Asistencia de personal (Fase 2 — N\u00f3mina)
+  ATTENDANCE_READ: 'attendance.read',
+  ATTENDANCE_WRITE: 'attendance.write',
+
+  // Bit\u00e1cora / libro de obra (Fase 2)
+  BITACORA_READ: 'bitacora.read',
+  BITACORA_WRITE: 'bitacora.write',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

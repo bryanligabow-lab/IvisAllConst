@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import type { PaymentOrder } from '@/types';
+import { PAYMENT_METHODS } from '@/lib/constants';
+import type { PaymentMethodValue, PaymentOrder } from '@/types';
 
 type Mode = 'CHOICE' | 'PARTIAL';
 
@@ -19,6 +20,7 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
   const [mode, setMode] = useState<Mode>('CHOICE');
   const [partialAmount, setPartialAmount] = useState('');
   const [reference, setReference] = useState('');
+  const [method, setMethod] = useState<PaymentMethodValue | ''>('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +29,9 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
     setMode('CHOICE');
     setPartialAmount('');
     setReference('');
+    setMethod((order?.paymentMethod as PaymentMethodValue | undefined) ?? '');
     setError(null);
-  }, [open, order?.id]);
+  }, [open, order?.id, order?.paymentMethod]);
 
   if (!order) return null;
 
@@ -39,7 +42,10 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost(`/payment-orders/${order.id}/pay`, payload);
+      await apiPost(`/payment-orders/${order.id}/pay`, {
+        ...payload,
+        ...(method ? { paymentMethod: method } : {}),
+      });
       onPaid();
       onClose();
     } catch (err) {
@@ -86,6 +92,37 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
             <span className="font-medium text-danger">{formatCurrency(pending, true)}</span>
           </div>
         </div>
+
+        {order.items && order.items.length > 1 && (
+          <div className="rounded-md border border-surface-border px-3 py-2 text-xs">
+            <div className="mb-1 font-medium text-ink-primary">Desglose por rubro</div>
+            <ul className="space-y-0.5">
+              {order.items.map((it) => (
+                <li key={it.id} className="flex justify-between">
+                  <span className="text-ink-secondary">
+                    {it.rubro.code}. {it.rubro.name}
+                  </span>
+                  <span>{formatCurrency(Number(it.amount), true)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <Field label="Método de pago">
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value as PaymentMethodValue | '')}
+            className="input"
+          >
+            <option value="">— Selecciona un método —</option>
+            {PAYMENT_METHODS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.icon} {m.label}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         {mode === 'CHOICE' && (
           <>

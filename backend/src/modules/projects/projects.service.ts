@@ -20,15 +20,19 @@ function classifyRubro(budgeted: number, spent: number): { balance: number; perc
 }
 
 export class ProjectsService {
-  static list(skip: number, take: number) {
+  static list(skip: number, take: number, allowedProjectIds: string[] | null = null) {
+    const where = {
+      deletedAt: null,
+      ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
+    };
     return prisma.$transaction([
       prisma.project.findMany({
-        where: { deletedAt: null },
+        where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.project.count({ where: { deletedAt: null } }),
+      prisma.project.count({ where }),
     ]);
   }
 
@@ -185,9 +189,12 @@ export class ProjectsService {
    * Estadísticas globales (todos los proyectos del usuario) para el Dashboard.
    * Devuelve un objeto por proyecto con totals + ciudad + estado, calculado en una sola query.
    */
-  static async getGlobalStats() {
+  static async getGlobalStats(allowedProjectIds: string[] | null = null) {
     const projects = await prisma.project.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
     });
 

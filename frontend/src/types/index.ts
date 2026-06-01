@@ -113,10 +113,16 @@ export type PaymentMethodValue =
   | 'DEBIT_CARD'
   | 'OTHER';
 
+export interface PaymentOrderItem {
+  id: string;
+  amount: number;
+  rubro: { id: string; code: string; name: string };
+}
+
 export interface PaymentOrder {
   id: string;
   projectId: string;
-  rubroId: string;
+  rubroId: string | null;
   providerId: string | null;
   description: string;
   amount: number;
@@ -127,7 +133,8 @@ export interface PaymentOrder {
   status: PaymentOrderStatus;
   paidAmount: number;
   pendingAmount: number;
-  rubro?: { code: string; name: string };
+  rubro?: { code: string; name: string } | null;
+  items?: PaymentOrderItem[];
   provider?: { id: string; name: string; ruc?: string | null; service?: string | null } | null;
   gastos?: Array<{ id: string; amount: number; gastoDate: string; description: string }>;
 }
@@ -153,4 +160,6 @@ export interface AuthUser {
   email: string;
   roles: string[];
   permissions: string[];
+  // Proyectos asignados (relevante para el rol operador).
+  projectIds?: string[];
 }

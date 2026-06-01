@@ -8,9 +8,11 @@ import {
   type Employee,
 } from '@/components/forms/CreateEmployeeModal';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
+import { AsistenciaPanel } from '@/components/forms/AsistenciaPanel';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
+import { useAuthStore } from '@/stores/authStore';
 
 interface PayrollHistoryEntry {
   id: string;
@@ -29,9 +31,17 @@ interface PayrollHistory {
 }
 
 export default function NominaPage() {
+  const { can } = useAuthStore();
+  const canPayroll = can('payroll.read');
+  const canPayrollWrite = can('payroll.write');
+  const canEmployeesWrite = can('employees.write');
+  const canAttendance = can('attendance.read');
+
+  const [tab, setTab] = useState<'EMPLEADOS' | 'ASISTENCIA'>('EMPLEADOS');
+
   const { data, isLoading, mutate } = useSWR<Employee[]>('/employees', apiGet);
   const { data: history, mutate: mutateHistory } = useSWR<PayrollHistory>(
-    '/employees/payroll-history',
+    canPayroll ? '/employees/payroll-history' : null,
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
@@ -60,20 +70,50 @@ export default function NominaPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowPay(true)} className="btn-success">
-            💵 Registrar pago
-          </button>
-          <button onClick={() => setShowCreate(true)} className="btn-primary">
-            + Nuevo empleado
-          </button>
+          {canPayrollWrite && tab === 'EMPLEADOS' && (
+            <button onClick={() => setShowPay(true)} className="btn-success">
+              💵 Registrar pago
+            </button>
+          )}
+          {canEmployeesWrite && tab === 'EMPLEADOS' && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary">
+              + Nuevo empleado
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Sub-navegación: Empleados / Asistencia */}
+      <div className="mb-5 flex gap-0 border-b border-surface-border">
+        <button
+          onClick={() => setTab('EMPLEADOS')}
+          className={`tab ${tab === 'EMPLEADOS' ? 'tab-active' : ''}`}
+        >
+          Empleados
+        </button>
+        {canAttendance && (
+          <button
+            onClick={() => setTab('ASISTENCIA')}
+            className={`tab ${tab === 'ASISTENCIA' ? 'tab-active' : ''}`}
+          >
+            Asistencia
+          </button>
+        )}
+      </div>
+
+      {tab === 'ASISTENCIA' ? (
+        <AsistenciaPanel />
+      ) : (
+        <>
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Metric label="Empleados activos" value={String(active.length)} icon="👥" />
         <Metric label="Inactivos" value={String(inactive.length)} icon="📦" />
-        <Metric label="Costo mensual estimado" value={formatCurrency(totalSalary)} icon="💰" tone="brand" />
-        <Metric label="Pagado histórico" value={formatCurrency(totalPaid)} icon="✅" tone="success" />
+        {canPayroll && (
+          <>
+            <Metric label="Costo mensual estimado" value={formatCurrency(totalSalary)} icon="💰" tone="brand" />
+            <Metric label="Pagado histórico" value={formatCurrency(totalPaid)} icon="✅" tone="success" />
+          </>
+        )}
       </div>
 
       <CreateEmployeeModal
@@ -121,10 +161,10 @@ export default function NominaPage() {
                 <th>Cédula</th>
                 <th>Cargo</th>
                 <th>Proyecto</th>
-                <th className="text-right">Salario mensual</th>
-                <th className="text-right">Pagado histórico</th>
+                {canPayroll && <th className="text-right">Salario mensual</th>}
+                {canPayroll && <th className="text-right">Pagado histórico</th>}
                 <th>Estado</th>
-                <th></th>
+                {canEmployeesWrite && <th></th>}
               </tr>
             </thead>
             <tbody>
@@ -137,36 +177,42 @@ export default function NominaPage() {
                   <td className="text-xs">{e.cedula || '—'}</td>
                   <td className="text-xs">{e.position || '—'}</td>
                   <td className="text-xs">{e.project?.name || '—'}</td>
-                  <td className="text-right">{formatCurrency(e.monthlySalary)}</td>
-                  <td className="text-right">{formatCurrency(Number(e.totalPaid ?? 0))}</td>
+                  {canPayroll && <td className="text-right">{formatCurrency(e.monthlySalary)}</td>}
+                  {canPayroll && (
+                    <td className="text-right">{formatCurrency(Number(e.totalPaid ?? 0))}</td>
+                  )}
                   <td>
                     <span className={e.status === 'ACTIVE' ? 'badge-ok' : 'badge-muted'}>
                       {e.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
-                  <td>
-                    <div className="flex justify-end gap-1">
-                      <button
-                        onClick={() => setEditing(e)}
-                        className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
-                        title="Editar"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => setPendingDelete(e)}
-                        className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                        title="Eliminar"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
+                  {canEmployeesWrite && (
+                    <td>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => setEditing(e)}
+                          className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => setPendingDelete(e)}
+                          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                          title="Eliminar"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </AppShell>
   );

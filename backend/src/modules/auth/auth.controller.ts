@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { prisma } from '../../config/database';
 import { success } from '../../utils/apiResponse';
 import { UnauthorizedError } from '../../utils/errors';
 import { env } from '../../config/env';
@@ -64,7 +65,12 @@ export class AuthController {
   }
 
   static async me(req: Request, res: Response): Promise<Response> {
-    return success(res, req.user);
+    if (!req.user) throw new UnauthorizedError();
+    const assignments = await prisma.projectAssignment.findMany({
+      where: { userId: req.user.id },
+      select: { projectId: true },
+    });
+    return success(res, { ...req.user, projectIds: assignments.map((a) => a.projectId) });
   }
 
   static async forgotPassword(req: Request, res: Response): Promise<Response> {

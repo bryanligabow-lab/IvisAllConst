@@ -4,6 +4,7 @@ import { PlanillasService } from './planillas.service';
 import { exportPlanillaExcel } from './planillas.excel';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { loadProjectScope, requireProjectAccess } from '../../middleware/projectScope';
 import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -37,11 +38,13 @@ const listQuerySchema = z.object({ projectId: z.string().uuid() });
 
 export const planillasRouter = Router();
 planillasRouter.use(authenticate);
+planillasRouter.use(loadProjectScope);
 
 planillasRouter.get(
   '/',
   requirePermission(PERMISSIONS.PLANILLAS_READ),
   validate(listQuerySchema, 'query'),
+  requireProjectAccess((req) => req.query.projectId as string | undefined),
   asyncHandler(async (req, res) => {
     const items = await PlanillasService.list(req.query.projectId as string);
     return success(res, items);
@@ -54,6 +57,9 @@ planillasRouter.get(
   validate(idParamSchema, 'params'),
   asyncHandler(async (req, res) => {
     const planilla = await PlanillasService.getById(req.params.id);
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(planilla.projectId)) {
+      throw new UnauthorizedError('No tienes acceso a este proyecto');
+    }
     return success(res, planilla);
   }),
 );

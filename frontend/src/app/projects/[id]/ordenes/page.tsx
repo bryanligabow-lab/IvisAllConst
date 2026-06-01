@@ -13,6 +13,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate, formatCalendarDate } from '@/lib/format';
 import { PAYMENT_METHOD_LABEL } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { PaymentOrder, ProjectSummary } from '@/types';
 
 const STATUS_LABEL = {
@@ -33,8 +34,13 @@ export default function OrdenesPage() {
     `/projects/${params.id}/summary`,
     apiGet,
   );
+  const { can, isRestricted } = useAuthStore();
+  // El operador puede crear órdenes pero NO aprobar/pagar/ver las listas.
+  const canApprove = can('payment_orders.approve');
+  const restricted = isRestricted();
+  // Solo cargamos el listado cuando el usuario puede aprobar/ver montos.
   const { data: orders, isLoading, mutate } = useSWR<PaymentOrder[]>(
-    `/payment-orders?projectId=${params.id}`,
+    canApprove ? `/payment-orders?projectId=${params.id}` : null,
     apiGet,
   );
   const [showCreate, setShowCreate] = useState(false);
@@ -66,7 +72,7 @@ export default function OrdenesPage() {
           Órdenes de pago {summary ? `— ${summary.project.name}` : ''}
         </h1>
         <button
-          onClick={() => setShowTypePicker(true)}
+          onClick={() => (restricted ? setShowCreate(true) : setShowTypePicker(true))}
           disabled={!summary}
           className="btn-primary disabled:opacity-50"
         >
@@ -132,8 +138,17 @@ export default function OrdenesPage() {
         }}
       />
 
-      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
+      {!canApprove && (
+        <div className="card text-sm text-ink-secondary">
+          Carga aquí las órdenes de pago (facturas) del proyecto. Quedan en estado{' '}
+          <strong>pendiente</strong> para que administración las revise y apruebe.
+        </div>
+      )}
 
+      {canApprove && isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
+
+      {canApprove && (
+        <>
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-medium">Pendientes ({pending.length})</h2>
         {pending.length === 0 ? (
@@ -173,6 +188,8 @@ export default function OrdenesPage() {
           </div>
         )}
       </section>
+        </>
+      )}
     </AppShell>
   );
 }
@@ -209,6 +226,17 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardPro
             {order.paidAt && ` · Pagada: ${formatDate(order.paidAt)}`}
             {order.invoiceNumber && ` · Factura ${order.invoiceNumber}`}
           </div>
+          {order.items && order.items.length > 1 && (
+            <div className="mt-1 text-xs text-ink-secondary">
+              📑 Desglose:{' '}
+              {order.items.map((it, i) => (
+                <span key={it.id}>
+                  {i > 0 && ' · '}
+                  {it.rubro.code} ({formatCurrency(Number(it.amount), true)})
+                </span>
+              ))}
+            </div>
+          )}
           {order.provider && (
             <div className="mt-1 text-xs text-ink-secondary">
               🏢 Proveedor: <span className="font-medium text-ink-primary">{order.provider.name}</span>

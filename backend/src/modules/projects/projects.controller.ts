@@ -8,7 +8,7 @@ import { SUCCESS } from '../../shared/constants/error-messages';
 export class ProjectsController {
   static async list(req: Request, res: Response): Promise<Response> {
     const { page, perPage, skip, take } = getPagination(req);
-    const [items, total] = await ProjectsService.list(skip, take);
+    const [items, total] = await ProjectsService.list(skip, take, req.allowedProjectIds ?? null);
     return success(res, items, 200, buildPaginationMeta(total, page, perPage));
   }
 
@@ -22,8 +22,8 @@ export class ProjectsController {
     return success(res, data);
   }
 
-  static async globalStats(_req: Request, res: Response): Promise<Response> {
-    const data = await ProjectsService.getGlobalStats();
+  static async globalStats(req: Request, res: Response): Promise<Response> {
+    const data = await ProjectsService.getGlobalStats(req.allowedProjectIds ?? null);
     return success(res, data);
   }
 

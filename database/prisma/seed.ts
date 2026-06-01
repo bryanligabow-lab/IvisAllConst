@@ -26,7 +26,8 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   { name: 'planillas.export', resource: 'planillas', action: 'export', description: 'Exportar planillas a Excel' },
   // payment orders
   { name: 'payment_orders.read', resource: 'payment_orders', action: 'read', description: 'Ver órdenes de pago' },
-  { name: 'payment_orders.write', resource: 'payment_orders', action: 'write', description: 'Crear/pagar/eliminar órdenes de pago' },
+  { name: 'payment_orders.write', resource: 'payment_orders', action: 'write', description: 'Crear órdenes de pago' },
+  { name: 'payment_orders.approve', resource: 'payment_orders', action: 'approve', description: 'Aprobar/pagar/eliminar órdenes de pago' },
   // providers
   { name: 'providers.read', resource: 'providers', action: 'read', description: 'Ver proveedores' },
   { name: 'providers.write', resource: 'providers', action: 'write', description: 'Crear/editar/eliminar proveedores' },
@@ -42,6 +43,12 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   // clients
   { name: 'clients.read', resource: 'clients', action: 'read', description: 'Ver clientes' },
   { name: 'clients.write', resource: 'clients', action: 'write', description: 'Crear/editar/eliminar clientes' },
+  // attendance (asistencia de personal)
+  { name: 'attendance.read', resource: 'attendance', action: 'read', description: 'Ver asistencia de personal' },
+  { name: 'attendance.write', resource: 'attendance', action: 'write', description: 'Registrar asistencia de personal' },
+  // bitacora (libro de obra)
+  { name: 'bitacora.read', resource: 'bitacora', action: 'read', description: 'Ver bitácora / libro de obra' },
+  { name: 'bitacora.write', resource: 'bitacora', action: 'write', description: 'Registrar en la bitácora / libro de obra' },
 ];
 
 async function main() {
@@ -116,6 +123,7 @@ async function main() {
     'planillas.read',
     'payment_orders.read',
     'payment_orders.write',
+    'payment_orders.approve',
     'providers.read',
     'providers.write',
     'employees.read',
@@ -133,6 +141,45 @@ async function main() {
       where: { roleId_permissionId: { roleId: user.id, permissionId: p.id } },
       update: {},
       create: { roleId: user.id, permissionId: p.id },
+    });
+  }
+
+  // ---------- Rol operador (residente de obra) ----------
+  // Acceso acotado y limitado a los proyectos que se le asignen.
+  // - Ejecución/planillas: SOLO porcentajes (sin valores monetarios) → se controla en el frontend.
+  // - Órdenes de pago: solo CREAR (sin payment_orders.approve, no paga ni elimina).
+  // - Nómina: asistencia + edición de info del personal (sin payroll.*).
+  // - Bitácora / documentación / proveedores: acceso.
+  const operador = await prisma.role.upsert({
+    where: { name: 'operador' },
+    update: {},
+    create: {
+      name: 'operador',
+      description: 'Residente de obra: acceso acotado a sus proyectos asignados',
+      isSystem: true,
+    },
+  });
+
+  const operadorPermNames = [
+    'projects.read',
+    'rubros.read',
+    'planillas.read',
+    'payment_orders.read',
+    'payment_orders.write',
+    'providers.read',
+    'providers.write',
+    'employees.read',
+    'employees.write',
+    'attendance.read',
+    'attendance.write',
+    'bitacora.read',
+    'bitacora.write',
+  ];
+  for (const p of allPermissions.filter((x) => operadorPermNames.includes(x.name))) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: operador.id, permissionId: p.id } },
+      update: {},
+      create: { roleId: operador.id, permissionId: p.id },
     });
   }
 

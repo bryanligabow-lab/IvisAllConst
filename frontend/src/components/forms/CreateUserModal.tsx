@@ -12,6 +12,12 @@ interface Role {
   isSystem?: boolean;
 }
 
+interface ProjectLite {
+  id: string;
+  code: string;
+  name: string;
+}
+
 interface CreatedUser {
   id: string;
   email: string;
@@ -28,16 +34,21 @@ interface Props {
 
 export function CreateUserModal({ open, onClose, onCreated }: Props) {
   const { data: roles } = useSWR<Role[]>(open ? '/users/roles/list' : null, apiGet);
+  const { data: projects } = useSWR<ProjectLite[]>(open ? '/projects?perPage=200' : null, apiGet);
 
   const [email, setEmail] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedUser | null>(null);
   const [copied, setCopied] = useState<'pwd' | 'code' | null>(null);
+
+  const operadorRoleId = roles?.find((r) => r.name === 'operador')?.id;
+  const showProjects = !!operadorRoleId && selectedRoles.includes(operadorRoleId);
 
   useEffect(() => {
     if (!open) return;
@@ -46,6 +57,7 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
     setLastName('');
     setPassword('');
     setSelectedRoles([]);
+    setSelectedProjects([]);
     setError(null);
     setCreated(null);
     setCopied(null);
@@ -71,6 +83,7 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
         lastName: lastName.trim(),
         password,
         roleIds: selectedRoles,
+        ...(showProjects ? { projectIds: selectedProjects } : {}),
       });
       setCreated(res);
       onCreated();
@@ -239,6 +252,44 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
                   </label>
                 ))}
               </div>
+            </div>
+          )}
+
+          {showProjects && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">Proyectos asignados</label>
+              <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                {!projects && (
+                  <div className="col-span-full text-xs text-slate-400">Cargando proyectos…</div>
+                )}
+                {projects?.length === 0 && (
+                  <div className="col-span-full text-xs text-slate-400">No hay proyectos.</div>
+                )}
+                {projects?.map((p) => (
+                  <label
+                    key={p.id}
+                    className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={selectedProjects.includes(p.id)}
+                      onChange={(e) =>
+                        setSelectedProjects((prev) =>
+                          e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id),
+                        )
+                      }
+                    />
+                    <div>
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{p.code}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                El operador solo verá y trabajará en estos proyectos.
+              </p>
             </div>
           )}
 

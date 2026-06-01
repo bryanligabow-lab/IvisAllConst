@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { loadProjectScope, projectScopeWhere } from '../../middleware/projectScope';
 import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -47,6 +48,7 @@ const payrollSchema = z.object({
 
 export const employeesRouter = Router();
 employeesRouter.use(authenticate);
+employeesRouter.use(loadProjectScope);
 
 // Historial completo de pagos de nómina (todos los empleados o filtrado por proyecto)
 employeesRouter.get(
@@ -97,10 +99,15 @@ employeesRouter.get(
   asyncHandler(async (req, res) => {
     const projectId =
       typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+    // Usuarios restringidos (operador) solo ven empleados de sus proyectos;
+    // un projectId explícito solo se respeta si está dentro de su alcance.
+    const allowExplicit =
+      projectId && (!req.allowedProjectIds || req.allowedProjectIds.includes(projectId));
     const employees = await prisma.employee.findMany({
       where: {
         deletedAt: null,
-        ...(projectId ? { projectId } : {}),
+        ...projectScopeWhere(req),
+        ...(allowExplicit ? { projectId } : {}),
       },
       include: {
         project: { select: { id: true, name: true, code: true } },

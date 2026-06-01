@@ -4,8 +4,7 @@ import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
 import { apiPost, ApiClientError } from '@/lib/api';
-import { PAYMENT_METHODS } from '@/lib/constants';
-import type { PaymentMethodValue, RubroSummary } from '@/types';
+import type { RubroSummary } from '@/types';
 
 interface Props {
   open: boolean;
@@ -15,13 +14,17 @@ interface Props {
   onCreated: () => void;
 }
 
+interface Line {
+  rubroId: string;
+  amount: string;
+}
+
 export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCreated }: Props) {
-  const [rubroId, setRubroId] = useState('');
   const [providerId, setProviderId] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue | ''>('');
   const [description, setDescription] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [amount, setAmount] = useState('');
+  // Una factura puede repartirse entre varios rubros (desglose).
+  const [lines, setLines] = useState<Line[]>([{ rubroId: '', amount: '' }]);
   // Default: 3 días en el futuro
   const defaultDate = (() => {
     const d = new Date();
@@ -32,29 +35,40 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+
   function reset() {
-    setRubroId('');
     setProviderId('');
-    setPaymentMethod('');
     setDescription('');
     setInvoiceNumber('');
-    setAmount('');
+    setLines([{ rubroId: '', amount: '' }]);
     setScheduledDate(defaultDate);
     setError(null);
   }
 
+  function updateLine(idx: number, patch: Partial<Line>) {
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+
+  function addLine() {
+    setLines((prev) => [...prev, { rubroId: '', amount: '' }]);
+  }
+
+  function removeLine(idx: number) {
+    setLines((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!rubroId) {
-      setError('Selecciona un rubro');
-      return;
-    }
     if (!providerId) {
       setError('Debes seleccionar un proveedor antes de crear la orden');
       return;
     }
-    if (!paymentMethod) {
-      setError('Selecciona el método de pago');
+    const cleanLines = lines
+      .map((l) => ({ rubroId: l.rubroId, amount: Number(l.amount) }))
+      .filter((l) => l.rubroId && l.amount > 0);
+    if (cleanLines.length === 0) {
+      setError('Indica al menos un rubro con su monto');
       return;
     }
     setSubmitting(true);
@@ -62,12 +76,11 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
     try {
       await apiPost('/payment-orders', {
         projectId,
-        rubroId,
         providerId,
-        paymentMethod,
         description,
         invoiceNumber: invoiceNumber || undefined,
-        amount: Number(amount),
+        // Siempre enviamos el desglose; el backend resuelve 1 o varios rubros.
+        items: cleanLines,
         scheduledDate,
       });
       reset();
@@ -83,39 +96,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
   return (
     <Modal open={open} onClose={onClose} title="Crear orden de pago">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <Field label="Rubro" required>
-          <select
-            value={rubroId}
-            onChange={(e) => setRubroId(e.target.value)}
-            required
-            className="input"
-          >
-            <option value="">— Selecciona un rubro —</option>
-            {rubros.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.code}. {r.name} (saldo ${r.balance.toFixed(2)})
-              </option>
-            ))}
-          </select>
-        </Field>
-
         <ProviderSelector value={providerId} onChange={setProviderId} required />
-
-        <Field label="Método de pago" required>
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethodValue | '')}
-            required
-            className="input"
-          >
-            <option value="">— Selecciona un método —</option>
-            {PAYMENT_METHODS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.icon} {m.label}
-              </option>
-            ))}
-          </select>
-        </Field>
 
         <Field label="Descripción" required>
           <input
@@ -123,32 +104,9 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             onChange={(e) => setDescription(e.target.value)}
             required
             className="input"
-            placeholder="Pago semana 3 — cuadrilla pintura"
+            placeholder="Compra Ferrisariato — materiales varios"
           />
         </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Monto" required>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-              className="input"
-            />
-          </Field>
-          <Field label="Fecha programada de pago" required>
-            <input
-              type="date"
-              value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
-              required
-              className="input"
-            />
-          </Field>
-        </div>
 
         <Field label="Nº de factura">
           <input
@@ -159,10 +117,79 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
           />
         </Field>
 
+        {/* Desglose de la factura por rubro */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-xs font-medium text-ink-secondary">
+              Rubros de la factura <span className="text-danger">*</span>
+            </label>
+            <span className="text-xs text-ink-secondary">
+              Total: <span className="font-semibold text-ink-primary">${total.toFixed(2)}</span>
+            </span>
+          </div>
+          <div className="space-y-2">
+            {lines.map((line, idx) => (
+              <div key={idx} className="flex items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <select
+                    value={line.rubroId}
+                    onChange={(e) => updateLine(idx, { rubroId: e.target.value })}
+                    className="input"
+                  >
+                    <option value="">— Selecciona un rubro —</option>
+                    {rubros.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.code}. {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-28">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={line.amount}
+                    onChange={(e) => updateLine(idx, { amount: e.target.value })}
+                    className="input"
+                    placeholder="Monto"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLine(idx)}
+                  disabled={lines.length === 1}
+                  className="mb-0.5 inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-secondary hover:bg-danger-soft hover:text-danger disabled:opacity-30"
+                  title="Quitar rubro"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addLine}
+            className="mt-2 text-xs font-medium text-brand hover:underline"
+          >
+            + Desglosar en otro rubro
+          </button>
+        </div>
+
+        <Field label="Fecha programada de pago" required>
+          <input
+            type="date"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+            required
+            className="input"
+          />
+        </Field>
+
         <p className="text-xs text-ink-secondary">
-          La orden queda en estado <strong>pendiente</strong> hasta que pulses{' '}
-          <em>Marcar como pagado</em>. Al pagarla, se registra automáticamente como gasto del
-          rubro.
+          La orden queda en estado <strong>pendiente</strong>. El <strong>método de pago</strong> se
+          elige al momento de aprobarla/pagarla. Si la factura cubre varios rubros, reparte el monto
+          en cada uno.
         </p>
 
         {error && (

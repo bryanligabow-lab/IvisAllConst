@@ -82,7 +82,9 @@
     @apply text-brand border-brand font-medium;
   }
   .table-default {
-    @apply w-full text-sm;
+    /* min-w para que en móvil la tabla haga scroll horizontal en su
+       contenedor (.overflow-x-auto) en vez de aplastar las columnas. */
+    @apply w-full min-w-[640px] text-sm sm:min-w-0;
   }
   .table-default th {
     @apply text-left text-xs font-medium uppercase tracking-wider text-ink-secondary py-3 px-3 border-b border-surface-border;

@@ -10,6 +10,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { Planilla, PlanillaStatus, ProjectSummary } from '@/types';
 
 const STATUS_LABEL: Record<PlanillaStatus, string> = {
@@ -59,6 +60,11 @@ export default function PlanillasPage() {
     isLoading,
     mutate: mutatePlanillas,
   } = useSWR<Planilla[]>(`/planillas?projectId=${params.id}`, apiGet);
+  const { isRestricted, can } = useAuthStore();
+  const percentOnly = isRestricted();
+  const canWrite = can('planillas.write');
+  const canExport = can('planillas.export');
+  const contractAmount = Number(summary?.project.contractAmount ?? 0);
   const [showCreate, setShowCreate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
@@ -70,13 +76,15 @@ export default function PlanillasPage() {
         <h1 className="text-lg font-medium">
           Planillas de avance {summary ? `— ${summary.project.name}` : ''}
         </h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          disabled={!summary}
-          className="btn-primary disabled:opacity-50"
-        >
-          + Nueva planilla
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowCreate(true)}
+            disabled={!summary}
+            className="btn-primary disabled:opacity-50"
+          >
+            + Nueva planilla
+          </button>
+        )}
       </div>
 
       {summary && (
@@ -113,38 +121,65 @@ export default function PlanillasPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className={STATUS_CLASS[p.status]}>{STATUS_LABEL[p.status]}</span>
-                <button onClick={() => downloadExcel(p.id)} className="btn-success">
-                  Exportar Excel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingDelete({ id: p.id, label: `Planilla #${p.number} — ${p.title}` })}
-                  className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                  title="Eliminar planilla"
-                >
-                  🗑️
-                </button>
+                {canExport && (
+                  <button onClick={() => downloadExcel(p.id)} className="btn-success">
+                    Exportar Excel
+                  </button>
+                )}
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => setPendingDelete({ id: p.id, label: `Planilla #${p.number} — ${p.title}` })}
+                    className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                    title="Eliminar planilla"
+                  >
+                    🗑️
+                  </button>
+                )}
               </div>
             </header>
 
-            <dl className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3">
-              <Row label="A. Valor de planilla" value={formatCurrency(Number(p.totalCurrent), true)} />
-              <Row
-                label="B. Amortización anticipo"
-                value={`-${formatCurrency(Number(p.advanceAmortization), true)}`}
-              />
-              <Row
-                label="C. Fondo garantía"
-                value={`-${formatCurrency(Number(p.guaranteeRetention), true)}`}
-              />
-              <Row label="Planilla anterior" value={formatCurrency(Number(p.totalPrevious), true)} />
-              <Row label="Acumulado" value={formatCurrency(Number(p.totalAccumulated), true)} />
-              <Row
-                label="Total a pagar"
-                value={formatCurrency(Number(p.netPayable), true)}
-                emphasis
-              />
-            </dl>
+            {percentOnly ? (
+              (() => {
+                const pct =
+                  contractAmount > 0
+                    ? Math.round((Number(p.totalAccumulated) / contractAmount) * 100)
+                    : 0;
+                return (
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-ink-secondary">Avance acumulado</span>
+                      <span className="font-semibold text-ink-primary">{pct}%</span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-muted">
+                      <div
+                        className="h-full rounded-full bg-brand transition-all"
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <dl className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3">
+                <Row label="A. Valor de planilla" value={formatCurrency(Number(p.totalCurrent), true)} />
+                <Row
+                  label="B. Amortización anticipo"
+                  value={`-${formatCurrency(Number(p.advanceAmortization), true)}`}
+                />
+                <Row
+                  label="C. Fondo garantía"
+                  value={`-${formatCurrency(Number(p.guaranteeRetention), true)}`}
+                />
+                <Row label="Planilla anterior" value={formatCurrency(Number(p.totalPrevious), true)} />
+                <Row label="Acumulado" value={formatCurrency(Number(p.totalAccumulated), true)} />
+                <Row
+                  label="Total a pagar"
+                  value={formatCurrency(Number(p.netPayable), true)}
+                  emphasis
+                />
+              </dl>
+            )}
           </article>
         ))}
       </div>

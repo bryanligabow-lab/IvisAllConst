@@ -10,6 +10,7 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { RUBRO_STATUS_LABEL } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { ProjectSummary, RubroStatus } from '@/types';
 
 const STATUS_CLASS: Record<RubroStatus, string> = {
@@ -19,12 +20,22 @@ const STATUS_CLASS: Record<RubroStatus, string> = {
   exhausted: 'badge-muted',
 };
 
+// % de avance ejecutado de un rubro (puede superar 100% si está excedido).
+function executedPercent(budgeted: number, spent: number): number {
+  if (budgeted <= 0) return 0;
+  return Math.round((spent / budgeted) * 100);
+}
+
 export default function PresupuestoPage() {
   const params = useParams<{ id: string }>();
   const { data, error, isLoading, mutate } = useSWR<ProjectSummary>(
     `/projects/${params.id}/summary`,
     apiGet,
   );
+  const { isRestricted, can } = useAuthStore();
+  // El operador (residente) ve solo porcentajes de avance, sin montos.
+  const percentOnly = isRestricted();
+  const canEditRubros = can('rubros.write');
   const [showCreate, setShowCreate] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
@@ -43,19 +54,28 @@ export default function PresupuestoPage() {
         <>
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-medium">{data.project.name} — Presupuesto por rubros</h1>
-              <p className="text-xs text-ink-secondary">
-                Monto contractual: {formatCurrency(data.project.contractAmount, true)} · Anticipo{' '}
-                {data.project.advancePercent}%: {formatCurrency(data.project.advanceAmount, true)}
-              </p>
+              <h1 className="text-lg font-medium">
+                {data.project.name} — {percentOnly ? 'Avance por rubros' : 'Presupuesto por rubros'}
+              </h1>
+              {!percentOnly && (
+                <p className="text-xs text-ink-secondary">
+                  Monto contractual: {formatCurrency(data.project.contractAmount, true)} · Anticipo{' '}
+                  {data.project.advancePercent}%: {formatCurrency(data.project.advanceAmount, true)}
+                </p>
+              )}
+              {percentOnly && (
+                <p className="text-xs text-ink-secondary">Avance de ejecución por rubro</p>
+              )}
             </div>
-            <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
-              + Añadir rubro
-            </button>
+            {canEditRubros && (
+              <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
+                + Añadir rubro
+              </button>
+            )}
           </div>
 
-          {/* Breakdown IVA + retenciones */}
-          <div className="card mb-4">
+          {/* Breakdown IVA + retenciones (oculto en vista de avance) */}
+          <div className={`card mb-4 ${percentOnly ? 'hidden' : ''}`}>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div>
                 <div className="text-xs uppercase text-ink-tertiary">Base sin IVA</div>
@@ -138,89 +158,139 @@ export default function PresupuestoPage() {
             }}
           />
 
-          <div className="card overflow-x-auto">
-            <table className="table-default">
-              <thead>
-                <tr>
-                  <th>Rubro</th>
-                  <th>Unidad</th>
-                  <th>Cantidad</th>
-                  <th>P. unitario</th>
-                  <th>Presupuestado</th>
-                  <th>Gastado</th>
-                  <th>Saldo</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rubros.length === 0 && (
+          {percentOnly ? (
+            /* ---------- Vista operador: solo avance en % ---------- */
+            <div className="card">
+              {data.rubros.length === 0 && (
+                <div className="py-6 text-center text-sm text-ink-secondary">
+                  Aún no hay rubros registrados en este proyecto.
+                </div>
+              )}
+              <div className="flex flex-col gap-3">
+                {data.rubros.map((r) => {
+                  const pct = executedPercent(r.budgetedAmount, r.spent);
+                  const exceeded = r.status === 'danger' || pct > 100;
+                  return (
+                    <div key={r.id} className="rounded-lg border border-surface-border p-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-sm font-medium">
+                          {r.code}. {r.name}
+                        </span>
+                        <span
+                          className={`text-sm font-semibold ${
+                            exceeded ? 'text-danger' : 'text-ink-primary'
+                          }`}
+                        >
+                          {pct}%
+                          {exceeded && (
+                            <span className="ml-2 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] text-danger">
+                              Excedido
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-muted">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            exceeded ? 'bg-danger' : 'bg-brand'
+                          }`}
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="card overflow-x-auto">
+              <table className="table-default">
+                <thead>
                   <tr>
-                    <td colSpan={9} className="py-6 text-center text-sm text-ink-secondary">
-                      Aún no hay rubros. Pulsa <strong>+ Añadir rubro</strong> para empezar a armar
-                      el presupuesto.
-                    </td>
+                    <th>Rubro</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>P. unitario</th>
+                    <th>Presupuestado</th>
+                    <th>Gastado</th>
+                    <th>Saldo</th>
+                    <th>Estado</th>
+                    <th></th>
                   </tr>
-                )}
-                {data.rubros.map((r) => (
-                  <tr key={r.id}>
-                    <td className="font-medium">
-                      {r.code}. {r.name}
-                    </td>
-                    <td>{r.unit ?? '—'}</td>
-                    <td>{r.quantity || '—'}</td>
-                    <td>{r.unitPrice ? formatCurrency(r.unitPrice) : '—'}</td>
-                    <td>
-                      {formatCurrency(r.budgetedAmount)}
-                      {(r.utilityPercent ?? 0) > 0 || r.includesVat ? (
-                        <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-ink-tertiary">
-                          {(r.utilityPercent ?? 0) > 0 && (
-                            <span className="rounded bg-warning-soft px-1.5 py-0.5 text-warning">
-                              +Util {r.utilityPercent}%
-                            </span>
-                          )}
-                          {r.includesVat && (
-                            <span className="rounded bg-brand-soft px-1.5 py-0.5 text-brand">
-                              +IVA
-                            </span>
-                          )}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>{formatCurrency(r.spent)}</td>
-                    <td className={r.balance < 0 ? 'text-danger' : ''}>{formatCurrency(r.balance)}</td>
-                    <td>
-                      <span className={STATUS_CLASS[r.status]}>
-                        {r.status === 'ok' || r.status === 'warn'
-                          ? `${r.percentFree}% libre`
-                          : RUBRO_STATUS_LABEL[r.status]}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDelete({ id: r.id, name: r.name })}
-                        className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                        title="Eliminar rubro"
-                      >
-                        🗑️
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {data.rubros.length > 0 && (
-                  <tr className="border-t-2 border-ink-primary font-medium">
-                    <td colSpan={4}>Total</td>
-                    <td>{formatCurrency(data.totals.budgeted)}</td>
-                    <td>{formatCurrency(data.totals.spent)}</td>
-                    <td>{formatCurrency(data.totals.balance)}</td>
-                    <td />
-                    <td />
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {data.rubros.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-6 text-center text-sm text-ink-secondary">
+                        Aún no hay rubros. Pulsa <strong>+ Añadir rubro</strong> para empezar a armar
+                        el presupuesto.
+                      </td>
+                    </tr>
+                  )}
+                  {data.rubros.map((r) => (
+                    <tr key={r.id}>
+                      <td className="font-medium">
+                        {r.code}. {r.name}
+                      </td>
+                      <td>{r.unit ?? '—'}</td>
+                      <td>{r.quantity || '—'}</td>
+                      <td>{r.unitPrice ? formatCurrency(r.unitPrice) : '—'}</td>
+                      <td>
+                        {formatCurrency(r.budgetedAmount)}
+                        {(r.utilityPercent ?? 0) > 0 || r.includesVat ? (
+                          <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-ink-tertiary">
+                            {(r.utilityPercent ?? 0) > 0 && (
+                              <span className="rounded bg-warning-soft px-1.5 py-0.5 text-warning">
+                                +Util {r.utilityPercent}%
+                              </span>
+                            )}
+                            {r.includesVat && (
+                              <span className="rounded bg-brand-soft px-1.5 py-0.5 text-brand">
+                                +IVA
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td>{formatCurrency(r.spent)}</td>
+                      <td className={r.balance < 0 ? 'text-danger' : ''}>
+                        {formatCurrency(r.balance)}
+                      </td>
+                      <td>
+                        <span className={STATUS_CLASS[r.status]}>
+                          {r.status === 'ok' || r.status === 'warn'
+                            ? `${r.percentFree}% libre`
+                            : RUBRO_STATUS_LABEL[r.status]}
+                        </span>
+                      </td>
+                      <td>
+                        {canEditRubros && (
+                          <button
+                            type="button"
+                            onClick={() => setPendingDelete({ id: r.id, name: r.name })}
+                            className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                            title="Eliminar rubro"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.rubros.length > 0 && (
+                    <tr className="border-t-2 border-ink-primary font-medium">
+                      <td colSpan={4}>Total</td>
+                      <td>{formatCurrency(data.totals.budgeted)}</td>
+                      <td>{formatCurrency(data.totals.spent)}</td>
+                      <td>{formatCurrency(data.totals.balance)}</td>
+                      <td />
+                      <td />
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </AppShell>

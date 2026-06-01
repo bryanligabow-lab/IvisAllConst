@@ -10,6 +10,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { Project } from '@/types';
 
 interface DashboardProjectStat {
@@ -73,23 +74,36 @@ export default function DashboardPage() {
   );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const { isRestricted, can } = useAuthStore();
+  // El operador ve solo sus proyectos asignados y sin valores monetarios.
+  const restricted = isRestricted();
+  const canCreateProject = can('projects.create');
+  const canManageProjects = can('projects.update');
 
   return (
     <AppShell>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {restricted ? 'Mis proyectos' : 'Dashboard'}
+          </h1>
           <p className="text-xs text-ink-secondary">
-            Visión consolidada de proyectos y presupuestos
+            {restricted
+              ? 'Proyectos asignados a tu cuenta'
+              : 'Visión consolidada de proyectos y presupuestos'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/proveedores" className="btn-secondary text-xs">
-            Ver proveedores
-          </Link>
-          <button onClick={() => setShowCreate(true)} className="btn-primary">
-            + Nuevo proyecto
-          </button>
+          {can('providers.read') && (
+            <Link href="/proveedores" className="btn-secondary text-xs">
+              Ver proveedores
+            </Link>
+          )}
+          {canCreateProject && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary">
+              + Nuevo proyecto
+            </button>
+          )}
         </div>
       </div>
 
@@ -102,8 +116,8 @@ export default function DashboardPage() {
 
       {stats && (
         <>
-          {/* KPIs compactos */}
-          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {/* KPIs compactos (ocultos para el operador: no ve montos) */}
+          <div className={`mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 ${restricted ? 'hidden' : ''}`}>
             <Kpi
               label="Activos"
               value={String(stats.totals.activeCount)}
@@ -169,6 +183,8 @@ export default function DashboardPage() {
                     <ProjectMiniCard
                       key={p.id}
                       project={p}
+                      hideMoney={restricted}
+                      canManage={canManageProjects}
                       onEdit={() => setEditingId(p.id)}
                       onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
                     />
@@ -243,10 +259,14 @@ function Kpi({
 
 function ProjectMiniCard({
   project,
+  hideMoney = false,
+  canManage = true,
   onEdit,
   onDelete,
 }: {
   project: DashboardProjectStat;
+  hideMoney?: boolean;
+  canManage?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -255,32 +275,34 @@ function ProjectMiniCard({
 
   return (
     <div className="group relative rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
-      <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            onEdit();
-          }}
-          className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
-          title="Editar"
-        >
-          ✏️
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            onDelete();
-          }}
-          className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-          title="Eliminar"
-        >
-          🗑️
-        </button>
-      </div>
+      {canManage && (
+        <div className="absolute right-1.5 top-1.5 flex gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onEdit();
+            }}
+            className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
+            title="Editar"
+          >
+            ✏️
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onDelete();
+            }}
+            className="rounded-md px-1.5 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+            title="Eliminar"
+          >
+            🗑️
+          </button>
+        </div>
+      )}
 
-      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className="block pr-12">
+      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className={canManage ? 'block pr-12' : 'block'}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-ink-primary">
@@ -296,16 +318,18 @@ function ProjectMiniCard({
           </span>
         </div>
 
-        <div className="mt-2 flex items-end justify-between text-[11px]">
-          <div>
-            <span className="text-ink-tertiary">Contratado</span>{' '}
-            <span className="font-medium">{formatCurrency(project.contractAmount)}</span>
+        {!hideMoney && (
+          <div className="mt-2 flex items-end justify-between text-[11px]">
+            <div>
+              <span className="text-ink-tertiary">Contratado</span>{' '}
+              <span className="font-medium">{formatCurrency(project.contractAmount)}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-ink-tertiary">Ejecutado</span>{' '}
+              <span className="font-medium">{formatCurrency(project.spent)}</span>
+            </div>
           </div>
-          <div className="text-right">
-            <span className="text-ink-tertiary">Ejecutado</span>{' '}
-            <span className="font-medium">{formatCurrency(project.spent)}</span>
-          </div>
-        </div>
+        )}
 
         <div className="mt-2">
           <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
@@ -328,7 +352,7 @@ function ProjectMiniCard({
           </div>
         </div>
 
-        {project.pending > 0 && (
+        {!hideMoney && project.pending > 0 && (
           <div className="mt-2 flex items-center justify-between rounded-md bg-danger-soft px-2 py-1 text-[10px]">
             <span className="text-danger">Pendiente pago</span>
             <span className="font-semibold text-danger">

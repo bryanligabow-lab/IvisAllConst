@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
+import { loadProjectScope, requireProjectAccess } from '../../middleware/projectScope';
 import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -32,11 +33,13 @@ const listRubrosQuerySchema = z.object({ projectId: z.string().uuid() });
 
 export const rubrosRouter = Router();
 rubrosRouter.use(authenticate);
+rubrosRouter.use(loadProjectScope);
 
 rubrosRouter.get(
   '/',
   requirePermission(PERMISSIONS.RUBROS_READ),
   validate(listRubrosQuerySchema, 'query'),
+  requireProjectAccess((req) => req.query.projectId as string | undefined),
   asyncHandler(async (req, res) => {
     const items = await prisma.rubro.findMany({
       where: { projectId: req.query.projectId as string, deletedAt: null },

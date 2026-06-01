@@ -29,6 +29,7 @@ model User {
   deletedAt     DateTime? @map("deleted_at")
 
   roles                UserRole[]
+  projectAssignments   ProjectAssignment[]      @relation("AssignmentUser")
   refreshTokens        RefreshToken[]
   passwordResets       PasswordResetToken[]
   emailVerifTokens     EmailVerificationToken[]
@@ -43,6 +44,8 @@ model User {
   createdProformas     Proforma[]               @relation("ProformaCreatedBy")
   createdClients       Client[]                 @relation("ClientCreatedBy")
   uploadedDocuments    ProjectDocument[]        @relation("DocUploadedBy")
+  createdAttendance    Attendance[]             @relation("AttendanceCreatedBy")
+  createdBitacora      BitacoraEntry[]          @relation("BitacoraCreatedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -219,6 +222,9 @@ model Project {
   employees     Employee[]
   proformas     Proforma[]
   documents     ProjectDocument[]
+  assignments   ProjectAssignment[]
+  attendance    Attendance[]
+  bitacora      BitacoraEntry[]
 
   @@index([code])
   @@index([status])
@@ -246,6 +252,23 @@ model ProjectDocument {
   @@map("project_documents")
 }
 
+// Asignación usuario ↔ proyecto. Define a qué proyectos puede acceder un
+// operador (residente). Los roles admin/super_admin ignoran esta restricción.
+model ProjectAssignment {
+  userId     String   @map("user_id")
+  projectId  String   @map("project_id")
+  assignedBy String?  @map("assigned_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user    User    @relation("AssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+  @@map("project_assignments")
+}
+
 model Rubro {
   id             String    @id @default(uuid())
   projectId      String    @map("project_id")
@@ -269,9 +292,10 @@ model Rubro {
   project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent        Rubro?         @relation("RubroChildren", fields: [parentId], references: [id])
   children      Rubro[]        @relation("RubroChildren")
-  gastos        Gasto[]
-  planillaItems PlanillaItem[]
-  paymentOrders PaymentOrder[]
+  gastos             Gasto[]
+  planillaItems      PlanillaItem[]
+  paymentOrders      PaymentOrder[]
+  paymentOrderItems  PaymentOrderItem[]
 
   @@unique([projectId, code])
   @@index([projectId])
@@ -365,7 +389,9 @@ model PlanillaItem {
 model PaymentOrder {
   id            String    @id @default(uuid())
   projectId     String    @map("project_id")
-  rubroId       String    @map("rubro_id")
+  // Rubro principal. Opcional: una orden puede repartirse entre varios rubros
+  // vía PaymentOrderItem (desglose de una factura por rubro).
+  rubroId       String?   @map("rubro_id")
   providerId    String?   @map("provider_id")
   description   String
   amount        Float
@@ -379,11 +405,12 @@ model PaymentOrder {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  rubro    Rubro     @relation(fields: [rubroId], references: [id])
-  provider Provider? @relation(fields: [providerId], references: [id])
-  creator  User      @relation("PaymentOrderCreatedBy", fields: [createdBy], references: [id])
+  project  Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rubro    Rubro?             @relation(fields: [rubroId], references: [id])
+  provider Provider?          @relation(fields: [providerId], references: [id])
+  creator  User               @relation("PaymentOrderCreatedBy", fields: [createdBy], references: [id])
   gastos   Gasto[]
+  items    PaymentOrderItem[]
 
   @@index([projectId, scheduledDate])
   @@index([rubroId])
@@ -391,6 +418,22 @@ model PaymentOrder {
   @@index([status])
   @@index([deletedAt])
   @@map("payment_orders")
+}
+
+// Desglose de una orden de pago (una factura) entre varios rubros.
+model PaymentOrderItem {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  rubroId   String   @map("rubro_id")
+  amount    Float
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order PaymentOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  rubro Rubro        @relation(fields: [rubroId], references: [id])
+
+  @@index([orderId])
+  @@index([rubroId])
+  @@map("payment_order_items")
 }
 
 model Provider {
@@ -431,14 +474,58 @@ model Employee {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  project Project? @relation(fields: [projectId], references: [id])
-  creator User     @relation("EmployeeCreatedBy", fields: [createdBy], references: [id])
-  gastos  Gasto[]
+  project    Project?     @relation(fields: [projectId], references: [id])
+  creator    User         @relation("EmployeeCreatedBy", fields: [createdBy], references: [id])
+  gastos     Gasto[]
+  attendance Attendance[]
 
   @@index([fullName])
   @@index([projectId])
   @@index([deletedAt])
   @@map("employees")
+}
+
+// Asistencia diaria de personal por proyecto (Fase 2 — Nómina).
+model Attendance {
+  id         String   @id @default(uuid())
+  employeeId String   @map("employee_id")
+  projectId  String   @map("project_id")
+  date       DateTime
+  status     String   @default("PRESENT") // PRESENT | ABSENT | LATE | PERMISSION | REST
+  notes      String?
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator  User     @relation("AttendanceCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([projectId, date])
+  @@map("attendance")
+}
+
+// Bitácora / libro de obra: registro diario por proyecto (Fase 2).
+model BitacoraEntry {
+  id        String    @id @default(uuid())
+  projectId String    @map("project_id")
+  date      DateTime
+  weather   String?
+  workforce Int?
+  title     String?
+  content   String
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User    @relation("BitacoraCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId, date])
+  @@index([deletedAt])
+  @@map("bitacora_entries")
 }
 
 model Proforma {

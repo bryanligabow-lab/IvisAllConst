@@ -12,6 +12,16 @@ interface Role {
   isSystem?: boolean;
 }
 
+interface ProjectLite {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface UserDetail {
+  projectIds?: string[];
+}
+
 export interface EditableUser {
   id: string;
   email: string;
@@ -30,13 +40,22 @@ interface Props {
 
 export function EditUserModal({ open, onClose, user, onSaved }: Props) {
   const { data: roles } = useSWR<Role[]>(open ? '/users/roles/list' : null, apiGet);
+  const { data: projects } = useSWR<ProjectLite[]>(open ? '/projects?perPage=200' : null, apiGet);
+  const { data: detail } = useSWR<UserDetail>(
+    open && user ? `/users/${user.id}` : null,
+    apiGet,
+  );
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const operadorRoleId = roles?.find((r) => r.name === 'operador')?.id;
+  const showProjects = !!operadorRoleId && selectedRoles.includes(operadorRoleId);
 
   // When opening, hydrate state with the user's current values.
   useEffect(() => {
@@ -59,6 +78,12 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
     setSelectedRoles(ids);
   }, [open, user, roles]);
 
+  // Hidrata los proyectos asignados desde el detalle del usuario.
+  useEffect(() => {
+    if (!open || !detail) return;
+    setSelectedProjects(detail.projectIds ?? []);
+  }, [open, detail]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -70,6 +95,8 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
         lastName: lastName.trim(),
         isActive,
         roleIds: selectedRoles,
+        // Si es operador, guarda los proyectos asignados; si no, lo limpia.
+        projectIds: showProjects ? selectedProjects : [],
       });
       onSaved();
       onClose();
@@ -162,10 +189,49 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             Cada rol incluye un set de permisos. <strong>super_admin</strong> tiene todos los
             permisos. <strong>admin</strong> puede gestionar proyectos, gastos, planillas,
-            proveedores, clientes, nómina y proformas. <strong>user</strong> tiene acceso de
-            lectura.
+            proveedores, clientes, nómina y proformas. <strong>operador</strong> (residente) solo
+            accede a sus proyectos asignados, ve avances en %, carga órdenes de pago y registra
+            asistencia/bitácora. <strong>user</strong> tiene acceso de lectura.
           </p>
         </div>
+
+        {showProjects && (
+          <div>
+            <label className="mb-1 block text-sm font-medium">Proyectos asignados</label>
+            <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+              {!projects && (
+                <div className="col-span-full text-xs text-slate-400">Cargando proyectos…</div>
+              )}
+              {projects?.length === 0 && (
+                <div className="col-span-full text-xs text-slate-400">No hay proyectos.</div>
+              )}
+              {projects?.map((p) => (
+                <label
+                  key={p.id}
+                  className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={selectedProjects.includes(p.id)}
+                    onChange={(e) =>
+                      setSelectedProjects((prev) =>
+                        e.target.checked ? [...prev, p.id] : prev.filter((x) => x !== p.id),
+                      )
+                    }
+                  />
+                  <div>
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{p.code}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              El operador solo verá y trabajará en estos proyectos.
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

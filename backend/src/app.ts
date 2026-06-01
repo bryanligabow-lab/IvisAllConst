@@ -15,6 +15,8 @@ import { planillasRouter } from './modules/planillas/planillas.routes';
 import { paymentOrdersRouter } from './modules/payment-orders/payment-orders.routes';
 import { providersRouter } from './modules/providers/providers.routes';
 import { employeesRouter } from './modules/employees/employees.routes';
+import { attendanceRouter } from './modules/attendance/attendance.routes';
+import { bitacoraRouter } from './modules/bitacora/bitacora.routes';
 import { proformasRouter } from './modules/proformas/proformas.routes';
 import { clientsRouter } from './modules/clients/clients.routes';
 import { healthRouter } from './modules/health/health.routes';
@@ -61,6 +63,8 @@ export function buildApp() {
   app.use('/api/payment-orders', paymentOrdersRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/employees', employeesRouter);
+  app.use('/api/attendance', attendanceRouter);
+  app.use('/api/bitacora', bitacoraRouter);
   app.use('/api/proformas', proformasRouter);
   app.use('/api/clients', clientsRouter);
 
