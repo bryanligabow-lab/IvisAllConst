@@ -16,6 +16,8 @@ interface AttendanceRow {
   position: string | null;
   cedula: string | null;
   status: AttendanceStatus | null;
+  checkIn: string | null;
+  checkOut: string | null;
   notes: string | null;
 }
 
@@ -42,6 +44,8 @@ interface HistoryRecord {
   employeeId: string;
   date: string;
   status: AttendanceStatus;
+  checkIn: string | null;
+  checkOut: string | null;
   employee: { fullName: string };
 }
 
@@ -76,14 +80,12 @@ export function AsistenciaPanel() {
 
   // Matriz empleado × día a partir del historial.
   const matrix = useMemo(() => {
-    const byEmployee = new Map<
-      string,
-      { name: string; days: Record<number, AttendanceStatus> }
-    >();
+    type Cell = { status: AttendanceStatus; checkIn: string | null; checkOut: string | null };
+    const byEmployee = new Map<string, { name: string; days: Record<number, Cell> }>();
     for (const r of history ?? []) {
       const day = Number(r.date.slice(8, 10));
       const e = byEmployee.get(r.employeeId) ?? { name: r.employee.fullName, days: {} };
-      e.days[day] = r.status;
+      e.days[day] = { status: r.status, checkIn: r.checkIn, checkOut: r.checkOut };
       byEmployee.set(r.employeeId, e);
     }
     return Array.from(byEmployee.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -98,6 +100,7 @@ export function AsistenciaPanel() {
   const { data: rows, isLoading, mutate } = useSWR<AttendanceRow[]>(key, apiGet);
 
   const [draft, setDraft] = useState<Record<string, AttendanceStatus>>({});
+  const [times, setTimes] = useState<Record<string, { in: string; out: string }>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -106,10 +109,24 @@ export function AsistenciaPanel() {
   useEffect(() => {
     if (!rows) return;
     const initial: Record<string, AttendanceStatus> = {};
-    for (const r of rows) if (r.status) initial[r.employeeId] = r.status;
+    const initialTimes: Record<string, { in: string; out: string }> = {};
+    for (const r of rows) {
+      if (r.status) initial[r.employeeId] = r.status;
+      if (r.checkIn || r.checkOut)
+        initialTimes[r.employeeId] = { in: r.checkIn ?? '', out: r.checkOut ?? '' };
+    }
     setDraft(initial);
+    setTimes(initialTimes);
     setSavedMsg(null);
   }, [rows]);
+
+  function setTime(employeeId: string, field: 'in' | 'out', value: string) {
+    setTimes((prev) => ({
+      ...prev,
+      [employeeId]: { in: prev[employeeId]?.in ?? '', out: prev[employeeId]?.out ?? '', [field]: value },
+    }));
+    setSavedMsg(null);
+  }
 
   const presentCount = useMemo(
     () => Object.values(draft).filter((s) => s === 'PRESENT' || s === 'LATE').length,
@@ -125,7 +142,12 @@ export function AsistenciaPanel() {
     if (!projectId || !rows) return;
     const records = rows
       .filter((r) => draft[r.employeeId])
-      .map((r) => ({ employeeId: r.employeeId, status: draft[r.employeeId] }));
+      .map((r) => ({
+        employeeId: r.employeeId,
+        status: draft[r.employeeId],
+        checkIn: times[r.employeeId]?.in || undefined,
+        checkOut: times[r.employeeId]?.out || undefined,
+      }));
     if (records.length === 0) {
       setError('Marca al menos un empleado');
       return;
@@ -260,14 +282,21 @@ export function AsistenciaPanel() {
                         </td>
                         {Array.from({ length: days }, (_, i) => i + 1).map((d) => {
                           const st = row.days[d];
+                          const label = st
+                            ? `${STATUS_OPTIONS.find((o) => o.value === st.status)?.label ?? ''}${
+                                st.checkIn || st.checkOut
+                                  ? ` ${st.checkIn ?? '—'} a ${st.checkOut ?? '—'}`
+                                  : ''
+                              }`
+                            : '';
                           return (
                             <td key={d} className="px-0.5 py-1 text-center">
                               {st ? (
                                 <span
-                                  className={`inline-flex h-5 w-5 items-center justify-center rounded-sm text-[10px] font-bold ${STATUS_SHORT[st].cls}`}
-                                  title={STATUS_OPTIONS.find((o) => o.value === st)?.label}
+                                  className={`inline-flex h-5 w-5 items-center justify-center rounded-sm text-[10px] font-bold ${STATUS_SHORT[st.status].cls}`}
+                                  title={label}
                                 >
-                                  {STATUS_SHORT[st].letter}
+                                  {STATUS_SHORT[st.status].letter}
                                 </span>
                               ) : (
                                 <span className="text-ink-tertiary">·</span>
@@ -310,24 +339,46 @@ export function AsistenciaPanel() {
                   {r.cedula ? ` · ${r.cedula}` : ''}
                 </div>
               </div>
-              <div className="flex flex-wrap gap-1">
-                {STATUS_OPTIONS.map((opt) => {
-                  const active = draft[r.employeeId] === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setStatus(r.employeeId, opt.value)}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                        active
-                          ? opt.cls
-                          : 'bg-surface-muted text-ink-secondary hover:text-ink-primary'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
+              <div className="flex flex-col gap-2 sm:items-end">
+                <div className="flex flex-wrap gap-1">
+                  {STATUS_OPTIONS.map((opt) => {
+                    const active = draft[r.employeeId] === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setStatus(r.employeeId, opt.value)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          active
+                            ? opt.cls
+                            : 'bg-surface-muted text-ink-secondary hover:text-ink-primary'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-ink-secondary">
+                  <label className="flex items-center gap-1">
+                    Entrada
+                    <input
+                      type="time"
+                      value={times[r.employeeId]?.in ?? ''}
+                      onChange={(e) => setTime(r.employeeId, 'in', e.target.value)}
+                      className="input h-7 w-[92px] px-1.5 py-0 text-xs"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1">
+                    Salida
+                    <input
+                      type="time"
+                      value={times[r.employeeId]?.out ?? ''}
+                      onChange={(e) => setTime(r.employeeId, 'out', e.target.value)}
+                      className="input h-7 w-[92px] px-1.5 py-0 text-xs"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           ))}

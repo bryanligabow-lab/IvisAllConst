@@ -18,6 +18,12 @@ const listQuerySchema = z.object({
   date: calendarDateSchema,
 });
 
+const timeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida (HH:MM)')
+  .optional()
+  .or(z.literal(''));
+
 const bulkSchema = z.object({
   projectId: z.string().uuid(),
   date: calendarDateSchema,
@@ -26,6 +32,8 @@ const bulkSchema = z.object({
       z.object({
         employeeId: z.string().uuid(),
         status: z.enum(ATTENDANCE_STATUS),
+        checkIn: timeSchema,
+        checkOut: timeSchema,
         notes: z.string().max(300).optional(),
       }),
     )
@@ -71,6 +79,8 @@ attendanceRouter.get(
         position: e.position,
         cedula: e.cedula,
         status: rec?.status ?? null,
+        checkIn: rec?.checkIn ?? null,
+        checkOut: rec?.checkOut ?? null,
         notes: rec?.notes ?? null,
       };
     });
@@ -91,7 +101,13 @@ attendanceRouter.post(
     const { projectId, date, records } = req.body as {
       projectId: string;
       date: Date;
-      records: Array<{ employeeId: string; status: string; notes?: string }>;
+      records: Array<{
+        employeeId: string;
+        status: string;
+        checkIn?: string;
+        checkOut?: string;
+        notes?: string;
+      }>;
     };
 
     // Solo empleados que pertenezcan al proyecto (evita inyectar ajenos).
@@ -107,12 +123,19 @@ attendanceRouter.post(
         .map((r) =>
           prisma.attendance.upsert({
             where: { employeeId_date: { employeeId: r.employeeId, date } },
-            update: { status: r.status, notes: r.notes ?? null },
+            update: {
+              status: r.status,
+              checkIn: r.checkIn || null,
+              checkOut: r.checkOut || null,
+              notes: r.notes ?? null,
+            },
             create: {
               employeeId: r.employeeId,
               projectId,
               date,
               status: r.status,
+              checkIn: r.checkIn || null,
+              checkOut: r.checkOut || null,
               notes: r.notes ?? null,
               createdBy: userId,
             },

@@ -78,6 +78,24 @@ export async function apiFetch<T>(
   return body.data;
 }
 
+// Descarga binaria (imágenes, archivos) con auth + refresh. Devuelve un Blob.
+export async function apiFetchBlob(path: string, retried = false): Promise<Blob> {
+  const token = getAccessToken();
+  const headers = new Headers();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: 'include' });
+
+  if (res.status === 401 && !retried) {
+    const fresh = await tryRefresh();
+    if (fresh) return apiFetchBlob(path, true);
+  }
+  if (!res.ok) {
+    throw new ApiClientError('FETCH_ERROR', 'No se pudo cargar el recurso', res.status);
+  }
+  return res.blob();
+}
+
 export const apiGet = <T>(path: string) => apiFetch<T>(path);
 export const apiPost = <T>(path: string, data: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data) });

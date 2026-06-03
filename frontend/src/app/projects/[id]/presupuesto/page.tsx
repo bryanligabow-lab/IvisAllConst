@@ -64,7 +64,10 @@ export default function PresupuestoPage() {
                 </p>
               )}
               {percentOnly && (
-                <p className="text-xs text-ink-secondary">Avance de ejecución por rubro</p>
+                <p className="text-xs text-ink-secondary">
+                  Presupuesto total: {formatCurrency(data.totals.budgeted, true)} · avance de
+                  ejecución por rubro en %
+                </p>
               )}
             </div>
             {canEditRubros && (
@@ -173,11 +176,17 @@ export default function PresupuestoPage() {
                   return (
                     <div key={r.id} className="rounded-lg border border-surface-border p-3">
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="text-sm font-medium">
-                          {r.code}. {r.name}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium">
+                            {r.code}. {r.name}
+                          </div>
+                          {/* El operador ve el presupuesto, pero NO el gastado ni el saldo. */}
+                          <div className="text-[11px] text-ink-secondary">
+                            Presupuesto: {formatCurrency(r.budgetedAmount, true)}
+                          </div>
+                        </div>
                         <span
-                          className={`text-sm font-semibold ${
+                          className={`shrink-0 text-sm font-semibold ${
                             exceeded ? 'text-danger' : 'text-ink-primary'
                           }`}
                         >

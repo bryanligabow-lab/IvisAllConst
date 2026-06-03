@@ -504,6 +504,9 @@ model Attendance {
   projectId  String   @map("project_id")
   date       DateTime
   status     String   @default("PRESENT") // PRESENT | ABSENT | LATE | PERMISSION | REST
+  // Hora de entrada/salida (formato "HH:MM"), opcionales.
+  checkIn    String?  @map("check_in")
+  checkOut   String?  @map("check_out")
   notes      String?
   createdBy  String   @map("created_by")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -534,10 +537,26 @@ model BitacoraEntry {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   creator User    @relation("BitacoraCreatedBy", fields: [createdBy], references: [id])
+  photos  BitacoraPhoto[]
 
   @@index([projectId, date])
   @@index([deletedAt])
   @@map("bitacora_entries")
+}
+
+// Fotos adjuntas a una entrada de bitácora (libro de obra).
+model BitacoraPhoto {
+  id        String   @id @default(uuid())
+  entryId   String   @map("entry_id")
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  entry BitacoraEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
+  @@map("bitacora_photos")
 }
 
 model Proforma {

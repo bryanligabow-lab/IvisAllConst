@@ -8,12 +8,20 @@ import { requireDeleteCode } from '../../middleware/requireDeleteCode';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { success } from '../../utils/apiResponse';
-import { NotFoundError, UnauthorizedError, ForbiddenError } from '../../utils/errors';
+import { NotFoundError, UnauthorizedError, ForbiddenError, BadRequestError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
 
 const listQuerySchema = z.object({ projectId: z.string().uuid() });
+
+const photoSchema = z.object({
+  mimeType: z.string().regex(/^image\//, 'Tipo de imagen no válido'),
+  dataBase64: z.string().min(10), // base64 sin el prefijo data:
+  caption: z.string().max(200).optional(),
+});
+const MAX_PHOTOS = 12;
+const MAX_PHOTO_BYTES = 6 * 1024 * 1024; // 6 MB por foto
 
 const createSchema = z.object({
   projectId: z.string().uuid(),
@@ -22,6 +30,7 @@ const createSchema = z.object({
   workforce: z.coerce.number().int().nonnegative().optional(),
   title: z.string().max(200).optional(),
   content: z.string().min(1).max(5000),
+  photos: z.array(photoSchema).max(MAX_PHOTOS).optional(),
 });
 
 const updateSchema = z.object({
@@ -34,6 +43,7 @@ const updateSchema = z.object({
 
 const entryInclude = {
   creator: { select: { firstName: true, lastName: true, email: true } },
+  photos: { select: { id: true, mimeType: true, caption: true }, orderBy: { createdAt: 'asc' } },
 } as const;
 
 export const bitacoraRouter = Router();
@@ -62,6 +72,16 @@ bitacoraRouter.post(
   requireProjectAccess((req) => req.body.projectId as string | undefined),
   asyncHandler(async (req, res) => {
     if (!req.user) throw new UnauthorizedError();
+    const photos = (req.body.photos as z.infer<typeof photoSchema>[] | undefined) ?? [];
+    const photoData = photos.map((p) => {
+      const buf = Buffer.from(p.dataBase64, 'base64');
+      if (buf.length === 0) throw new BadRequestError('Una foto está vacía');
+      if (buf.length > MAX_PHOTO_BYTES) {
+        throw new BadRequestError(`Cada foto debe pesar menos de ${MAX_PHOTO_BYTES / 1024 / 1024} MB`);
+      }
+      return { mimeType: p.mimeType, data: buf, caption: p.caption || null };
+    });
+
     const created = await prisma.bitacoraEntry.create({
       data: {
         projectId: req.body.projectId,
@@ -71,10 +91,48 @@ bitacoraRouter.post(
         title: req.body.title || null,
         content: req.body.content,
         createdBy: req.user.id,
+        ...(photoData.length > 0 ? { photos: { create: photoData } } : {}),
       },
       include: entryInclude,
     });
     return success(res, created, 201);
+  }),
+);
+
+// Sirve el binario de una foto (con verificación de acceso al proyecto).
+bitacoraRouter.get(
+  '/photo/:photoId',
+  requirePermission(PERMISSIONS.BITACORA_READ),
+  asyncHandler(async (req, res) => {
+    const photo = await prisma.bitacoraPhoto.findFirst({
+      where: { id: req.params.photoId },
+      include: { entry: { select: { projectId: true, deletedAt: true } } },
+    });
+    if (!photo || photo.entry.deletedAt) throw new NotFoundError('Foto no encontrada');
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(photo.entry.projectId)) {
+      throw new ForbiddenError('No tienes acceso a este proyecto');
+    }
+    res.setHeader('Content-Type', photo.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(photo.data));
+  }),
+);
+
+// Elimina una foto de una entrada.
+bitacoraRouter.delete(
+  '/photo/:photoId',
+  requirePermission(PERMISSIONS.BITACORA_WRITE),
+  asyncHandler(async (req, res) => {
+    const photo = await prisma.bitacoraPhoto.findFirst({
+      where: { id: req.params.photoId },
+      include: { entry: { select: { projectId: true } } },
+    });
+    if (!photo) throw new NotFoundError('Foto no encontrada');
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(photo.entry.projectId)) {
+      throw new ForbiddenError('No tienes acceso a este proyecto');
+    }
+    await prisma.bitacoraPhoto.delete({ where: { id: photo.id } });
+    return success(res, { message: 'Foto eliminada' });
   }),
 );
 

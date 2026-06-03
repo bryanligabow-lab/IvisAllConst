@@ -6,10 +6,17 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
+import { AuthImage } from '@/components/ui/AuthImage';
 import { apiDelete, apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import type { ProjectSummary } from '@/types';
+
+interface BitacoraPhoto {
+  id: string;
+  mimeType: string;
+  caption: string | null;
+}
 
 interface BitacoraEntry {
   id: string;
@@ -20,6 +27,29 @@ interface BitacoraEntry {
   content: string;
   createdAt: string;
   creator?: { firstName: string; lastName: string; email: string };
+  photos?: BitacoraPhoto[];
+}
+
+interface PhotoDraft {
+  preview: string;
+  dataBase64: string;
+  mimeType: string;
+  filename: string;
+}
+
+const MAX_PHOTOS = 12;
+const MAX_PHOTO_SIZE = 6 * 1024 * 1024; // 6 MB
+
+function fileToBase64(file: File): Promise<{ dataUrl: string; dataBase64: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve({ dataUrl, dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, '') });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function today(): string {
@@ -42,9 +72,11 @@ export default function BitacoraPage() {
   const [workforce, setWorkforce] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<BitacoraEntry | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   function resetForm() {
     setDate(today());
@@ -52,7 +84,28 @@ export default function BitacoraPage() {
     setWorkforce('');
     setTitle('');
     setContent('');
+    setPhotos([]);
     setError(null);
+  }
+
+  async function addPhotos(files: FileList | null) {
+    if (!files) return;
+    setError(null);
+    const added: PhotoDraft[] = [];
+    for (const f of Array.from(files)) {
+      if (photos.length + added.length >= MAX_PHOTOS) {
+        setError(`Máximo ${MAX_PHOTOS} fotos por entrada.`);
+        break;
+      }
+      if (!f.type.startsWith('image/')) continue;
+      if (f.size > MAX_PHOTO_SIZE) {
+        setError(`"${f.name}" pesa más de 6 MB.`);
+        continue;
+      }
+      const { dataUrl, dataBase64 } = await fileToBase64(f);
+      added.push({ preview: dataUrl, dataBase64, mimeType: f.type, filename: f.name });
+    }
+    if (added.length) setPhotos((c) => [...c, ...added]);
   }
 
   async function submit(e: React.FormEvent) {
@@ -71,6 +124,9 @@ export default function BitacoraPage() {
         workforce: workforce ? Number(workforce) : undefined,
         title: title || undefined,
         content: content.trim(),
+        photos: photos.length
+          ? photos.map((p) => ({ mimeType: p.mimeType, dataBase64: p.dataBase64 }))
+          : undefined,
       });
       resetForm();
       await mutate();
@@ -155,6 +211,39 @@ export default function BitacoraPage() {
             />
           </div>
 
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-secondary">
+              Fotos (opcional)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                void addPhotos(e.target.files);
+                e.target.value = '';
+              }}
+              className="block w-full text-xs text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-surface-muted file:px-3 file:py-1.5 file:text-xs file:font-medium"
+            />
+            {photos.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {photos.map((p, i) => (
+                  <div key={i} className="relative h-20 w-20 overflow-hidden rounded-md border border-surface-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.preview} alt={p.filename} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setPhotos((c) => c.filter((_, j) => j !== i))}
+                      className="absolute right-0.5 top-0.5 rounded bg-black/60 px-1 text-[10px] text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>
           )}
@@ -206,9 +295,40 @@ export default function BitacoraPage() {
               )}
             </header>
             <p className="whitespace-pre-wrap text-sm text-ink-primary">{e.content}</p>
+            {e.photos && e.photos.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {e.photos.map((ph) => (
+                  <button
+                    key={ph.id}
+                    type="button"
+                    onClick={() => setLightbox(`/bitacora/photo/${ph.id}`)}
+                    className="h-24 w-24 overflow-hidden rounded-md border border-surface-border transition-transform hover:scale-105"
+                    title="Ampliar"
+                  >
+                    <AuthImage path={`/bitacora/photo/${ph.id}`} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </article>
         ))}
       </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <AuthImage path={lightbox} className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain" />
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
+          >
+            Cerrar ✕
+          </button>
+        </div>
+      )}
 
       <DeleteConfirmDialog
         open={!!pendingDelete}
