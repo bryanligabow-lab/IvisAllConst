@@ -16,7 +16,11 @@ interface ProjectLite {
   id: string;
   code: string;
   name: string;
+  status?: string;
 }
+
+// Proyectos cerrados que NO deben ofrecerse para asignar.
+const CLOSED_STATUSES = ['COMPLETED', 'CANCELLED'];
 
 interface CreatedUser {
   id: string;
@@ -49,6 +53,8 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
 
   const operadorRoleId = roles?.find((r) => r.name === 'operador')?.id;
   const showProjects = !!operadorRoleId && selectedRoles.includes(operadorRoleId);
+  // Solo proyectos vigentes (no cerrados) para asignar.
+  const activeProjects = projects?.filter((p) => !CLOSED_STATUSES.includes(p.status ?? 'ACTIVE'));
 
   useEffect(() => {
     if (!open) return;
@@ -262,10 +268,10 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
                 {!projects && (
                   <div className="col-span-full text-xs text-slate-400">Cargando proyectos…</div>
                 )}
-                {projects?.length === 0 && (
-                  <div className="col-span-full text-xs text-slate-400">No hay proyectos.</div>
+                {activeProjects?.length === 0 && (
+                  <div className="col-span-full text-xs text-slate-400">No hay proyectos activos.</div>
                 )}
-                {projects?.map((p) => (
+                {activeProjects?.map((p) => (
                   <label
                     key={p.id}
                     className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"

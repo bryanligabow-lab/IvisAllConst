@@ -16,7 +16,11 @@ interface ProjectLite {
   id: string;
   code: string;
   name: string;
+  status?: string;
 }
+
+// Proyectos cerrados que NO deben ofrecerse para asignar.
+const CLOSED_STATUSES = ['COMPLETED', 'CANCELLED'];
 
 interface UserDetail {
   projectIds?: string[];
@@ -56,6 +60,11 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
 
   const operadorRoleId = roles?.find((r) => r.name === 'operador')?.id;
   const showProjects = !!operadorRoleId && selectedRoles.includes(operadorRoleId);
+  // Proyectos vigentes (no cerrados) + los que el usuario ya tenga asignados
+  // aunque estén cerrados (para no desasignarlos sin querer).
+  const activeProjects = projects?.filter(
+    (p) => !CLOSED_STATUSES.includes(p.status ?? 'ACTIVE') || selectedProjects.includes(p.id),
+  );
 
   // When opening, hydrate state with the user's current values.
   useEffect(() => {
@@ -202,10 +211,10 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
               {!projects && (
                 <div className="col-span-full text-xs text-slate-400">Cargando proyectos…</div>
               )}
-              {projects?.length === 0 && (
-                <div className="col-span-full text-xs text-slate-400">No hay proyectos.</div>
+              {activeProjects?.length === 0 && (
+                <div className="col-span-full text-xs text-slate-400">No hay proyectos activos.</div>
               )}
-              {projects?.map((p) => (
+              {activeProjects?.map((p) => (
                 <label
                   key={p.id}
                   className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
