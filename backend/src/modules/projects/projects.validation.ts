@@ -11,10 +11,18 @@ export const projectStatusSchema = z.enum([
   'CANCELLED',
 ]);
 
+export const executionTypeSchema = z.enum(['OWN', 'SUBCONTRACTED']);
+
 export const createProjectSchema = z.object({
   code: z.string().min(1).max(80),
   name: z.string().min(1).max(200),
   contractor: z.string().max(200).optional(),
+  // Cliente que solicita el contrato (catálogo de clientes).
+  clientId: z.string().uuid().optional().nullable(),
+  // Quién ejecuta: propio (CREACOM) o subcontratado.
+  executionType: executionTypeSchema.default('OWN').optional(),
+  // Subcontratista (proveedor) cuando executionType = SUBCONTRACTED.
+  subcontractorId: z.string().uuid().optional().nullable(),
   description: z.string().max(2000).optional(),
   city: z.string().max(120).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),

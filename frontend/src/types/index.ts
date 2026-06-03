@@ -2,11 +2,18 @@ export type ProjectStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCE
 export type PlanillaStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'CANCELLED';
 export type RubroStatus = 'ok' | 'warn' | 'danger' | 'exhausted';
 
+export type ExecutionType = 'OWN' | 'SUBCONTRACTED';
+
 export interface Project {
   id: string;
   code: string;
   name: string;
   contractor: string | null;
+  clientId?: string | null;
+  client?: { id: string; name: string; ruc?: string | null } | null;
+  executionType?: ExecutionType;
+  subcontractorId?: string | null;
+  subcontractor?: { id: string; name: string; ruc?: string | null } | null;
   description: string | null;
   city: string | null;
   latitude: number | null;
@@ -102,6 +109,36 @@ export interface Provider {
   totalDebt?: number;
   pendingOrdersCount?: number;
   projectsWithDebtCount?: number;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  ruc: string | null;
+  address: string | null;
+  responsible: string | null;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  proformasCount?: number;
+  proformasTotal?: number;
+}
+
+export interface SubcontractorView {
+  id: string;
+  name: string;
+  ruc: string | null;
+  phone: string | null;
+  email: string | null;
+  projects: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: ProjectStatus;
+    budgeted: number;
+    spent: number;
+    progressBudget: number;
+  }>;
 }
 
 export type PaymentOrderStatus = 'PENDING' | 'PAID' | 'CANCELLED';

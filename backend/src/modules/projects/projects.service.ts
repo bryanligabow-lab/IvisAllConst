@@ -41,6 +41,8 @@ export class ProjectsService {
       where: { id, deletedAt: null },
       include: {
         _count: { select: { rubros: true, gastos: true, planillas: true } },
+        client: { select: { id: true, name: true, ruc: true } },
+        subcontractor: { select: { id: true, name: true, ruc: true } },
       },
     });
     if (!project) throw new NotFoundError(ERRORS.PROJECT_NOT_FOUND);
@@ -160,11 +162,15 @@ export class ProjectsService {
   }
 
   static create(dto: CreateProjectDto, createdBy: string) {
+    const executionType = dto.executionType ?? 'OWN';
     return prisma.project.create({
       data: {
         code: dto.code,
         name: dto.name,
         contractor: dto.contractor ?? null,
+        clientId: dto.clientId ?? null,
+        executionType,
+        subcontractorId: executionType === 'SUBCONTRACTED' ? (dto.subcontractorId ?? null) : null,
         description: dto.description ?? null,
         city: dto.city ?? null,
         latitude: dto.latitude ?? null,
@@ -196,6 +202,10 @@ export class ProjectsService {
         ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
       },
       orderBy: { createdAt: 'desc' },
+      include: {
+        client: { select: { id: true, name: true } },
+        subcontractor: { select: { id: true, name: true } },
+      },
     });
 
     if (projects.length === 0) {
@@ -296,6 +306,9 @@ export class ProjectsService {
         code: p.code,
         name: p.name,
         contractor: p.contractor,
+        clientName: p.client?.name ?? null,
+        executionType: p.executionType,
+        subcontractorName: p.subcontractor?.name ?? null,
         city: p.city,
         latitude: p.latitude,
         longitude: p.longitude,
@@ -331,7 +344,93 @@ export class ProjectsService {
 
   static async update(id: string, dto: UpdateProjectDto) {
     await this.getById(id);
-    return prisma.project.update({ where: { id }, data: dto });
+    const data = { ...dto };
+    // Si la ejecución pasa a propia, se limpia el subcontratista.
+    if (data.executionType === 'OWN') data.subcontractorId = null;
+    return prisma.project.update({ where: { id }, data });
+  }
+
+  /**
+   * Subcontratistas (proveedores) que ejecutan obras, con sus proyectos y el
+   * avance (gastado/presupuesto) de cada uno. Alimenta la vista "Subcontratistas".
+   */
+  static async getSubcontractors(allowedProjectIds: string[] | null = null) {
+    const projects = await prisma.project.findMany({
+      where: {
+        deletedAt: null,
+        executionType: 'SUBCONTRACTED',
+        subcontractorId: { not: null },
+        ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { subcontractor: { select: { id: true, name: true, ruc: true, phone: true, email: true } } },
+    });
+
+    if (projects.length === 0) return [];
+
+    const projectIds = projects.map((p) => p.id);
+    const [budgetedAgg, spentAgg] = await Promise.all([
+      prisma.rubro.groupBy({
+        by: ['projectId'],
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        _sum: { budgetedAmount: true },
+      }),
+      prisma.gasto.groupBy({
+        by: ['projectId'],
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        _sum: { amount: true },
+      }),
+    ]);
+    const budgetedMap = new Map(budgetedAgg.map((b) => [b.projectId, Number(b._sum.budgetedAmount ?? 0)]));
+    const spentMap = new Map(spentAgg.map((s) => [s.projectId, Number(s._sum.amount ?? 0)]));
+
+    const bySub = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        ruc: string | null;
+        phone: string | null;
+        email: string | null;
+        projects: Array<{
+          id: string;
+          code: string;
+          name: string;
+          status: string;
+          budgeted: number;
+          spent: number;
+          progressBudget: number;
+        }>;
+      }
+    >();
+
+    for (const p of projects) {
+      if (!p.subcontractor) continue;
+      const budgeted = budgetedMap.get(p.id) ?? 0;
+      const spent = spentMap.get(p.id) ?? 0;
+      const progressBudget = budgeted > 0 ? Math.min(1, spent / budgeted) : 0;
+      const entry =
+        bySub.get(p.subcontractor.id) ?? {
+          id: p.subcontractor.id,
+          name: p.subcontractor.name,
+          ruc: p.subcontractor.ruc,
+          phone: p.subcontractor.phone,
+          email: p.subcontractor.email,
+          projects: [],
+        };
+      entry.projects.push({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        status: p.status,
+        budgeted,
+        spent,
+        progressBudget,
+      });
+      bySub.set(p.subcontractor.id, entry);
+    }
+
+    return Array.from(bySub.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   static async softDelete(id: string) {

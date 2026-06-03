@@ -18,6 +18,9 @@ interface DashboardProjectStat {
   code: string;
   name: string;
   contractor: string | null;
+  clientName: string | null;
+  executionType?: 'OWN' | 'SUBCONTRACTED';
+  subcontractorName: string | null;
   city: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -93,10 +96,20 @@ export default function DashboardPage() {
               : 'Visión consolidada de proyectos y presupuestos'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {can('clients.read') && !restricted && (
+            <Link href={ROUTES.CLIENTES} className="btn-secondary text-xs">
+              Ver clientes
+            </Link>
+          )}
           {can('providers.read') && (
             <Link href="/proveedores" className="btn-secondary text-xs">
               Ver proveedores
+            </Link>
+          )}
+          {can('providers.read') && !restricted && (
+            <Link href={ROUTES.SUBCONTRATISTAS} className="btn-secondary text-xs">
+              Subcontratistas
             </Link>
           )}
           {canCreateProject && (
@@ -312,6 +325,18 @@ function ProjectMiniCard({
               {project.code}
               {project.city ? ` · 📍 ${project.city}` : ''}
             </div>
+            {(project.clientName || project.executionType === 'SUBCONTRACTED') && (
+              <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px]">
+                {project.clientName && (
+                  <span className="text-ink-tertiary">👤 {project.clientName}</span>
+                )}
+                {project.executionType === 'SUBCONTRACTED' && (
+                  <span className="badge-warn">
+                    Subcontratado{project.subcontractorName ? `: ${project.subcontractorName}` : ''}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <span className={`${STATUS_CLASS[project.status]} shrink-0`}>
             {STATUS_LABEL[project.status]}

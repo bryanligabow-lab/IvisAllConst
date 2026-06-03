@@ -192,6 +192,12 @@ model Project {
   code             String    @unique
   name             String
   contractor       String?
+  // Cliente que solicita el contrato (catálogo de clientes).
+  clientId         String?   @map("client_id")
+  // Quién ejecuta la obra: OWN (CREACOM) | SUBCONTRACTED.
+  executionType    String    @default("OWN") @map("execution_type")
+  // Subcontratista (proveedor) cuando executionType = SUBCONTRACTED.
+  subcontractorId  String?   @map("subcontractor_id")
   description      String?
   city             String?
   latitude         Float?
@@ -215,6 +221,8 @@ model Project {
   deletedAt        DateTime? @map("deleted_at")
 
   creator       User           @relation("CreatedBy", fields: [createdBy], references: [id])
+  client        Client?        @relation("ClientProjects", fields: [clientId], references: [id])
+  subcontractor Provider?      @relation("ProjectSubcontractor", fields: [subcontractorId], references: [id])
   rubros        Rubro[]
   gastos        Gasto[]
   planillas     Planilla[]
@@ -228,6 +236,8 @@ model Project {
 
   @@index([code])
   @@index([status])
+  @@index([clientId])
+  @@index([subcontractorId])
   @@index([deletedAt])
   @@map("projects")
 }
@@ -448,9 +458,11 @@ model Provider {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  creator       User           @relation("ProviderCreatedBy", fields: [createdBy], references: [id])
-  gastos        Gasto[]
-  paymentOrders PaymentOrder[]
+  creator              User           @relation("ProviderCreatedBy", fields: [createdBy], references: [id])
+  gastos               Gasto[]
+  paymentOrders        PaymentOrder[]
+  // Proyectos en los que actúa como subcontratista.
+  subcontractedProjects Project[]     @relation("ProjectSubcontractor")
 
   @@index([name])
   @@index([deletedAt])
@@ -600,6 +612,7 @@ model Client {
 
   creator   User       @relation("ClientCreatedBy", fields: [createdBy], references: [id])
   proformas Proforma[]
+  projects  Project[]  @relation("ClientProjects")
 
   @@index([name])
   @@index([deletedAt])

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
-import { apiPatch, apiPost, ApiClientError } from '@/lib/api';
+import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { ECUADOR_CITIES, findCity } from '@/lib/ecuador-cities';
-import type { Project } from '@/types';
+import type { Client, ExecutionType, Project, Provider } from '@/types';
 
 interface Props {
   open: boolean;
@@ -16,8 +16,18 @@ interface Props {
 export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [contractor, setContractor] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [executionType, setExecutionType] = useState<ExecutionType>('OWN');
+  const [subcontractorId, setSubcontractorId] = useState('');
   const [city, setCity] = useState('');
+  // Catálogos para los desplegables.
+  const [clients, setClients] = useState<Client[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  // Alta rápida en línea.
+  const [newClientName, setNewClientName] = useState('');
+  const [newSubName, setNewSubName] = useState('');
+  const [addingClient, setAddingClient] = useState(false);
+  const [addingSub, setAddingSub] = useState(false);
   const [contractAmount, setContractAmount] = useState('');
   const [advancePercent, setAdvancePercent] = useState('40');
   const [guaranteePercent, setGuaranteePercent] = useState('5');
@@ -36,12 +46,25 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
 
   const isEdit = !!initial;
 
+  // Cargar catálogos de clientes y proveedores al abrir.
+  useEffect(() => {
+    if (!open) return;
+    apiGet<Client[]>('/clients')
+      .then(setClients)
+      .catch(() => setClients([]));
+    apiGet<Provider[]>('/providers')
+      .then(setProviders)
+      .catch(() => setProviders([]));
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     if (initial) {
       setCode(initial.code);
       setName(initial.name);
-      setContractor(initial.contractor ?? '');
+      setClientId(initial.clientId ?? '');
+      setExecutionType(initial.executionType ?? 'OWN');
+      setSubcontractorId(initial.subcontractorId ?? '');
       setCity(initial.city ?? '');
       setContractAmount(String(initial.contractAmount));
       setAdvancePercent(String(initial.advancePercent));
@@ -57,7 +80,9 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
     } else {
       setCode('');
       setName('');
-      setContractor('');
+      setClientId('');
+      setExecutionType('OWN');
+      setSubcontractorId('');
       setCity('');
       setContractAmount('');
       setAdvancePercent('40');
@@ -71,8 +96,44 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setEndDate('');
       setStatus('ACTIVE');
     }
+    setNewClientName('');
+    setNewSubName('');
+    setAddingClient(false);
+    setAddingSub(false);
     setError(null);
   }, [open, initial]);
+
+  async function handleAddClient() {
+    const nm = newClientName.trim();
+    if (!nm) return;
+    setAddingClient(true);
+    try {
+      const created = await apiPost<Client>('/clients', { name: nm });
+      setClients((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setClientId(created.id);
+      setNewClientName('');
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'No se pudo crear el cliente');
+    } finally {
+      setAddingClient(false);
+    }
+  }
+
+  async function handleAddSubcontractor() {
+    const nm = newSubName.trim();
+    if (!nm) return;
+    setAddingSub(true);
+    try {
+      const created = await apiPost<Provider>('/providers', { name: nm });
+      setProviders((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSubcontractorId(created.id);
+      setNewSubName('');
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'No se pudo crear el subcontratista');
+    } finally {
+      setAddingSub(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +144,9 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       const payload = {
         code,
         name,
-        contractor: contractor || undefined,
+        clientId: clientId || null,
+        executionType,
+        subcontractorId: executionType === 'SUBCONTRACTED' ? subcontractorId || null : null,
         city: city || undefined,
         latitude: cityData?.lat,
         longitude: cityData?.lng,
@@ -126,15 +189,132 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
               placeholder="TEC-URB-001-2026"
             />
           </Field>
-          <Field label="Contratante">
-            <input
-              value={contractor}
-              onChange={(e) => setContractor(e.target.value)}
-              className="input"
-              placeholder="Empresa S.A."
-            />
+          <Field label="Cliente" hint="Quién solicita el contrato">
+            <div className="flex gap-1">
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                className="input"
+              >
+                <option value="">— Selecciona un cliente —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setAddingClient((v) => !v)}
+                className="btn-secondary shrink-0 px-2 text-xs"
+                title="Agregar cliente"
+              >
+                + Nuevo
+              </button>
+            </div>
           </Field>
         </div>
+
+        {addingClient && (
+          <div className="flex gap-2 rounded-md border border-surface-border bg-surface-muted p-2">
+            <input
+              value={newClientName}
+              onChange={(e) => setNewClientName(e.target.value)}
+              className="input"
+              placeholder="Nombre del nuevo cliente"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleAddClient();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void handleAddClient()}
+              className="btn-primary shrink-0 px-3 text-xs"
+            >
+              Agregar
+            </button>
+          </div>
+        )}
+
+        {/* Ejecución de la obra */}
+        <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <legend className="px-1 text-xs font-medium text-ink-secondary">Ejecución de la obra</legend>
+          <div className="flex flex-wrap gap-4 py-1 text-xs">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="executionType"
+                checked={executionType === 'OWN'}
+                onChange={() => setExecutionType('OWN')}
+              />
+              Propia (<strong>CREACOM</strong>)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="executionType"
+                checked={executionType === 'SUBCONTRACTED'}
+                onChange={() => setExecutionType('SUBCONTRACTED')}
+              />
+              Subcontratada
+            </label>
+          </div>
+
+          {executionType === 'SUBCONTRACTED' && (
+            <div className="mt-1">
+              <Field label="Subcontratista">
+                <div className="flex gap-1">
+                  <select
+                    value={subcontractorId}
+                    onChange={(e) => setSubcontractorId(e.target.value)}
+                    className="input"
+                  >
+                    <option value="">— Selecciona un subcontratista —</option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setAddingSub((v) => !v)}
+                    className="btn-secondary shrink-0 px-2 text-xs"
+                    title="Agregar subcontratista"
+                  >
+                    + Nuevo
+                  </button>
+                </div>
+              </Field>
+              {addingSub && (
+                <div className="mt-2 flex gap-2 rounded-md border border-surface-border bg-surface p-2">
+                  <input
+                    value={newSubName}
+                    onChange={(e) => setNewSubName(e.target.value)}
+                    className="input"
+                    placeholder="Nombre del subcontratista"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleAddSubcontractor();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleAddSubcontractor()}
+                    className="btn-primary shrink-0 px-3 text-xs"
+                  >
+                    Agregar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </fieldset>
 
         <Field label="Nombre del proyecto" required>
           <input

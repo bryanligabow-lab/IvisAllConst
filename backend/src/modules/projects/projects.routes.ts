@@ -31,6 +31,11 @@ projectsRouter.get(
   asyncHandler(ProjectsController.globalStats),
 );
 projectsRouter.get(
+  '/subcontractors',
+  requirePermission(PERMISSIONS.PROVIDERS_READ),
+  asyncHandler(ProjectsController.subcontractors),
+);
+projectsRouter.get(
   '/report/export',
   requirePermission(PERMISSIONS.PROJECTS_READ),
   asyncHandler(async (_req, res) => {
