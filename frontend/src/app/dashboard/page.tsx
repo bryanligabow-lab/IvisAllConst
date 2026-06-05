@@ -285,6 +285,8 @@ function ProjectMiniCard({
 }) {
   const pctBudget = Math.round(project.progressBudget * 100);
   const isOver = project.budgeted > 0 && project.spent > project.budgeted;
+  // Saldo = lo contratado menos lo ejecutado (lo que queda).
+  const saldo = project.contractAmount - project.spent;
 
   return (
     <div className="group relative rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
@@ -344,14 +346,20 @@ function ProjectMiniCard({
         </div>
 
         {!hideMoney && (
-          <div className="mt-2 flex items-end justify-between text-[11px]">
-            <div>
-              <span className="text-ink-tertiary">Contratado</span>{' '}
+          <div className="mt-2 space-y-0.5 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-ink-tertiary">Contratado</span>
               <span className="font-medium">{formatCurrency(project.contractAmount)}</span>
             </div>
-            <div className="text-right">
-              <span className="text-ink-tertiary">Ejecutado</span>{' '}
+            <div className="flex items-center justify-between">
+              <span className="text-ink-tertiary">Ejecutado</span>
               <span className="font-medium">{formatCurrency(project.spent)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-ink-tertiary">Saldo</span>
+              <span className={`font-medium ${saldo < 0 ? 'text-danger' : 'text-success'}`}>
+                {formatCurrency(saldo)}
+              </span>
             </div>
           </div>
         )}
