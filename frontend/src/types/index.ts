@@ -145,6 +145,8 @@ export type PaymentOrderStatus = 'PENDING' | 'PAID' | 'CANCELLED';
 export type PaymentMethodValue =
   | 'CASH'
   | 'TRANSFER'
+  | 'BANCO_GUAYAQUIL'
+  | 'BANCO_PICHINCHA'
   | 'CHECK'
   | 'CREDIT_CARD'
   | 'DEBIT_CARD'

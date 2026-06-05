@@ -70,7 +70,7 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar pago">
+    <Modal open={open} onClose={onClose} title="Aprobar y registrar pago">
       <div className="space-y-4">
         <div className="rounded-md bg-surface-muted px-3 py-2 text-xs">
           <div className="font-medium text-ink-primary">{order.description}</div>
@@ -109,7 +109,7 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
           </div>
         )}
 
-        <Field label="Método de pago">
+        <Field label="Método de pago / banco">
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value as PaymentMethodValue | '')}
@@ -124,6 +124,15 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
           </select>
         </Field>
 
+        <Field label="¿Cómo o quién pagó? (opcional)" hint="Ej. pagó Bryan por transferencia, cheque #123…">
+          <input
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            className="input"
+            placeholder="Detalle del pago"
+          />
+        </Field>
+
         {mode === 'CHOICE' && (
           <>
             <p className="text-sm">¿Cómo quieres registrar el pago?</p>
@@ -131,7 +140,7 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => pay({ mode: 'TOTAL' })}
+                onClick={() => pay({ mode: 'TOTAL', reference: reference || undefined })}
                 className="group rounded-lg border-2 border-success bg-success-soft px-4 py-5 text-left transition-all hover:shadow-md disabled:opacity-50"
               >
                 <div className="text-2xl">💰</div>
@@ -171,14 +180,6 @@ export function PaymentDialog({ open, onClose, order, onPaid }: Props) {
                 autoFocus
                 className="input text-lg"
                 placeholder={`Hasta ${pending.toFixed(2)}`}
-              />
-            </Field>
-            <Field label="Referencia (opcional)">
-              <input
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                className="input"
-                placeholder="Anticipo 1, Abono semana 2…"
               />
             </Field>
 

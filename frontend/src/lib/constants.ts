@@ -35,6 +35,8 @@ export const RUBRO_STATUS_LABEL = {
 export const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Efectivo', icon: '💵' },
   { value: 'TRANSFER', label: 'Transferencia bancaria', icon: '🏦' },
+  { value: 'BANCO_GUAYAQUIL', label: 'Banco Guayaquil', icon: '🏦' },
+  { value: 'BANCO_PICHINCHA', label: 'Banco Pichincha', icon: '🏦' },
   { value: 'CHECK', label: 'Cheque', icon: '📄' },
   { value: 'CREDIT_CARD', label: 'Tarjeta de crédito', icon: '💳' },
   { value: 'DEBIT_CARD', label: 'Tarjeta de débito', icon: '💳' },
@@ -46,6 +48,8 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number]['value'];
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: 'Efectivo',
   TRANSFER: 'Transferencia',
+  BANCO_GUAYAQUIL: 'Banco Guayaquil',
+  BANCO_PICHINCHA: 'Banco Pichincha',
   CHECK: 'Cheque',
   CREDIT_CARD: 'Tarjeta de crédito',
   DEBIT_CARD: 'Tarjeta de débito',

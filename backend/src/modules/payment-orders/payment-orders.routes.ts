@@ -20,6 +20,8 @@ import { calendarDateSchema } from '../../shared/utils/date.util';
 export const PAYMENT_METHODS = [
   'CASH',
   'TRANSFER',
+  'BANCO_GUAYAQUIL',
+  'BANCO_PICHINCHA',
   'CHECK',
   'CREDIT_CARD',
   'DEBIT_CARD',

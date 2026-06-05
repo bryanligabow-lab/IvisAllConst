@@ -47,6 +47,8 @@ export default function OrdenesPage() {
   const [showPayroll, setShowPayroll] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [payingOrder, setPayingOrder] = useState<PaymentOrder | null>(null);
+  // Pestañas para el flujo: cargar órdenes vs aprobarlas (solo quien aprueba).
+  const [tab, setTab] = useState<'CARGAR' | 'APROBAR'>('CARGAR');
 
   function handleTypeChosen(type: PaymentType) {
     setShowTypePicker(false);
@@ -138,6 +140,7 @@ export default function OrdenesPage() {
         }}
       />
 
+      {/* Operador: solo carga, sin listas ni aprobación */}
       {!canApprove && (
         <div className="card text-sm text-ink-secondary">
           Carga aquí las órdenes de pago (facturas) del proyecto. Quedan en estado{' '}
@@ -145,49 +148,109 @@ export default function OrdenesPage() {
         </div>
       )}
 
-      {canApprove && isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
-
       {canApprove && (
         <>
-      <section className="mb-6">
-        <h2 className="mb-2 text-sm font-medium">Pendientes ({pending.length})</h2>
-        {pending.length === 0 ? (
-          <div className="card text-sm text-ink-secondary">No hay órdenes pendientes.</div>
-        ) : (
-          <div className="space-y-3">
-            {pending.map((o) => (
-              <OrderCard
-                key={o.id}
-                order={o}
-                statusLabel={STATUS_LABEL[o.status]}
-                statusClass={STATUS_CLASS[o.status]}
-                onPay={() => setPayingOrder(o)}
-                onDelete={() => setPendingDelete(o)}
-              />
-            ))}
+          {/* Pestañas Cargar / Aprobar */}
+          <div className="mb-5 flex gap-0 border-b border-surface-border">
+            <button
+              onClick={() => setTab('CARGAR')}
+              className={`tab ${tab === 'CARGAR' ? 'tab-active' : ''}`}
+            >
+              Cargar
+            </button>
+            <button
+              onClick={() => setTab('APROBAR')}
+              className={`tab ${tab === 'APROBAR' ? 'tab-active' : ''}`}
+            >
+              Aprobar ({pending.length})
+            </button>
           </div>
-        )}
-      </section>
 
-      <section>
-        <h2 className="mb-2 text-sm font-medium">Pagadas ({paid.length})</h2>
-        {paid.length === 0 ? (
-          <div className="card text-sm text-ink-secondary">Todavía no hay órdenes pagadas.</div>
-        ) : (
-          <div className="space-y-3">
-            {paid.map((o) => (
-              <OrderCard
-                key={o.id}
-                order={o}
-                statusLabel={STATUS_LABEL[o.status]}
-                statusClass={STATUS_CLASS[o.status]}
-                onPay={() => setPayingOrder(o)}
-                onDelete={() => setPendingDelete(o)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+          {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
+
+          {tab === 'CARGAR' && (
+            <section>
+              <div className="card mb-4 text-sm text-ink-secondary">
+                Carga las facturas como órdenes de pago con <strong>+ Nueva orden de pago</strong>.
+                Quedan <strong>pendientes</strong> y luego se aprueban en la pestaña{' '}
+                <strong>Aprobar</strong> — ahí se registra el gasto automáticamente.
+              </div>
+              <h2 className="mb-2 text-sm font-medium">
+                Órdenes cargadas — pendientes ({pending.length})
+              </h2>
+              {pending.length === 0 ? (
+                <div className="card text-sm text-ink-secondary">
+                  No hay órdenes cargadas todavía.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pending.map((o) => (
+                    <OrderCard
+                      key={o.id}
+                      order={o}
+                      statusLabel={STATUS_LABEL[o.status]}
+                      statusClass={STATUS_CLASS[o.status]}
+                      canPay={false}
+                      onPay={() => setPayingOrder(o)}
+                      onDelete={() => setPendingDelete(o)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {tab === 'APROBAR' && (
+            <>
+              <section className="mb-6">
+                <h2 className="mb-2 text-sm font-medium">
+                  Pendientes de aprobar ({pending.length})
+                </h2>
+                {pending.length === 0 ? (
+                  <div className="card text-sm text-ink-secondary">
+                    No hay órdenes pendientes de aprobar.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pending.map((o) => (
+                      <OrderCard
+                        key={o.id}
+                        order={o}
+                        statusLabel={STATUS_LABEL[o.status]}
+                        statusClass={STATUS_CLASS[o.status]}
+                        canPay
+                        onPay={() => setPayingOrder(o)}
+                        onDelete={() => setPendingDelete(o)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h2 className="mb-2 text-sm font-medium">Aprobadas / pagadas ({paid.length})</h2>
+                {paid.length === 0 ? (
+                  <div className="card text-sm text-ink-secondary">
+                    Todavía no hay órdenes aprobadas.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paid.map((o) => (
+                      <OrderCard
+                        key={o.id}
+                        order={o}
+                        statusLabel={STATUS_LABEL[o.status]}
+                        statusClass={STATUS_CLASS[o.status]}
+                        canPay={false}
+                        onPay={() => setPayingOrder(o)}
+                        onDelete={() => setPendingDelete(o)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
         </>
       )}
     </AppShell>
@@ -200,9 +263,10 @@ interface CardProps {
   statusClass: string;
   onPay: () => void;
   onDelete: () => void;
+  canPay?: boolean;
 }
 
-function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardProps) {
+function OrderCard({ order, statusLabel, statusClass, onPay, onDelete, canPay = true }: CardProps) {
   const total = Number(order.amount);
   const paid = Number(order.paidAmount ?? 0);
   const pending = Number(order.pendingAmount ?? Math.max(0, total - paid));
@@ -302,9 +366,9 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete }: CardPro
       )}
 
       <footer className="mt-4 flex flex-wrap justify-end gap-2">
-        {isPending && (
+        {isPending && canPay && (
           <button onClick={onPay} className="btn-success">
-            {hasPartial ? '💰 Pagar saldo' : '💰 Marcar como pagado'}
+            {hasPartial ? '💰 Pagar saldo' : '✓ Aprobar y pagar'}
           </button>
         )}
         <button
