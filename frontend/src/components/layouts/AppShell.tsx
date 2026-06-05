@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { apiPost, setAccessToken } from '@/lib/api';
 import { ROUTES } from '@/lib/constants';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { SessionExpiryWatcher } from '@/components/ui/SessionExpiryWatcher';
 
 interface NavLink {
   href: string;
@@ -196,6 +197,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <main className="mx-auto max-w-7xl px-4 py-6 animate-fade-in sm:px-6 sm:py-8">{children}</main>
+
+      <SessionExpiryWatcher onLogout={handleLogout} />
     </div>
   );
 }

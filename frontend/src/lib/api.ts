@@ -96,6 +96,25 @@ export async function apiFetchBlob(path: string, retried = false): Promise<Blob>
   return res.blob();
 }
 
+// Momento (ms epoch) en que expira el access token actual, leído del JWT.
+export function getSessionExpiry(): number | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1] ?? ''));
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// Renueva la sesión (nuevo access token) usando el refresh cookie.
+// Devuelve true si se pudo ampliar.
+export async function refreshSession(): Promise<boolean> {
+  const token = await tryRefresh();
+  return !!token;
+}
+
 export const apiGet = <T>(path: string) => apiFetch<T>(path);
 export const apiPost = <T>(path: string, data: unknown) =>
   apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data) });

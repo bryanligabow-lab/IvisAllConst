@@ -12,10 +12,15 @@ import { ERRORS, SUCCESS } from '../../shared/constants/error-messages';
 import type { ISessionContext } from '../../shared/interfaces/auth.interface';
 
 function setRefreshCookie(res: Response, token: string, maxAgeSec: number): void {
+  const isProd = env.NODE_ENV === 'production';
   res.cookie(REFRESH_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    // En producción el frontend y el backend están en dominios distintos
+    // (cross-site), por lo que la cookie debe ser SameSite=None + Secure para
+    // que el navegador la envíe en la renovación (/auth/refresh). Si no, la
+    // sesión "se cae" a los 15 min porque el refresh no recibe la cookie.
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: maxAgeSec * 1000,
     path: REFRESH_COOKIE_PATH,
   });
