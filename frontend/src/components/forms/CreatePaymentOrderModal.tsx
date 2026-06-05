@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { apiPost, ApiClientError } from '@/lib/api';
 import type { RubroSummary } from '@/types';
 
@@ -131,18 +132,15 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             {lines.map((line, idx) => (
               <div key={idx} className="flex items-end gap-2">
                 <div className="min-w-0 flex-1">
-                  <select
+                  <SearchableSelect
                     value={line.rubroId}
-                    onChange={(e) => updateLine(idx, { rubroId: e.target.value })}
-                    className="input"
-                  >
-                    <option value="">— Selecciona un rubro —</option>
-                    {rubros.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.code}. {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => updateLine(idx, { rubroId: v })}
+                    placeholder="— Selecciona o escribe un rubro —"
+                    options={rubros.map((r) => ({
+                      value: r.id,
+                      label: `${r.code}. ${r.name}`,
+                    }))}
+                  />
                 </div>
                 <div className="w-28">
                   <input

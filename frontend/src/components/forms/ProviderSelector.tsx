@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Field } from '@/components/ui/Modal';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { CreateProviderModal } from '@/components/forms/CreateProviderModal';
 import { apiGet } from '@/lib/api';
 import type { Provider } from '@/types';
@@ -21,22 +22,19 @@ export function ProviderSelector({ value, onChange, label = 'Proveedor', require
   return (
     <Field label={label} required={required}>
       <div className="flex gap-2">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          className="input flex-1"
-        >
-          <option value="">
-            {required ? '— Selecciona un proveedor —' : '— Sin proveedor —'}
-          </option>
-          {providers?.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.service ? ` · ${p.service}` : ''}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-0 flex-1">
+          <SearchableSelect
+            value={value}
+            onChange={onChange}
+            placeholder={
+              required ? '— Selecciona o escribe un proveedor —' : '— Sin proveedor —'
+            }
+            options={(providers ?? []).map((p) => ({
+              value: p.id,
+              label: `${p.name}${p.service ? ` · ${p.service}` : ''}`,
+            }))}
+          />
+        </div>
         <button
           type="button"
           onClick={() => setShowCreate(true)}
