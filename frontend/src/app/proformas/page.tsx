@@ -86,7 +86,7 @@ export default function ProformasPage() {
 
       {data && data.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="table-default">
+          <table className="table-default table-cards">
             <thead>
               <tr>
                 <th>N°</th>
@@ -102,20 +102,20 @@ export default function ProformasPage() {
             <tbody>
               {data.map((p) => (
                 <tr key={p.id}>
-                  <td className="font-medium">{p.number}</td>
-                  <td className="text-xs">{formatCalendarDate(p.date)}</td>
-                  <td>
+                  <td data-label="N°" className="font-medium">{p.number}</td>
+                  <td data-label="Fecha" className="text-xs">{formatCalendarDate(p.date)}</td>
+                  <td data-label="Cliente">
                     <Link href={`/proformas/${p.id}`} className="font-medium text-brand hover:underline">
                       {p.clientName}
                     </Link>
                   </td>
-                  <td className="text-xs">{p.projectLabel || '—'}</td>
-                  <td>
+                  <td data-label="Proyecto" className="text-xs">{p.projectLabel || '—'}</td>
+                  <td data-label="Estado">
                     <span className={STATUS_CLASS[p.status]}>{STATUS_LABEL[p.status]}</span>
                   </td>
-                  <td className="text-right text-xs">{p.items.length}</td>
-                  <td className="text-right font-semibold">{formatCurrency(p.total, true)}</td>
-                  <td>
+                  <td data-label="Ítems" className="text-right text-xs">{p.items.length}</td>
+                  <td data-label="Total" className="text-right font-semibold">{formatCurrency(p.total, true)}</td>
+                  <td data-label="" className="cell-actions">
                     <div className="flex justify-end gap-1">
                       <Link
                         href={`/proformas/${p.id}`}

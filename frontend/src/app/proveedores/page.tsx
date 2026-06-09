@@ -78,7 +78,7 @@ export default function ProvidersPage() {
 
       {providers && providers.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="table-default">
+          <table className="table-default table-cards">
             <thead>
               <tr>
                 <th>Proveedor</th>
@@ -93,7 +93,7 @@ export default function ProvidersPage() {
             <tbody>
               {providers.map((p) => (
                 <tr key={p.id}>
-                  <td>
+                  <td data-label="Proveedor">
                     <Link
                       href={`/proveedores/${p.id}`}
                       className="font-medium text-brand hover:underline"
@@ -101,20 +101,20 @@ export default function ProvidersPage() {
                       {p.name}
                     </Link>
                   </td>
-                  <td className="text-xs">{p.ruc || '—'}</td>
-                  <td className="text-xs">{p.service || '—'}</td>
-                  <td className={`text-right ${Number(p.totalDebt) > 0 ? 'text-danger font-medium' : 'text-ink-secondary'}`}>
+                  <td data-label="RUC" className="text-xs">{p.ruc || '—'}</td>
+                  <td data-label="Servicio" className="text-xs">{p.service || '—'}</td>
+                  <td data-label="Deuda total" className={`text-right ${Number(p.totalDebt) > 0 ? 'text-danger font-medium' : 'text-ink-secondary'}`}>
                     {formatCurrency(Number(p.totalDebt ?? 0))}
                   </td>
-                  <td className="text-right">{formatCurrency(Number(p.totalSpent ?? 0))}</td>
-                  <td>
+                  <td data-label="Total gastado" className="text-right">{formatCurrency(Number(p.totalSpent ?? 0))}</td>
+                  <td data-label="Proyectos con deuda">
                     {Number(p.projectsWithDebtCount ?? 0) > 0 ? (
                       <span className="badge-warn">{p.projectsWithDebtCount} proyecto(s)</span>
                     ) : (
                       <span className="text-ink-tertiary text-xs">—</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="" className="cell-actions">
                     <div className="flex justify-end gap-1">
                       <button
                         onClick={() => setEditing(p)}

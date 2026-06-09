@@ -154,7 +154,7 @@ export default function NominaPage() {
 
       {data && data.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="table-default">
+          <table className="table-default table-cards">
             <thead>
               <tr>
                 <th>Empleado</th>
@@ -170,24 +170,24 @@ export default function NominaPage() {
             <tbody>
               {data.map((e) => (
                 <tr key={e.id}>
-                  <td>
+                  <td data-label="Empleado">
                     <div className="font-medium">{e.fullName}</div>
                     {e.email && <div className="text-xs text-ink-secondary">{e.email}</div>}
                   </td>
-                  <td className="text-xs">{e.cedula || '—'}</td>
-                  <td className="text-xs">{e.position || '—'}</td>
-                  <td className="text-xs">{e.project?.name || '—'}</td>
-                  {canPayroll && <td className="text-right">{formatCurrency(e.monthlySalary)}</td>}
+                  <td data-label="Cédula" className="text-xs">{e.cedula || '—'}</td>
+                  <td data-label="Cargo" className="text-xs">{e.position || '—'}</td>
+                  <td data-label="Proyecto" className="text-xs">{e.project?.name || '—'}</td>
+                  {canPayroll && <td data-label="Salario mensual" className="text-right">{formatCurrency(e.monthlySalary)}</td>}
                   {canPayroll && (
-                    <td className="text-right">{formatCurrency(Number(e.totalPaid ?? 0))}</td>
+                    <td data-label="Pagado histórico" className="text-right">{formatCurrency(Number(e.totalPaid ?? 0))}</td>
                   )}
-                  <td>
+                  <td data-label="Estado">
                     <span className={e.status === 'ACTIVE' ? 'badge-ok' : 'badge-muted'}>
                       {e.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                     </span>
                   </td>
                   {canEmployeesWrite && (
-                    <td>
+                    <td data-label="" className="cell-actions">
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => setEditing(e)}
@@ -262,7 +262,7 @@ function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="table-default">
+        <table className="table-default table-cards">
           <thead>
             <tr>
               <th>Fecha</th>
@@ -277,13 +277,13 @@ function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
           <tbody>
             {history.payments.map((p) => (
               <tr key={p.id}>
-                <td className="text-xs">{formatCalendarDate(p.gastoDate)}</td>
-                <td className="font-medium">{p.employee?.fullName ?? '—'}</td>
-                <td className="text-xs">{p.employee?.position ?? '—'}</td>
-                <td className="text-xs">{p.project.name}</td>
-                <td className="text-xs">{p.rubro.code}. {p.rubro.name}</td>
-                <td className="text-xs">{p.description}</td>
-                <td className="text-right font-semibold">{formatCurrency(Number(p.amount), true)}</td>
+                <td data-label="Fecha" className="text-xs">{formatCalendarDate(p.gastoDate)}</td>
+                <td data-label="Empleado" className="font-medium">{p.employee?.fullName ?? '—'}</td>
+                <td data-label="Cargo" className="text-xs">{p.employee?.position ?? '—'}</td>
+                <td data-label="Proyecto" className="text-xs">{p.project.name}</td>
+                <td data-label="Rubro" className="text-xs">{p.rubro.code}. {p.rubro.name}</td>
+                <td data-label="Descripción" className="text-xs">{p.description}</td>
+                <td data-label="Monto" className="text-right font-semibold">{formatCurrency(Number(p.amount), true)}</td>
               </tr>
             ))}
           </tbody>

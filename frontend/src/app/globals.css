@@ -381,3 +381,81 @@ html.dark .shadow-premium {
 html.dark button.hover\:bg-surface-muted:hover {
   background-color: rgba(60, 60, 70, 0.4) !important;
 }
+
+/* =================================================
+   RESPONSIVE — celular / tablet (ADITIVO)
+   El diseño de escritorio (>=640px) queda intacto.
+   ================================================= */
+
+/* Evitar scroll horizontal de TODA la página por desbordes puntuales.
+   Las tablas anchas siguen con su propio scroll en .overflow-x-auto. */
+@media (max-width: 639px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Tablas que se transforman en tarjetas apiladas en celular.
+     Uso: <table class="table-default table-cards"> y en cada celda de
+     datos <td data-label="Nombre de columna">…</td>. En >=640px vuelve a
+     comportarse como tabla normal sin cambios. */
+  table.table-cards {
+    min-width: 0;
+  }
+  table.table-cards thead {
+    display: none;
+  }
+  table.table-cards tbody,
+  table.table-cards tr,
+  table.table-cards td {
+    display: block;
+    width: 100%;
+  }
+  table.table-cards tr {
+    @apply rounded-lg border border-surface-border bg-surface;
+    margin-bottom: 0.625rem;
+    padding: 0.25rem 0.875rem;
+  }
+  table.table-cards tr:hover {
+    background: transparent;
+  }
+  table.table-cards td {
+    @apply border-b border-surface-border/60;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0;
+    text-align: right;
+  }
+  table.table-cards tr td:last-child {
+    border-bottom: 0;
+  }
+  table.table-cards td::before {
+    content: attr(data-label);
+    @apply text-xs font-medium uppercase tracking-wide text-ink-secondary;
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  /* Celdas sin etiqueta (acciones) ocupan toda la fila, centradas */
+  table.table-cards td[data-label='']::before,
+  table.table-cards td:not([data-label])::before {
+    content: '';
+  }
+  table.table-cards td.cell-actions {
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  /* Áreas táctiles cómodas (~44px) en celular sin afectar escritorio */
+  .btn {
+    @apply min-h-[44px];
+  }
+  .tab {
+    @apply py-3;
+  }
+}
+
+html.dark table.table-cards tr {
+  background-color: #1A1A1F;
+  border-color: #2A2A30;
+}

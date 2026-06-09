@@ -31,21 +31,21 @@ export function Modal({ open, onClose, title, children, width = 'md' }: ModalPro
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 px-4 py-8"
+      className="fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-black/40 p-0 sm:items-start sm:px-4 sm:py-8"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className={`relative w-full ${maxW} rounded-lg border border-surface-border bg-surface shadow-xl`}
+        className={`relative flex min-h-full w-full flex-col border-surface-border bg-surface shadow-xl sm:min-h-0 sm:rounded-lg sm:border ${maxW}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-surface-border px-5 py-3">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface px-5 py-3 sm:rounded-t-lg">
           <h2 className="text-sm font-medium">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="text-ink-secondary transition-colors hover:text-ink-primary"
+            className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-muted hover:text-ink-primary"
             aria-label="Cerrar"
           >
             ✕

@@ -87,7 +87,7 @@ export default function DirectorioPage() {
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="table-cards w-full min-w-[640px] text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -127,11 +127,11 @@ export default function DirectorioPage() {
               )}
               {users?.map((u) => (
                 <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-2 font-medium text-slate-900 dark:text-slate-100">
+                  <td data-label="Nombre" className="px-4 py-2 font-medium text-slate-900 dark:text-slate-100">
                     {u.firstName} {u.lastName}
                   </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">{u.email}</td>
-                  <td className="px-4 py-2">
+                  <td data-label="Correo" className="px-4 py-2 text-slate-600 dark:text-slate-400">{u.email}</td>
+                  <td data-label="Roles" className="px-4 py-2">
                     <div className="flex flex-wrap gap-1">
                       {u.roles.length === 0 && <span className="text-xs text-slate-400">—</span>}
                       {u.roles.map((r, i) => (
@@ -144,7 +144,7 @@ export default function DirectorioPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-2">
+                  <td data-label="Estado" className="px-4 py-2">
                     {u.isActive ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                         ● Activo
@@ -155,10 +155,10 @@ export default function DirectorioPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-slate-500 dark:text-slate-400">
+                  <td data-label="Último ingreso" className="px-4 py-2 text-slate-500 dark:text-slate-400">
                     {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('es-EC') : '—'}
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td data-label="" className="cell-actions px-4 py-2 text-right">
                     <div className="flex flex-wrap justify-end gap-2">
                       <button
                         onClick={() => setEditing(u)}

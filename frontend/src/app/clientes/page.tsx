@@ -72,7 +72,7 @@ export default function ClientesPage() {
 
       {data && data.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="table-default">
+          <table className="table-default table-cards">
             <thead>
               <tr>
                 <th>Cliente</th>
@@ -88,14 +88,14 @@ export default function ClientesPage() {
             <tbody>
               {data.map((c) => (
                 <tr key={c.id}>
-                  <td className="font-medium">{c.name}</td>
-                  <td className="text-xs">{c.ruc || '—'}</td>
-                  <td className="text-xs">{c.responsible || '—'}</td>
-                  <td className="text-xs">{c.email || '—'}</td>
-                  <td className="text-xs">{c.phone || '—'}</td>
-                  <td className="text-right text-xs">{c.proformasCount ?? 0}</td>
-                  <td className="text-right">{formatCurrency(Number(c.proformasTotal ?? 0))}</td>
-                  <td>
+                  <td data-label="Cliente" className="font-medium">{c.name}</td>
+                  <td data-label="RUC" className="text-xs">{c.ruc || '—'}</td>
+                  <td data-label="Responsable" className="text-xs">{c.responsible || '—'}</td>
+                  <td data-label="Email" className="text-xs">{c.email || '—'}</td>
+                  <td data-label="Teléfono" className="text-xs">{c.phone || '—'}</td>
+                  <td data-label="Proformas" className="text-right text-xs">{c.proformasCount ?? 0}</td>
+                  <td data-label="Monto cotizado" className="text-right">{formatCurrency(Number(c.proformasTotal ?? 0))}</td>
+                  <td data-label="" className="cell-actions">
                     <div className="flex justify-end gap-1">
                       <button
                         onClick={() => setEditing(c)}
