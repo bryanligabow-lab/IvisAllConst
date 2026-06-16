@@ -45,12 +45,17 @@ export class AuthController {
       await AuthService.login(req.body, getCtx(req));
 
     setRefreshCookie(res, refreshToken, refreshExpiresInSec);
-    return success(res, { accessToken, expiresIn: accessExpiresInSec, userId });
+    // Devolvemos también el refreshToken en el body: entre subdominios distintos
+    // de Railway la cookie es third-party y el navegador la bloquea, así que el
+    // frontend lo guarda y lo manda en /auth/refresh (la cookie queda de respaldo).
+    return success(res, { accessToken, refreshToken, expiresIn: accessExpiresInSec, userId });
   }
 
   static async refresh(req: Request, res: Response): Promise<Response> {
+    // Preferimos el token enviado en el body (camino confiable cross-domain);
+    // si no viene, caemos a la cookie de respaldo.
     const refreshToken: string | undefined =
-      req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
+      req.body?.refreshToken || req.cookies?.[REFRESH_COOKIE_NAME];
     if (!refreshToken) throw new UnauthorizedError(ERRORS.REFRESH_TOKEN_MISSING);
 
     const tokens = await AuthService.refresh(refreshToken, getCtx(req));
@@ -58,6 +63,7 @@ export class AuthController {
 
     return success(res, {
       accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       expiresIn: tokens.accessExpiresInSec,
     });
   }

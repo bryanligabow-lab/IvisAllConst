@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
-import { apiPost, setAccessToken } from '@/lib/api';
+import { apiPost, clearSession } from '@/lib/api';
 import { ROUTES } from '@/lib/constants';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { SessionExpiryWatcher } from '@/components/ui/SessionExpiryWatcher';
@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     } catch {
       /* ignorar */
     }
-    setAccessToken(null);
+    clearSession();
     setUser(null);
     router.replace(ROUTES.LOGIN);
   };

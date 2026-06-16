@@ -30,16 +30,44 @@ export function setAccessToken(token: string | null): void {
   else sessionStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
 }
 
+function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+}
+
+export function setRefreshToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (token) sessionStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, token);
+  else sessionStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+}
+
+// Limpia ambos tokens (logout / sesión inválida).
+export function clearSession(): void {
+  setAccessToken(null);
+  setRefreshToken(null);
+}
+
 async function tryRefresh(): Promise<string | null> {
   try {
+    // Mandamos el refresh token en el body (la cookie es third-party entre los
+    // subdominios de Railway y el navegador la bloquea). La cookie queda como
+    // respaldo vía credentials:include.
+    const stored = getRefreshToken();
     const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(stored ? { refreshToken: stored } : {}),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as ApiResponse<{ accessToken: string }>;
+    const body = (await res.json()) as ApiResponse<{
+      accessToken: string;
+      refreshToken?: string;
+    }>;
     if (!body.success) return null;
     setAccessToken(body.data.accessToken);
+    // El backend rota el refresh token: guardamos el nuevo para el próximo refresh.
+    if (body.data.refreshToken) setRefreshToken(body.data.refreshToken);
     return body.data.accessToken;
   } catch {
     return null;

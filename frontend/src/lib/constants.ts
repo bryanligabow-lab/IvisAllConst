@@ -3,6 +3,7 @@ export const API_BASE_URL =
 
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'iac.access',
+  REFRESH_TOKEN: 'iac.refresh',
 } as const;
 
 export const ROUTES = {

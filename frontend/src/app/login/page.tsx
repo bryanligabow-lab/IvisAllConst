@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { apiPost, setAccessToken } from '@/lib/api';
+import { apiPost, setAccessToken, setRefreshToken } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { ROUTES } from '@/lib/constants';
 import {
@@ -14,6 +14,7 @@ import {
 
 interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   expiresIn: number;
   userId: string;
 }
@@ -77,6 +78,7 @@ export default function LoginPage() {
     try {
       const data = await apiPost<LoginResponse>('/auth/login', { email, password });
       setAccessToken(data.accessToken);
+      setRefreshToken(data.refreshToken);
       await loadMe();
       router.replace(ROUTES.DASHBOARD);
     } catch (err) {
