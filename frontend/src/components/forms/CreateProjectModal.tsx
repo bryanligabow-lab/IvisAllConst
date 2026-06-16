@@ -19,6 +19,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [clientId, setClientId] = useState('');
   const [executionType, setExecutionType] = useState<ExecutionType>('OWN');
   const [subcontractorId, setSubcontractorId] = useState('');
+  const [creacomProfitPercent, setCreacomProfitPercent] = useState('0');
   const [city, setCity] = useState('');
   // Catálogos para los desplegables.
   const [clients, setClients] = useState<Client[]>([]);
@@ -65,6 +66,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setClientId(initial.clientId ?? '');
       setExecutionType(initial.executionType ?? 'OWN');
       setSubcontractorId(initial.subcontractorId ?? '');
+      setCreacomProfitPercent(String(initial.creacomProfitPercent ?? 0));
       setCity(initial.city ?? '');
       setContractAmount(String(initial.contractAmount));
       setAdvancePercent(String(initial.advancePercent));
@@ -83,6 +85,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setClientId('');
       setExecutionType('OWN');
       setSubcontractorId('');
+      setCreacomProfitPercent('0');
       setCity('');
       setContractAmount('');
       setAdvancePercent('40');
@@ -147,6 +150,8 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
         clientId: clientId || null,
         executionType,
         subcontractorId: executionType === 'SUBCONTRACTED' ? subcontractorId || null : null,
+        creacomProfitPercent:
+          executionType === 'SUBCONTRACTED' ? Number(creacomProfitPercent) || 0 : 0,
         city: city || undefined,
         latitude: cityData?.lat,
         longitude: cityData?.lng,
@@ -312,6 +317,25 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
                   </button>
                 </div>
               )}
+
+              <div className="mt-2">
+                <Field
+                  label="% de ganancia de CREACOM"
+                  hint="Margen que gana CREACOM sobre la obra subcontratada."
+                >
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={creacomProfitPercent}
+                    onChange={(e) => setCreacomProfitPercent(e.target.value)}
+                    className="input"
+                    placeholder="0"
+                  />
+                </Field>
+              </div>
             </div>
           )}
         </fieldset>

@@ -23,6 +23,8 @@ export const createProjectSchema = z.object({
   executionType: executionTypeSchema.default('OWN').optional(),
   // Subcontratista (proveedor) cuando executionType = SUBCONTRACTED.
   subcontractorId: z.string().uuid().optional().nullable(),
+  // % de ganancia de CREACOM cuando la obra es subcontratada.
+  creacomProfitPercent: z.coerce.number().min(0).max(100).default(0).optional(),
   description: z.string().max(2000).optional(),
   city: z.string().max(120).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),

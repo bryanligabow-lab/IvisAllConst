@@ -11,7 +11,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { RUBRO_STATUS_LABEL } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
-import type { ProjectSummary, RubroStatus } from '@/types';
+import type { ProjectSummary, RubroStatus, RubroSummary } from '@/types';
 
 const STATUS_CLASS: Record<RubroStatus, string> = {
   ok: 'badge-ok',
@@ -36,7 +36,10 @@ export default function PresupuestoPage() {
   // El operador (residente) ve solo porcentajes de avance, sin montos.
   const percentOnly = isRestricted();
   const canEditRubros = can('rubros.write');
-  const [showCreate, setShowCreate] = useState(false);
+  const [rubroModal, setRubroModal] = useState<{ open: boolean; initial: RubroSummary | null }>({
+    open: false,
+    initial: null,
+  });
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   return (
@@ -71,7 +74,10 @@ export default function PresupuestoPage() {
               )}
             </div>
             {canEditRubros && (
-              <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
+              <button
+                onClick={() => setRubroModal({ open: true, initial: null })}
+                className="btn-primary whitespace-nowrap"
+              >
                 + Añadir rubro
               </button>
             )}
@@ -140,11 +146,12 @@ export default function PresupuestoPage() {
           </div>
 
           <CreateRubroModal
-            open={showCreate}
-            onClose={() => setShowCreate(false)}
+            open={rubroModal.open}
+            onClose={() => setRubroModal({ open: false, initial: null })}
             projectId={params.id}
             nextOrderIndex={data.rubros.length}
             projectVatPercent={data.project.vatPercent}
+            initial={rubroModal.initial}
             onCreated={() => mutate()}
           />
 
@@ -240,6 +247,14 @@ export default function PresupuestoPage() {
                     <tr key={r.id}>
                       <td className="font-medium">
                         {r.code}. {r.name}
+                        {r.subcontractorName && (
+                          <div className="mt-0.5 text-[10px] font-normal text-ink-tertiary">
+                            🔧 Subc: {r.subcontractorName}
+                            {r.subcontractAmount != null
+                              ? ` · ${formatCurrency(r.subcontractAmount)}`
+                              : ''}
+                          </div>
+                        )}
                       </td>
                       <td>{r.unit ?? '—'}</td>
                       <td>{r.quantity || '—'}</td>
@@ -274,14 +289,24 @@ export default function PresupuestoPage() {
                       </td>
                       <td>
                         {canEditRubros && (
-                          <button
-                            type="button"
-                            onClick={() => setPendingDelete({ id: r.id, name: r.name })}
-                            className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                            title="Eliminar rubro"
-                          >
-                            🗑️
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setRubroModal({ open: true, initial: r })}
+                              className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-brand-soft hover:text-brand"
+                              title="Editar rubro"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDelete({ id: r.id, name: r.name })}
+                              className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                              title="Eliminar rubro"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

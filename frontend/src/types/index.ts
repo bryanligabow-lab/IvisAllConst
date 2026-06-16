@@ -26,6 +26,7 @@ export interface Project {
   isWithholdingAgent?: boolean;
   vatRetentionPercent?: string | number;
   incomeRetentionPercent?: string | number;
+  creacomProfitPercent?: string | number;
   startDate: string | null;
   endDate: string | null;
   status: ProjectStatus;
@@ -46,6 +47,9 @@ export interface RubroSummary {
   balance: number;
   percentFree: number;
   status: RubroStatus;
+  subcontractorId?: string | null;
+  subcontractorName?: string | null;
+  subcontractAmount?: number | null;
 }
 
 export interface ProjectSummary {

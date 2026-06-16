@@ -212,6 +212,8 @@ model Project {
   isWithholdingAgent     Boolean @default(false) @map("is_withholding_agent")
   vatRetentionPercent    Float   @default(0) @map("vat_retention_percent")
   incomeRetentionPercent Float   @default(0) @map("income_retention_percent")
+  // % de ganancia de CREACOM cuando la obra es subcontratada.
+  creacomProfitPercent   Float   @default(0) @map("creacom_profit_percent")
   startDate        DateTime? @map("start_date")
   endDate          DateTime? @map("end_date")
   status           String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED
@@ -295,6 +297,10 @@ model Rubro {
   orderIndex     Int       @default(0) @map("order_index")
   parentId       String?   @map("parent_id")
   isGroup        Boolean   @default(false) @map("is_group")
+  // Subcontratación parcial: un rubro puede ejecutarlo un subcontratista (proveedor)
+  // con un valor a pagar que puede cambiar en el tiempo.
+  subcontractorId   String?  @map("subcontractor_id")
+  subcontractAmount Float?   @map("subcontract_amount")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   deletedAt      DateTime? @map("deleted_at")
@@ -302,6 +308,7 @@ model Rubro {
   project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent        Rubro?         @relation("RubroChildren", fields: [parentId], references: [id])
   children      Rubro[]        @relation("RubroChildren")
+  subcontractor Provider?      @relation("RubroSubcontractor", fields: [subcontractorId], references: [id])
   gastos             Gasto[]
   planillaItems      PlanillaItem[]
   paymentOrders      PaymentOrder[]
@@ -310,6 +317,7 @@ model Rubro {
   @@unique([projectId, code])
   @@index([projectId])
   @@index([parentId])
+  @@index([subcontractorId])
   @@map("rubros")
 }
 
@@ -463,6 +471,8 @@ model Provider {
   paymentOrders        PaymentOrder[]
   // Proyectos en los que actúa como subcontratista.
   subcontractedProjects Project[]     @relation("ProjectSubcontractor")
+  // Rubros (parciales) que ejecuta como subcontratista.
+  subcontractedRubros   Rubro[]       @relation("RubroSubcontractor")
 
   @@index([name])
   @@index([deletedAt])

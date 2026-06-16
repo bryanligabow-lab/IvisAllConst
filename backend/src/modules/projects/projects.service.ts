@@ -59,6 +59,7 @@ export class ProjectsService {
     const rubros = await prisma.rubro.findMany({
       where: { projectId: id, deletedAt: null },
       orderBy: { orderIndex: 'asc' },
+      include: { subcontractor: { select: { id: true, name: true } } },
     });
 
     const gastosByRubro = await prisma.gasto.groupBy({
@@ -94,6 +95,9 @@ export class ProjectsService {
         balance,
         percentFree,
         status,
+        subcontractorId: r.subcontractorId ?? null,
+        subcontractorName: r.subcontractor?.name ?? null,
+        subcontractAmount: r.subcontractAmount != null ? Number(r.subcontractAmount) : null,
       };
     });
 
@@ -171,6 +175,8 @@ export class ProjectsService {
         clientId: dto.clientId ?? null,
         executionType,
         subcontractorId: executionType === 'SUBCONTRACTED' ? (dto.subcontractorId ?? null) : null,
+        creacomProfitPercent:
+          executionType === 'SUBCONTRACTED' ? (dto.creacomProfitPercent ?? 0) : 0,
         description: dto.description ?? null,
         city: dto.city ?? null,
         latitude: dto.latitude ?? null,
@@ -345,8 +351,11 @@ export class ProjectsService {
   static async update(id: string, dto: UpdateProjectDto) {
     await this.getById(id);
     const data = { ...dto };
-    // Si la ejecución pasa a propia, se limpia el subcontratista.
-    if (data.executionType === 'OWN') data.subcontractorId = null;
+    // Si la ejecución pasa a propia, se limpia el subcontratista y la ganancia.
+    if (data.executionType === 'OWN') {
+      data.subcontractorId = null;
+      data.creacomProfitPercent = 0;
+    }
     return prisma.project.update({ where: { id }, data });
   }
 

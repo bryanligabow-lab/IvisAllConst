@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
-import { apiPost, ApiClientError } from '@/lib/api';
+import { ProviderSelector } from '@/components/forms/ProviderSelector';
+import { apiPatch, apiPost, ApiClientError } from '@/lib/api';
+import type { RubroSummary } from '@/types';
 
 interface Props {
   open: boolean;
@@ -11,6 +13,8 @@ interface Props {
   nextOrderIndex?: number;
   /** IVA % vigente del proyecto (15 por defecto). */
   projectVatPercent?: number;
+  /** Si viene → modo edición del rubro. */
+  initial?: RubroSummary | null;
   onCreated: () => void;
 }
 
@@ -20,8 +24,10 @@ export function CreateRubroModal({
   projectId,
   nextOrderIndex = 0,
   projectVatPercent = 15,
+  initial = null,
   onCreated,
 }: Props) {
+  const isEdit = !!initial;
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [unit, setUnit] = useState('');
@@ -31,8 +37,45 @@ export function CreateRubroModal({
   const [includesVat, setIncludesVat] = useState(false);
   const [budgetedAmount, setBudgetedAmount] = useState('');
   const [touchedBudget, setTouchedBudget] = useState(false);
+  // Subcontratación parcial (opcional).
+  const [subcontractorId, setSubcontractorId] = useState('');
+  const [subcontractAmount, setSubcontractAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Prefill al abrir según modo (crear vs editar).
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setCode(initial.code);
+      setName(initial.name);
+      setUnit(initial.unit ?? '');
+      setQuantity(initial.quantity ? String(initial.quantity) : '');
+      setUnitPrice(initial.unitPrice ? String(initial.unitPrice) : '');
+      setUtilityPercent(String(initial.utilityPercent ?? 0));
+      setIncludesVat(Boolean(initial.includesVat));
+      setBudgetedAmount(String(initial.budgetedAmount ?? ''));
+      // En edición respetamos el monto guardado (no recalcular automáticamente).
+      setTouchedBudget(true);
+      setSubcontractorId(initial.subcontractorId ?? '');
+      setSubcontractAmount(
+        initial.subcontractAmount != null ? String(initial.subcontractAmount) : '',
+      );
+    } else {
+      setCode('');
+      setName('');
+      setUnit('');
+      setQuantity('');
+      setUnitPrice('');
+      setUtilityPercent('0');
+      setIncludesVat(false);
+      setBudgetedAmount('');
+      setTouchedBudget(false);
+      setSubcontractorId('');
+      setSubcontractAmount('');
+    }
+    setError(null);
+  }, [open, initial]);
 
   // Derivados — se recalculan en cada render.
   const q = parseFloat(quantity);
@@ -41,9 +84,7 @@ export function CreateRubroModal({
   const subtotal = !Number.isNaN(q) && !Number.isNaN(p) ? q * p : 0;
   const utilityAmount = subtotal * ((Number.isFinite(u) ? u : 0) / 100);
   const baseConUtilidad = subtotal + utilityAmount;
-  const vatAmount = includesVat
-    ? baseConUtilidad * ((projectVatPercent || 0) / 100)
-    : 0;
+  const vatAmount = includesVat ? baseConUtilidad * ((projectVatPercent || 0) / 100) : 0;
   const computedTotal = baseConUtilidad + vatAmount;
 
   // Auto-llenar el monto presupuestado cuando cambian los componentes,
@@ -53,26 +94,12 @@ export function CreateRubroModal({
     if (computedTotal > 0) setBudgetedAmount(computedTotal.toFixed(2));
   }, [computedTotal, touchedBudget]);
 
-  function reset() {
-    setCode('');
-    setName('');
-    setUnit('');
-    setQuantity('');
-    setUnitPrice('');
-    setUtilityPercent('0');
-    setIncludesVat(false);
-    setBudgetedAmount('');
-    setTouchedBudget(false);
-    setError(null);
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost('/rubros', {
-        projectId,
+      const base = {
         code,
         name,
         unit: unit || undefined,
@@ -81,13 +108,18 @@ export function CreateRubroModal({
         utilityPercent: utilityPercent ? Number(utilityPercent) : 0,
         includesVat,
         budgetedAmount: Number(budgetedAmount),
-        orderIndex: nextOrderIndex,
-      });
-      reset();
+        subcontractorId: subcontractorId || null,
+        subcontractAmount: subcontractorId && subcontractAmount ? Number(subcontractAmount) : null,
+      };
+      if (isEdit && initial) {
+        await apiPatch(`/rubros/${initial.id}`, base);
+      } else {
+        await apiPost('/rubros', { projectId, ...base, orderIndex: nextOrderIndex });
+      }
       onCreated();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Error al crear el rubro');
+      setError(err instanceof ApiClientError ? err.message : 'Error al guardar el rubro');
     } finally {
       setSubmitting(false);
     }
@@ -97,7 +129,11 @@ export function CreateRubroModal({
     new Intl.NumberFormat('es-EC', { style: 'currency', currency: 'USD' }).format(n);
 
   return (
-    <Modal open={open} onClose={onClose} title="Añadir rubro al presupuesto">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? 'Editar rubro' : 'Añadir rubro al presupuesto'}
+    >
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Código" required>
@@ -136,6 +172,7 @@ export function CreateRubroModal({
           <Field label="Cantidad contratada">
             <input
               type="number"
+              inputMode="decimal"
               step="0.01"
               min="0"
               value={quantity}
@@ -147,6 +184,7 @@ export function CreateRubroModal({
           <Field label="Precio unitario">
             <input
               type="number"
+              inputMode="decimal"
               step="0.01"
               min="0"
               value={unitPrice}
@@ -165,6 +203,7 @@ export function CreateRubroModal({
             <Field label="Utilidad %" hint="Se suma al subtotal antes del IVA.">
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min="0"
                 max="100"
@@ -221,6 +260,7 @@ export function CreateRubroModal({
         <Field label="Monto presupuestado total" required>
           <input
             type="number"
+            inputMode="decimal"
             step="0.01"
             min="0"
             value={budgetedAmount}
@@ -237,6 +277,37 @@ export function CreateRubroModal({
           </p>
         </Field>
 
+        {/* Subcontratación parcial del rubro (opcional) */}
+        <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <legend className="px-1 text-xs font-medium text-ink-secondary">
+            Subcontratación del rubro (opcional)
+          </legend>
+          <ProviderSelector
+            label="Subcontratista de este rubro"
+            value={subcontractorId}
+            onChange={setSubcontractorId}
+          />
+          {subcontractorId && (
+            <div className="mt-2">
+              <Field
+                label="Valor a pagar al subcontratista"
+                hint="Lo que se le pagará por este rubro. Puedes actualizarlo cuando cambie."
+              >
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  value={subcontractAmount}
+                  onChange={(e) => setSubcontractAmount(e.target.value)}
+                  className="input"
+                  placeholder="0.00"
+                />
+              </Field>
+            </div>
+          )}
+        </fieldset>
+
         {error && (
           <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>
         )}
@@ -246,7 +317,7 @@ export function CreateRubroModal({
             Cancelar
           </button>
           <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">
-            {submitting ? 'Guardando…' : 'Añadir rubro'}
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Añadir rubro'}
           </button>
         </div>
       </form>

@@ -26,6 +26,9 @@ const createRubroSchema = z.object({
   orderIndex: z.coerce.number().int().nonnegative().default(0),
   parentId: z.string().uuid().optional(),
   isGroup: z.coerce.boolean().default(false),
+  // Subcontratación parcial del rubro (opcional).
+  subcontractorId: z.string().uuid().nullable().optional(),
+  subcontractAmount: z.coerce.number().nonnegative().nullable().optional(),
 });
 
 const updateRubroSchema = createRubroSchema.partial().omit({ projectId: true });
