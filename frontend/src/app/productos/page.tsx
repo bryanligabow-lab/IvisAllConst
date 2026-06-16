@@ -4,6 +4,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProductModal } from '@/components/forms/CreateProductModal';
+import { AuthImage } from '@/components/ui/AuthImage';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
@@ -70,6 +71,7 @@ export default function ProductosPage() {
           <table className="table-default table-cards">
             <thead>
               <tr>
+                <th>Img</th>
                 <th>Producto</th>
                 <th>Unidad</th>
                 <th>Descripción</th>
@@ -80,6 +82,17 @@ export default function ProductosPage() {
             <tbody>
               {data.map((p) => (
                 <tr key={p.id}>
+                  <td data-label="Img">
+                    {p.hasImage ? (
+                      <AuthImage
+                        path={`/products/${p.id}/image`}
+                        alt={p.name}
+                        className="h-10 w-10 rounded border border-surface-border object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs text-ink-tertiary">—</span>
+                    )}
+                  </td>
                   <td data-label="Producto" className="font-medium">{p.name}</td>
                   <td data-label="Unidad" className="text-xs">{p.unit}</td>
                   <td data-label="Descripción" className="max-w-md text-xs text-ink-secondary">

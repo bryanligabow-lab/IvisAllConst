@@ -658,6 +658,9 @@ model Product {
   unit        String    @default("U")
   description String
   unitPrice   Float     @default(0) @map("unit_price")
+  // Imagen opcional del producto (se copia al ítem de la proforma al elegirlo).
+  imageData   Bytes?    @map("image_data")
+  imageMime   String?   @map("image_mime")
   createdBy   String    @map("created_by")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")

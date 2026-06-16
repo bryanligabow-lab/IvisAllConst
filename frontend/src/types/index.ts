@@ -134,6 +134,8 @@ export interface Product {
   unit: string;
   description: string;
   unitPrice: number;
+  imageMime?: string | null;
+  hasImage?: boolean;
   createdAt?: string;
 }
 

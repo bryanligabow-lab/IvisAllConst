@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { apiGet, apiPost, ApiClientError } from '@/lib/api';
+import { apiFetchBlob, apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Product, Project } from '@/types';
 
@@ -48,6 +48,15 @@ function fileToBase64(file: File): Promise<{ dataUrl: string; dataBase64: string
     };
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -119,8 +128,9 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     setItems((curr) => curr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
-  // Elegir un producto guardado → llena unidad, descripción y precio del ítem.
-  function applyProduct(idx: number, productId: string) {
+  // Elegir un producto guardado → llena unidad, descripción y precio del ítem,
+  // y copia su imagen (si tiene) para que salga al lado del rubro.
+  async function applyProduct(idx: number, productId: string) {
     const prod = products?.find((p) => p.id === productId);
     if (!prod) return;
     updateItem(idx, {
@@ -128,6 +138,23 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
       description: prod.description,
       unitPrice: String(prod.unitPrice),
     });
+    if (prod.hasImage) {
+      try {
+        const blob = await apiFetchBlob(`/products/${prod.id}/image`);
+        const dataUrl = await blobToDataUrl(blob);
+        updateItem(idx, {
+          image: {
+            preview: dataUrl,
+            dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, ''),
+            mimeType: blob.type || prod.imageMime || 'image/png',
+            filename: prod.name,
+            caption: '',
+          },
+        });
+      } catch {
+        /* si falla la imagen, igual queda el ítem con sus datos */
+      }
+    }
   }
 
   // Guardar el ítem actual como producto reutilizable (solo cuando el usuario lo pide).
