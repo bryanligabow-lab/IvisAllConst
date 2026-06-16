@@ -43,6 +43,7 @@ model User {
   createdEmployees     Employee[]               @relation("EmployeeCreatedBy")
   createdProformas     Proforma[]               @relation("ProformaCreatedBy")
   createdClients       Client[]                 @relation("ClientCreatedBy")
+  createdProducts      Product[]                @relation("ProductCreatedBy")
   uploadedDocuments    ProjectDocument[]        @relation("DocUploadedBy")
   createdAttendance    Attendance[]             @relation("AttendanceCreatedBy")
   createdBitacora      BitacoraEntry[]          @relation("BitacoraCreatedBy")
@@ -646,6 +647,27 @@ model Client {
   @@index([name])
   @@index([deletedAt])
   @@map("clients")
+}
+
+// Catálogo de productos/servicios reutilizables para las proformas.
+// El usuario guarda SOLO los que se repiten; al armar una proforma elige el
+// producto (llena unidad/descripción/precio) y solo ajusta cantidad/precio.
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  unit        String    @default("U")
+  description String
+  unitPrice   Float     @default(0) @map("unit_price")
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  creator User @relation("ProductCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([name])
+  @@index([deletedAt])
+  @@map("products")
 }
 
 model ProformaImage {

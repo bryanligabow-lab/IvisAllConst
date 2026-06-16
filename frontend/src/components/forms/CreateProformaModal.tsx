@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import type { Project } from '@/types';
+import type { Product, Project } from '@/types';
 
 interface ImageItem {
   preview: string; // base64 data URL
@@ -77,6 +78,8 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
 
   const { data: clients, mutate: mutateClients } = useSWR<Client[]>('/clients', apiGet);
   const { data: projects } = useSWR<Project[]>('/projects', apiGet);
+  const { data: products, mutate: mutateProducts } = useSWR<Product[]>('/products', apiGet);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -114,6 +117,39 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
 
   function updateItem(idx: number, patch: Partial<Item>) {
     setItems((curr) => curr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+
+  // Elegir un producto guardado → llena unidad, descripción y precio del ítem.
+  function applyProduct(idx: number, productId: string) {
+    const prod = products?.find((p) => p.id === productId);
+    if (!prod) return;
+    updateItem(idx, {
+      unit: prod.unit,
+      description: prod.description,
+      unitPrice: String(prod.unitPrice),
+    });
+  }
+
+  // Guardar el ítem actual como producto reutilizable (solo cuando el usuario lo pide).
+  async function saveItemAsProduct(idx: number) {
+    const it = items[idx];
+    if (!it.description.trim()) {
+      setError('El ítem necesita una descripción para guardarlo como producto.');
+      return;
+    }
+    try {
+      await apiPost('/products', {
+        name: it.description.trim().slice(0, 200),
+        unit: it.unit || 'U',
+        description: it.description.trim(),
+        unitPrice: Number(it.unitPrice) || 0,
+      });
+      await mutateProducts();
+      setNotice('✓ Guardado en el catálogo de productos.');
+      setTimeout(() => setNotice(null), 2500);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'No se pudo guardar el producto');
+    }
   }
   function addItem() {
     setItems((c) => [...c, { quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
@@ -340,6 +376,19 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
                 key={idx}
                 className="rounded-md border border-surface-border bg-surface-muted/30 p-2"
               >
+                {products && products.length > 0 && (
+                  <div className="mb-2">
+                    <SearchableSelect
+                      value=""
+                      onChange={(v) => applyProduct(idx, v)}
+                      placeholder="📦 Usar un producto guardado…"
+                      options={products.map((p) => ({
+                        value: p.id,
+                        label: `${p.description.slice(0, 70)} · ${formatCurrency(p.unitPrice)}`,
+                      }))}
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-12 gap-2">
                   <input
                     value={it.quantity}
@@ -422,9 +471,18 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
                       />
                     </label>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => saveItemAsProduct(idx)}
+                    className="ml-auto shrink-0 text-xs text-ink-secondary hover:text-brand"
+                    title="Guardar este ítem en el catálogo para reutilizarlo"
+                  >
+                    💾 Guardar como producto
+                  </button>
                 </div>
               </div>
             ))}
+            {notice && <div className="text-xs font-medium text-success">{notice}</div>}
           </div>
 
           <div className="mt-3 flex flex-col items-end gap-1 text-sm">

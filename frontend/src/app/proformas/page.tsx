@@ -9,6 +9,7 @@ import { CreateProformaModal } from '@/components/forms/CreateProformaModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
+import { ROUTES } from '@/lib/constants';
 
 interface ProformaListItem {
   id: string;
@@ -51,9 +52,14 @@ export default function ProformasPage() {
             Cotizaciones formales · Genera PDF idéntico al formato CREACOM o exporta a Excel.
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + Nueva proforma
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link href={ROUTES.PRODUCTOS} className="btn-secondary">
+            📦 Productos
+          </Link>
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + Nueva proforma
+          </button>
+        </div>
       </div>
 
       <CreateProformaModal

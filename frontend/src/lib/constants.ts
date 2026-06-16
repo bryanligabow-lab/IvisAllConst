@@ -21,6 +21,7 @@ export const ROUTES = {
   SUBCONTRATISTAS: '/subcontratistas',
   NOMINA: '/nomina',
   PROFORMAS: '/proformas',
+  PRODUCTOS: '/productos',
   CLIENTES: '/clientes',
   PROYECTOS_REPORT: '/proyectos',
   DIRECTORIO: '/directorio',

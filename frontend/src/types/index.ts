@@ -128,6 +128,15 @@ export interface Client {
   proformasTotal?: number;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  unit: string;
+  description: string;
+  unitPrice: number;
+  createdAt?: string;
+}
+
 export interface SubcontractorView {
   id: string;
   name: string;

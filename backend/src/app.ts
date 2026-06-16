@@ -19,6 +19,7 @@ import { attendanceRouter } from './modules/attendance/attendance.routes';
 import { bitacoraRouter } from './modules/bitacora/bitacora.routes';
 import { proformasRouter } from './modules/proformas/proformas.routes';
 import { clientsRouter } from './modules/clients/clients.routes';
+import { productsRouter } from './modules/products/products.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { failure } from './utils/apiResponse';
 import { ERRORS } from './shared/constants/error-messages';
@@ -67,6 +68,7 @@ export function buildApp() {
   app.use('/api/bitacora', bitacoraRouter);
   app.use('/api/proformas', proformasRouter);
   app.use('/api/clients', clientsRouter);
+  app.use('/api/products', productsRouter);
 
   app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
 
