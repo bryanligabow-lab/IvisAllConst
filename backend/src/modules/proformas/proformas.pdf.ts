@@ -58,7 +58,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   const headerY = M;
   if (fs.existsSync(LOGO_PATH)) {
     try {
-      doc.image(LOGO_PATH, M, headerY - 8, { fit: [200, 90] });
+      doc.image(LOGO_PATH, M, headerY - 6, { fit: [250, 116] });
     } catch {
       /* ignore */
     }
@@ -86,8 +86,8 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
 
   // Línea separadora
   doc
-    .moveTo(M, headerY + 92)
-    .lineTo(M + W, headerY + 92)
+    .moveTo(M, headerY + 118)
+    .lineTo(M + W, headerY + 118)
     .lineWidth(1.5)
     .strokeColor(RED)
     .stroke();
@@ -97,10 +97,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     .fillColor(DARK)
     .font('Helvetica')
     .fontSize(9)
-    .text(formatDateLong(p.date), M, headerY + 100, { width: W, align: 'right' });
+    .text(formatDateLong(p.date), M, headerY + 126, { width: W, align: 'right' });
 
   // ===== Emisor (izq) + Cliente (der) =====
-  const blockY = headerY + 122;
+  const blockY = headerY + 148;
   doc.fillColor(DARK).font('Helvetica-Bold').fontSize(10).text('CREA INNOVACION PROYECTOS Y SERVICIOS', M, blockY);
   doc.font('Helvetica-Bold').text('CREACOM S.A.', M, blockY + 12);
   doc.font('Helvetica').fontSize(9).fillColor(DARK);
@@ -108,39 +108,28 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   doc.text('AUT SRI: 31234567817', M, blockY + 38);
   doc.text('DIRECCION: AV. GUAYAQUIL, ED. MARCIMEX', M, blockY + 50);
 
-  // Cliente
+  // Cliente (der) — alturas dinámicas para que un nombre/dirección largo
+  // no se monte con la línea siguiente.
   const clientX = M + W / 2 + 10;
   const clientW = W / 2 - 10;
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(10)
-    .text(p.clientName.toUpperCase(), clientX, blockY, { width: clientW, align: 'right' });
-  let cy = blockY + 14;
-  doc.font('Helvetica').fontSize(9);
-  if (p.clientRuc) {
-    doc.text(`RUC: ${p.clientRuc}`, clientX, cy, { width: clientW, align: 'right' });
-    cy += 12;
-  }
-  if (p.clientAddress) {
-    doc.text(`DIRECCION: ${p.clientAddress}`, clientX, cy, { width: clientW, align: 'right' });
-    cy += 12;
-  }
-  if (p.projectLabel || p.project) {
-    doc.text(`PROYECTO: ${p.projectLabel || p.project?.name}`, clientX, cy, {
-      width: clientW,
-      align: 'right',
-    });
-    cy += 12;
-  }
-  if (p.clientResponsible) {
-    doc.text(`RESPONSABLE: ${p.clientResponsible}`, clientX, cy, {
-      width: clientW,
-      align: 'right',
-    });
-  }
+  let cy = blockY;
+  const drawClientLine = (text: string, bold = false, size = 9) => {
+    doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(size).fillColor(DARK);
+    const h = doc.heightOfString(text, { width: clientW, align: 'right' });
+    doc.text(text, clientX, cy, { width: clientW, align: 'right' });
+    cy += h + 2;
+  };
+  drawClientLine(p.clientName.toUpperCase(), true, 10);
+  if (p.clientRuc) drawClientLine(`RUC: ${p.clientRuc}`);
+  if (p.clientAddress) drawClientLine(`DIRECCION: ${p.clientAddress}`);
+  if (p.projectLabel || p.project)
+    drawClientLine(`PROYECTO: ${p.projectLabel || p.project?.name}`);
+  if (p.clientResponsible) drawClientLine(`RESPONSABLE: ${p.clientResponsible}`);
+  const clientBottom = cy;
 
-  // ===== Tabla =====
-  const tableTop = blockY + 88;
+  // ===== Tabla ===== (debajo del bloque más alto: emisor o cliente)
+  const emitterBottom = blockY + 62;
+  const tableTop = Math.max(emitterBottom, clientBottom) + 22;
   const colX = [M, M + 50, M + 100, M + W - 200, M + W - 100, M + W];
   const colWidths = [50, 50, W - 250, 100, 100];
 
@@ -199,8 +188,67 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     rowY += rowH;
   }
 
+  // ===== Imágenes referenciales (junto a la descripción, misma página) =====
+  let footerTop = rowY + 18;
+  if (p.images && p.images.length > 0) {
+    const perRow = Math.min(p.images.length, 3);
+    const gap = 12;
+    const cellW = (W - gap * (perRow - 1)) / perRow;
+    const boxH = p.images.length === 1 ? 160 : 130;
+    const rows = Math.ceil(p.images.length / perRow);
+    const bandH = 16 + rows * (boxH + 22);
+
+    // Si el bloque de imágenes no cabe en la página, pasa a una nueva.
+    if (footerTop + bandH > PAGE_H - M) {
+      doc.addPage();
+      footerTop = M;
+    }
+
+    doc.fillColor(GRAY).font('Helvetica-Bold').fontSize(9).text('IMAGEN REFERENCIAL', M, footerTop);
+    let iy = footerTop + 14;
+    let icol = 0;
+    for (const img of p.images) {
+      const ix = M + icol * (cellW + gap);
+      try {
+        doc.image(Buffer.from(img.data), ix, iy, {
+          fit: [cellW, boxH],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        doc
+          .fillColor(GRAY)
+          .font('Helvetica')
+          .fontSize(8)
+          .text('(No se pudo cargar la imagen)', ix, iy + boxH / 2, {
+            width: cellW,
+            align: 'center',
+          });
+      }
+      if (img.caption) {
+        doc
+          .fillColor(GRAY)
+          .font('Helvetica-Oblique')
+          .fontSize(8)
+          .text(img.caption, ix, iy + boxH + 2, { width: cellW, align: 'center' });
+      }
+      icol++;
+      if (icol === perRow) {
+        icol = 0;
+        iy += boxH + 22;
+      }
+    }
+    if (icol !== 0) iy += boxH + 22;
+    footerTop = iy + 8;
+  }
+
+  // Si no queda espacio para notas/totales, pásalos a una página nueva.
+  if (footerTop > PAGE_H - 180) {
+    doc.addPage();
+    footerTop = M;
+  }
+
   // ===== Notas (izq) y totales (der) =====
-  const footerTop = rowY + 18;
 
   // Caja notas (izquierda) — borde rojo redondeado
   const notesW = W / 2 - 12;
@@ -310,56 +358,6 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     signY + 20,
     { width: totalsW, align: 'center' },
   );
-
-  // ===== Imágenes adjuntas (página nueva si hay) =====
-  if (p.images && p.images.length > 0) {
-    doc.addPage();
-    doc
-      .fillColor(RED)
-      .font('Helvetica-Bold')
-      .fontSize(16)
-      .text('Imágenes del producto / servicio', M, M);
-    doc
-      .moveTo(M, M + 22)
-      .lineTo(M + W, M + 22)
-      .lineWidth(1.5)
-      .strokeColor(RED)
-      .stroke();
-
-    let y = M + 38;
-    const colW = (W - 16) / 2; // 2 columnas
-    let col = 0;
-    for (const img of p.images) {
-      const imgBuf = Buffer.from(img.data);
-      const x = M + col * (colW + 16);
-      // Reservamos hasta 200px de alto por imagen + 30px de caption
-      try {
-        doc.image(imgBuf, x, y, { fit: [colW, 200], align: 'center' });
-      } catch {
-        doc
-          .fillColor(GRAY)
-          .fontSize(9)
-          .text('(No se pudo cargar la imagen)', x, y, { width: colW, align: 'center' });
-      }
-      if (img.caption) {
-        doc
-          .fillColor(GRAY)
-          .font('Helvetica-Oblique')
-          .fontSize(9)
-          .text(img.caption, x, y + 205, { width: colW, align: 'center' });
-      }
-      col++;
-      if (col === 2) {
-        col = 0;
-        y += 240;
-        // Si nos quedamos sin espacio en la página, otra página
-        if (y > PAGE_H - 260) {
-          doc.addPage();
-          y = M;
-        }
-      }
-    }
-  }
 
   doc.end();
 }
