@@ -26,6 +26,9 @@ const imageSchema = z.object({
   dataBase64: z.string().min(10), // raw base64 (without data:... prefix)
   caption: z.string().max(200).optional(),
   filename: z.string().max(200).optional(),
+  // Índice del ítem al que pertenece (para mostrarla junto a ese rubro).
+  // Null/ausente = imagen general (al final del PDF).
+  itemIndex: z.coerce.number().int().nonnegative().nullable().optional(),
 });
 
 const DEFAULTS = {
@@ -57,7 +60,7 @@ const createSchema = z.object({
   notes: z.string().max(2000).optional(),
   status: z.enum(['DRAFT', 'SENT', 'APPROVED', 'REJECTED']).optional(),
   items: z.array(itemSchema).min(1, 'Agrega al menos un ítem'),
-  images: z.array(imageSchema).max(10).optional(),
+  images: z.array(imageSchema).max(60).optional(),
 });
 
 const updateSchema = createSchema.partial().extend({
@@ -219,6 +222,7 @@ proformasRouter.post(
         images: {
           create: images.map((img, idx) => ({
             orderIndex: idx,
+            itemIndex: img.itemIndex ?? null,
             mimeType: img.mimeType,
             data: Buffer.from(img.dataBase64, 'base64'),
             caption: img.caption || null,
@@ -230,7 +234,14 @@ proformasRouter.post(
         items: { orderBy: { orderIndex: 'asc' } },
         images: {
           orderBy: { orderIndex: 'asc' },
-          select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+          select: {
+            id: true,
+            mimeType: true,
+            caption: true,
+            filename: true,
+            orderIndex: true,
+            itemIndex: true,
+          },
         },
       },
     });
@@ -272,6 +283,7 @@ proformasRouter.patch(
             data: {
               proformaId: req.params.id,
               orderIndex: idx,
+              itemIndex: img.itemIndex ?? null,
               mimeType: img.mimeType,
               data: Buffer.from(img.dataBase64, 'base64'),
               caption: img.caption || null,
@@ -290,7 +302,14 @@ proformasRouter.patch(
           items: { orderBy: { orderIndex: 'asc' } },
           images: {
             orderBy: { orderIndex: 'asc' },
-            select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+            select: {
+              id: true,
+              mimeType: true,
+              caption: true,
+              filename: true,
+              orderIndex: true,
+              itemIndex: true,
+            },
           },
         },
       });

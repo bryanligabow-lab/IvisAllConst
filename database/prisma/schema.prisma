@@ -652,6 +652,9 @@ model ProformaImage {
   id         String   @id @default(uuid())
   proformaId String   @map("proforma_id")
   orderIndex Int      @default(0) @map("order_index")
+  // Índice del ítem (orderIndex) al que pertenece la imagen. Null = imagen
+  // general de la proforma (se muestra al final).
+  itemIndex  Int?     @map("item_index")
   filename   String?
   mimeType   String   @map("mime_type")
   data       Bytes

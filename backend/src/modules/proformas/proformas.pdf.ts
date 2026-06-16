@@ -143,24 +143,48 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   doc.text('V. UNITARIO', colX[3], headerTextY, { width: colWidths[3], align: 'center' });
   doc.text('V. TOTAL', colX[4], headerTextY, { width: colWidths[4], align: 'center' });
 
+  // Agrupar imágenes: por rubro (itemIndex) vs generales (sin ítem → al final).
+  const imagesByItem = new Map<number, typeof p.images>();
+  const generalImages: typeof p.images = [];
+  for (const img of p.images) {
+    if (img.itemIndex == null) {
+      generalImages.push(img);
+    } else {
+      const arr = imagesByItem.get(img.itemIndex) ?? [];
+      arr.push(img);
+      imagesByItem.set(img.itemIndex, arr);
+    }
+  }
+
   // Filas
   let rowY = tableTop + 28;
   let subtotal = 0;
   doc.fillColor(DARK).font('Helvetica').fontSize(9);
 
-  for (const it of p.items) {
+  const detalleW = colWidths[2];
+  for (const [idx, it] of p.items.entries()) {
     const totalLine = it.quantity * it.unitPrice;
     subtotal += totalLine;
 
-    const detailH = doc.heightOfString(it.description, { width: colWidths[2] - 8 });
-    const rowH = Math.max(26, detailH + 12);
+    const imgs = imagesByItem.get(idx) ?? [];
+    const hasImg = imgs.length > 0;
+
+    // Si el rubro tiene imagen: texto a la izquierda, imagen a la derecha del detalle.
+    const imgBoxH = 100;
+    const textW = hasImg ? Math.round(detalleW * 0.5) : detalleW;
+    const imgAreaX = colX[2] + textW + 8;
+    const imgAreaW = detalleW - textW - 8;
+
+    const detailH = doc.heightOfString(it.description, { width: textW - 8 });
+    const contentH = hasImg ? Math.max(detailH, imgBoxH) : detailH;
+    const rowH = Math.max(26, contentH + 14);
 
     if (rowY + rowH > PAGE_H - 240) {
       doc.addPage();
       rowY = M;
     }
 
-    // Sombra ligera alterna
+    // Línea inferior
     doc
       .moveTo(M, rowY + rowH)
       .lineTo(M + W, rowY + rowH)
@@ -172,10 +196,30 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const cellY = rowY + rowH / 2 - 5;
     doc.text(String(it.quantity), colX[0], cellY, { width: colWidths[0], align: 'center' });
     doc.text(it.unit, colX[1], cellY, { width: colWidths[1], align: 'center' });
-    doc.text(it.description, colX[2] + 4, rowY + 6, {
-      width: colWidths[2] - 8,
-      align: 'center',
+    doc.text(it.description, colX[2] + 4, rowY + 8, {
+      width: textW - 8,
+      align: hasImg ? 'left' : 'center',
     });
+
+    // Imagen(es) del rubro, al lado de la descripción.
+    if (hasImg) {
+      const n = Math.min(imgs.length, 3);
+      const gap = 4;
+      const cw = (imgAreaW - gap * (n - 1)) / n;
+      for (let k = 0; k < n; k++) {
+        try {
+          doc.image(Buffer.from(imgs[k].data), imgAreaX + k * (cw + gap), rowY + 7, {
+            fit: [cw, imgBoxH],
+            align: 'center',
+            valign: 'center',
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+      doc.fillColor(DARK).font('Helvetica').fontSize(9);
+    }
+
     doc.text(`$ ${formatMoney(it.unitPrice)}`, colX[3], cellY, {
       width: colWidths[3] - 8,
       align: 'right',
@@ -190,12 +234,12 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
 
   // ===== Imágenes referenciales (junto a la descripción, misma página) =====
   let footerTop = rowY + 18;
-  if (p.images && p.images.length > 0) {
-    const perRow = Math.min(p.images.length, 3);
+  if (generalImages.length > 0) {
+    const perRow = Math.min(generalImages.length, 3);
     const gap = 12;
     const cellW = (W - gap * (perRow - 1)) / perRow;
-    const boxH = p.images.length === 1 ? 160 : 130;
-    const rows = Math.ceil(p.images.length / perRow);
+    const boxH = generalImages.length === 1 ? 160 : 130;
+    const rows = Math.ceil(generalImages.length / perRow);
     const bandH = 16 + rows * (boxH + 22);
 
     // Si el bloque de imágenes no cabe en la página, pasa a una nueva.
@@ -207,7 +251,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     doc.fillColor(GRAY).font('Helvetica-Bold').fontSize(9).text('IMAGEN REFERENCIAL', M, footerTop);
     let iy = footerTop + 14;
     let icol = 0;
-    for (const img of p.images) {
+    for (const img of generalImages) {
       const ix = M + icol * (cellW + gap);
       try {
         doc.image(Buffer.from(img.data), ix, iy, {

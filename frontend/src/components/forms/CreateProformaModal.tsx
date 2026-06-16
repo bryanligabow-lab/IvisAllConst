@@ -8,19 +8,20 @@ import { apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Project } from '@/types';
 
-interface Item {
-  quantity: string;
-  unit: string;
-  description: string;
-  unitPrice: string;
-}
-
 interface ImageItem {
   preview: string; // base64 data URL
   dataBase64: string; // sin prefix
   mimeType: string;
   filename: string;
   caption: string;
+}
+
+interface Item {
+  quantity: string;
+  unit: string;
+  description: string;
+  unitPrice: string;
+  image?: ImageItem | null; // imagen del rubro (sale al lado de la descripción)
 }
 
 interface Props {
@@ -68,7 +69,7 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
   const [items, setItems] = useState<Item[]>([
-    { quantity: '1', unit: 'GBL', description: '', unitPrice: '' },
+    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null },
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +95,7 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
-    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '' }]);
+    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
     setImages([]);
     setError(null);
   }, [open]);
@@ -115,7 +116,7 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     setItems((curr) => curr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
   function addItem() {
-    setItems((c) => [...c, { quantity: '1', unit: 'GBL', description: '', unitPrice: '' }]);
+    setItems((c) => [...c, { quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
   }
   function removeItem(idx: number) {
     setItems((c) => (c.length === 1 ? c : c.filter((_, i) => i !== idx)));
@@ -142,6 +143,20 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
 
   function removeImage(idx: number) {
     setImages((c) => c.filter((_, i) => i !== idx));
+  }
+
+  // Imagen ligada a un rubro (sale al lado de su descripción en el PDF).
+  async function attachItemImage(idx: number, file: File | undefined | null) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > MAX_IMAGE_SIZE) {
+      setError(`"${file.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
+      return;
+    }
+    const { dataUrl, dataBase64 } = await fileToBase64(file);
+    updateItem(idx, {
+      image: { preview: dataUrl, dataBase64, mimeType: file.type, filename: file.name, caption: '' },
+    });
   }
 
   const subtotal = items.reduce(
@@ -186,12 +201,29 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           description: it.description,
           unitPrice: Number(it.unitPrice),
         })),
-        images: images.map((img) => ({
-          mimeType: img.mimeType,
-          dataBase64: img.dataBase64,
-          filename: img.filename,
-          caption: img.caption || undefined,
-        })),
+        images: [
+          // Imágenes ligadas a un rubro (van al lado de su descripción).
+          ...items.flatMap((it, idx) =>
+            it.image
+              ? [
+                  {
+                    mimeType: it.image.mimeType,
+                    dataBase64: it.image.dataBase64,
+                    filename: it.image.filename,
+                    caption: it.image.caption || undefined,
+                    itemIndex: idx,
+                  },
+                ]
+              : [],
+          ),
+          // Imágenes generales (sin rubro) → al final del PDF.
+          ...images.map((img) => ({
+            mimeType: img.mimeType,
+            dataBase64: img.dataBase64,
+            filename: img.filename,
+            caption: img.caption || undefined,
+          })),
+        ],
       };
       const created = (await apiPost<{ id: string }>('/proformas', payload)) as { id: string };
       onCreated(created.id);
@@ -306,48 +338,91 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
             {items.map((it, idx) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 gap-2 rounded-md border border-surface-border bg-surface-muted/30 p-2"
+                className="rounded-md border border-surface-border bg-surface-muted/30 p-2"
               >
-                <input
-                  value={it.quantity}
-                  onChange={(e) => updateItem(idx, { quantity: e.target.value })}
-                  className="input col-span-2"
-                  placeholder="Cant"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                />
-                <input
-                  value={it.unit}
-                  onChange={(e) => updateItem(idx, { unit: e.target.value })}
-                  className="input col-span-2"
-                  placeholder="UNI"
-                />
-                <input
-                  value={it.description}
-                  onChange={(e) => updateItem(idx, { description: e.target.value })}
-                  className="input col-span-5"
-                  placeholder="Descripción"
-                  required
-                />
-                <input
-                  value={it.unitPrice}
-                  onChange={(e) => updateItem(idx, { unitPrice: e.target.value })}
-                  className="input col-span-2"
-                  placeholder="V. Unit"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeItem(idx)}
-                  disabled={items.length === 1}
-                  className="col-span-1 rounded-md text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger disabled:opacity-30"
-                  title="Eliminar línea"
-                >
-                  🗑️
-                </button>
+                <div className="grid grid-cols-12 gap-2">
+                  <input
+                    value={it.quantity}
+                    onChange={(e) => updateItem(idx, { quantity: e.target.value })}
+                    className="input col-span-2"
+                    placeholder="Cant"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                  <input
+                    value={it.unit}
+                    onChange={(e) => updateItem(idx, { unit: e.target.value })}
+                    className="input col-span-2"
+                    placeholder="UNI"
+                  />
+                  <input
+                    value={it.description}
+                    onChange={(e) => updateItem(idx, { description: e.target.value })}
+                    className="input col-span-5"
+                    placeholder="Descripción"
+                    required
+                  />
+                  <input
+                    value={it.unitPrice}
+                    onChange={(e) => updateItem(idx, { unitPrice: e.target.value })}
+                    className="input col-span-2"
+                    placeholder="V. Unit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    disabled={items.length === 1}
+                    className="col-span-1 rounded-md text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger disabled:opacity-30"
+                    title="Eliminar línea"
+                  >
+                    🗑️
+                  </button>
+                </div>
+
+                {/* Imagen del rubro — sale al lado de la descripción en el PDF */}
+                <div className="mt-2 flex items-center gap-2">
+                  {it.image ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={it.image.preview}
+                        alt={it.image.filename}
+                        className="h-12 w-12 shrink-0 rounded border border-surface-border object-cover"
+                      />
+                      <input
+                        value={it.image.caption}
+                        onChange={(e) =>
+                          updateItem(idx, {
+                            image: it.image ? { ...it.image, caption: e.target.value } : null,
+                          })
+                        }
+                        placeholder="Pie de foto del rubro (opcional)"
+                        className="input flex-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateItem(idx, { image: null })}
+                        className="shrink-0 text-xs text-ink-secondary hover:text-danger"
+                      >
+                        Quitar
+                      </button>
+                    </>
+                  ) : (
+                    <label className="btn-secondary cursor-pointer text-xs">
+                      📷 Imagen del rubro
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => attachItemImage(idx, e.target.files?.[0])}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -378,7 +453,7 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
         <div className="rounded-lg border border-surface-border p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
-              Imágenes del producto / servicio (opcional)
+              Imágenes generales (al final del PDF, opcional)
             </div>
             <label className="btn-secondary cursor-pointer text-xs">
               + Subir imagen
@@ -392,8 +467,9 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
             </label>
           </div>
           <p className="mb-2 text-[11px] text-ink-tertiary">
-            Hasta {MAX_IMAGES} imágenes · máximo 4 MB cada una · aparecerán al final del PDF y en
-            una hoja aparte del Excel.
+            Para poner una imagen <strong>al lado de un rubro</strong>, usa el botón “📷 Imagen del
+            rubro” en cada ítem. Estas de aquí son imágenes generales: hasta {MAX_IMAGES}, máximo 4
+            MB cada una, aparecen al final del PDF.
           </p>
           {images.length === 0 ? (
             <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/30 px-3 py-6 text-center text-xs text-ink-secondary">
