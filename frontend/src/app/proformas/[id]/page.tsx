@@ -3,7 +3,9 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
+import { useState } from 'react';
 import { AppShell } from '@/components/layouts/AppShell';
+import { CreateProformaModal, type ProformaEditData } from '@/components/forms/CreateProformaModal';
 import { apiGet } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
@@ -62,7 +64,8 @@ async function downloadExport(id: string, format: 'pdf' | 'xlsx', number: string
 
 export default function ProformaDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data, isLoading } = useSWR<ProformaDetail>(`/proformas/${params.id}`, apiGet);
+  const { data, isLoading, mutate } = useSWR<ProformaDetail>(`/proformas/${params.id}`, apiGet);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (isLoading || !data) {
     return (
@@ -89,6 +92,9 @@ export default function ProformaDetailPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setEditOpen(true)} className="btn-secondary">
+            ✏️ Editar
+          </button>
           <button
             onClick={() => downloadExport(data.id, 'pdf', data.number)}
             className="btn-primary"
@@ -211,6 +217,16 @@ export default function ProformaDetailPage() {
           </div>
         </div>
       </div>
+
+      <CreateProformaModal
+        open={editOpen}
+        initial={editOpen ? (data as unknown as ProformaEditData) : null}
+        onClose={() => setEditOpen(false)}
+        onCreated={() => {
+          mutate();
+          setEditOpen(false);
+        }}
+      />
     </AppShell>
   );
 }

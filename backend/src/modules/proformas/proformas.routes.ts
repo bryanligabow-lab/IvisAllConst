@@ -129,7 +129,14 @@ proformasRouter.get(
         items: { orderBy: { orderIndex: 'asc' } },
         images: {
           orderBy: { orderIndex: 'asc' },
-          select: { id: true, mimeType: true, caption: true, filename: true, orderIndex: true },
+          select: {
+            id: true,
+            mimeType: true,
+            caption: true,
+            filename: true,
+            orderIndex: true,
+            itemIndex: true,
+          },
         },
       },
     });

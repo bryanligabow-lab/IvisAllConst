@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { apiFetchBlob, apiGet, apiPost, ApiClientError } from '@/lib/api';
+import { apiFetchBlob, apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Product, Project } from '@/types';
 
@@ -25,9 +25,38 @@ interface Item {
   image?: ImageItem | null; // imagen del rubro (sale al lado de la descripción)
 }
 
+// Datos completos de una proforma para editarla (GET /proformas/:id).
+export interface ProformaEditData {
+  id: string;
+  date: string;
+  clientId: string | null;
+  clientName: string;
+  clientRuc: string | null;
+  clientAddress: string | null;
+  clientResponsible: string | null;
+  projectId: string | null;
+  projectLabel: string | null;
+  ivaPercent: number;
+  creditTerm: string | null;
+  paymentTerms: string | null;
+  validity: string | null;
+  topClients: string | null;
+  signerName: string | null;
+  signerTitle: string | null;
+  items: Array<{ quantity: number; unit: string; description: string; unitPrice: number }>;
+  images: Array<{
+    id: string;
+    mimeType: string;
+    caption: string | null;
+    filename: string | null;
+    itemIndex: number | null;
+  }>;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
+  initial?: ProformaEditData | null; // si viene → edición
   onCreated: (id: string) => void;
 }
 
@@ -60,7 +89,8 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export function CreateProformaModal({ open, onClose, onCreated }: Props) {
+export function CreateProformaModal({ open, onClose, initial, onCreated }: Props) {
+  const isEdit = !!initial;
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientId, setClientId] = useState('');
   const [showCreateClient, setShowCreateClient] = useState(false);
@@ -89,9 +119,47 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
   const { data: projects } = useSWR<Project[]>('/projects', apiGet);
   const { data: products, mutate: mutateProducts } = useSWR<Product[]>('/products', apiGet);
   const [notice, setNotice] = useState<string | null>(null);
+  // Mientras se recuperan las imágenes existentes (edición), bloqueamos el guardar
+  // para no perderlas si el usuario guarda demasiado rápido.
+  const [imagesLoading, setImagesLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setNotice(null);
+    setError(null);
+    setImagesLoading(false);
+    if (initial) {
+      setDate(initial.date ? initial.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+      setClientId(initial.clientId ?? '');
+      setClientName(initial.clientName ?? '');
+      setClientRuc(initial.clientRuc ?? '');
+      setClientAddress(initial.clientAddress ?? '');
+      setClientResponsible(initial.clientResponsible ?? '');
+      setProjectId(initial.projectId ?? '');
+      setProjectLabel(initial.projectLabel ?? '');
+      setIvaPercent(String(initial.ivaPercent ?? 15));
+      setCreditTerm(initial.creditTerm ?? '');
+      setPaymentTerms(initial.paymentTerms ?? '');
+      setValidity(initial.validity ?? '');
+      setTopClients(initial.topClients ?? '');
+      setSignerName(initial.signerName ?? '');
+      setSignerTitle(initial.signerTitle ?? '');
+      setItems(
+        initial.items.length > 0
+          ? initial.items.map((it) => ({
+              quantity: String(it.quantity),
+              unit: it.unit,
+              description: it.description,
+              unitPrice: String(it.unitPrice),
+              image: null,
+            }))
+          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }],
+      );
+      setImages([]);
+      // Cargar las imágenes existentes (binario) para no perderlas al guardar.
+      void loadInitialImages(initial);
+      return;
+    }
     setDate(new Date().toISOString().slice(0, 10));
     setClientId('');
     setClientName('');
@@ -109,8 +177,40 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
     setSignerTitle('Gerente General');
     setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
     setImages([]);
-    setError(null);
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial]);
+
+  // Trae el binario de cada imagen existente y la reasigna a su rubro (itemIndex)
+  // o a las imágenes generales.
+  async function loadInitialImages(p: ProformaEditData) {
+    if (!p.images || p.images.length === 0) return;
+    setImagesLoading(true);
+    try {
+    for (const img of p.images) {
+      try {
+        const blob = await apiFetchBlob(`/proformas/${p.id}/images/${img.id}`);
+        const dataUrl = await blobToDataUrl(blob);
+        const imageItem: ImageItem = {
+          preview: dataUrl,
+          dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: blob.type || img.mimeType || 'image/png',
+          filename: img.filename ?? '',
+          caption: img.caption ?? '',
+        };
+        if (img.itemIndex != null) {
+          const ti = img.itemIndex;
+          setItems((curr) => curr.map((it, i) => (i === ti ? { ...it, image: imageItem } : it)));
+        } else {
+          setImages((curr) => [...curr, imageItem]);
+        }
+      } catch {
+        /* si una imagen falla, seguimos con el resto */
+      }
+    }
+    } finally {
+      setImagesLoading(false);
+    }
+  }
 
   // Cuando el usuario elige un cliente, pre-llenar campos
   function selectClient(id: string) {
@@ -288,18 +388,34 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           })),
         ],
       };
-      const created = (await apiPost<{ id: string }>('/proformas', payload)) as { id: string };
-      onCreated(created.id);
+      if (isEdit && initial) {
+        await apiPatch(`/proformas/${initial.id}`, payload);
+        onCreated(initial.id);
+      } else {
+        const created = (await apiPost<{ id: string }>('/proformas', payload)) as { id: string };
+        onCreated(created.id);
+      }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Error al crear la proforma');
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : isEdit
+            ? 'Error al guardar la proforma'
+            : 'Error al crear la proforma',
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nueva proforma" width="lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? 'Editar proforma' : 'Nueva proforma'}
+      width="lg"
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Cliente */}
         <div className="rounded-lg border border-surface-border p-3">
@@ -648,8 +764,18 @@ export function CreateProformaModal({ open, onClose, onCreated }: Props) {
           <button type="button" onClick={onClose} className="btn-secondary">
             Cancelar
           </button>
-          <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">
-            {submitting ? 'Creando…' : 'Crear proforma'}
+          <button
+            type="submit"
+            disabled={submitting || imagesLoading}
+            className="btn-primary disabled:opacity-50"
+          >
+            {imagesLoading
+              ? 'Cargando imágenes…'
+              : submitting
+                ? 'Guardando…'
+                : isEdit
+                  ? 'Guardar cambios'
+                  : 'Crear proforma'}
           </button>
         </div>
       </form>

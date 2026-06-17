@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
-import { CreateProformaModal } from '@/components/forms/CreateProformaModal';
+import { CreateProformaModal, type ProformaEditData } from '@/components/forms/CreateProformaModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
@@ -41,7 +41,19 @@ export default function ProformasPage() {
   const router = useRouter();
   const { data, isLoading, mutate } = useSWR<ProformaListItem[]>('/proformas', apiGet);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<ProformaEditData | null>(null);
+  const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; number: string; clientName: string } | null>(null);
+
+  async function openEdit(id: string) {
+    setLoadingEditId(id);
+    try {
+      const detail = await apiGet<ProformaEditData>(`/proformas/${id}`);
+      setEditing(detail);
+    } finally {
+      setLoadingEditId(null);
+    }
+  }
 
   return (
     <AppShell>
@@ -68,6 +80,16 @@ export default function ProformasPage() {
         onCreated={(id) => {
           mutate();
           router.push(`/proformas/${id}`);
+        }}
+      />
+
+      <CreateProformaModal
+        open={!!editing}
+        initial={editing}
+        onClose={() => setEditing(null)}
+        onCreated={() => {
+          mutate();
+          setEditing(null);
         }}
       />
 
@@ -130,6 +152,14 @@ export default function ProformasPage() {
                       >
                         👁️
                       </Link>
+                      <button
+                        onClick={() => openEdit(p.id)}
+                        disabled={loadingEditId === p.id}
+                        className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted disabled:opacity-50"
+                        title="Editar"
+                      >
+                        {loadingEditId === p.id ? '…' : '✏️'}
+                      </button>
                       <button
                         onClick={() => setPendingDelete({ id: p.id, number: p.number, clientName: p.clientName })}
                         className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
