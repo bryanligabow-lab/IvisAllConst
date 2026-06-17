@@ -170,16 +170,17 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const hasImg = imgs.length > 0;
 
     // Si el rubro tiene imagen: texto a la izquierda, imagen a la derecha del detalle.
-    const imgBoxH = 100;
-    const textW = hasImg ? Math.round(detalleW * 0.5) : detalleW;
+    const imgBoxH = 62;
+    const textW = hasImg ? Math.round(detalleW * 0.55) : detalleW;
     const imgAreaX = colX[2] + textW + 8;
     const imgAreaW = detalleW - textW - 8;
 
     const detailH = doc.heightOfString(it.description, { width: textW - 8 });
     const contentH = hasImg ? Math.max(detailH, imgBoxH) : detailH;
-    const rowH = Math.max(26, contentH + 14);
+    const rowH = Math.max(24, contentH + 12);
 
-    if (rowY + rowH > PAGE_H - 240) {
+    // Llenar la página hasta el fondo (deja solo el margen) antes de saltar.
+    if (rowY + rowH > PAGE_H - M) {
       doc.addPage();
       rowY = M;
     }
@@ -238,7 +239,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const perRow = Math.min(generalImages.length, 3);
     const gap = 12;
     const cellW = (W - gap * (perRow - 1)) / perRow;
-    const boxH = generalImages.length === 1 ? 160 : 130;
+    const boxH = generalImages.length === 1 ? 120 : 90;
     const rows = Math.ceil(generalImages.length / perRow);
     const bandH = 16 + rows * (boxH + 22);
 
@@ -287,7 +288,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   }
 
   // Si no queda espacio para notas/totales, pásalos a una página nueva.
-  if (footerTop > PAGE_H - 180) {
+  if (footerTop > PAGE_H - 210) {
     doc.addPage();
     footerTop = M;
   }
