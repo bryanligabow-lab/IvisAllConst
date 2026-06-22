@@ -36,7 +36,9 @@ export const generalLimiter = buildLimiter({
   max: env.RATE_LIMIT_MAX,
   prefix: 'general',
 });
-export const loginLimiter = buildLimiter(RATE_LIMITS.LOGIN);
+// Solo contamos los intentos FALLIDOS: un login correcto no consume el cupo,
+// así varias personas tras la misma IP pueden entrar sin bloquearse entre sí.
+export const loginLimiter = buildLimiter(RATE_LIMITS.LOGIN, { skipSuccessfulRequests: true });
 export const registerLimiter = buildLimiter(RATE_LIMITS.REGISTER);
 export const passwordResetLimiter = buildLimiter(RATE_LIMITS.PASSWORD_RESET);
 export const uploadsLimiter = buildLimiter(RATE_LIMITS.UPLOADS);
