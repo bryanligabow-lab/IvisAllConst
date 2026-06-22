@@ -7,9 +7,12 @@ import { CreateClientModal, type Client } from '@/components/forms/CreateClientM
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/format';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function ClientesPage() {
   const { data, isLoading, mutate } = useSWR<Client[]>('/clients', apiGet);
+  const { can } = useAuthStore();
+  const canWrite = can('clients.write');
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
@@ -27,9 +30,11 @@ export default function ClientesPage() {
             escribir los datos cada vez.
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + Nuevo cliente
-        </button>
+        {canWrite && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + Nuevo cliente
+          </button>
+        )}
       </div>
 
       {data && (
@@ -96,22 +101,24 @@ export default function ClientesPage() {
                   <td data-label="Proformas" className="text-right text-xs">{c.proformasCount ?? 0}</td>
                   <td data-label="Monto cotizado" className="text-right">{formatCurrency(Number(c.proformasTotal ?? 0))}</td>
                   <td data-label="" className="cell-actions">
-                    <div className="flex justify-end gap-1">
-                      <button
-                        onClick={() => setEditing(c)}
-                        className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
-                        title="Editar"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => setPendingDelete(c)}
-                        className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                        title="Eliminar"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                    {canWrite && (
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => setEditing(c)}
+                          className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => setPendingDelete(c)}
+                          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                          title="Eliminar"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

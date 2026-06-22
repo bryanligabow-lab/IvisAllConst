@@ -9,6 +9,7 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 import { formatDate } from '@/lib/format';
+import { useAuthStore } from '@/stores/authStore';
 import type { ProjectSummary } from '@/types';
 
 interface ProjectDocument {
@@ -60,6 +61,7 @@ export default function ProjectDocumentsPage() {
     apiGet,
   );
   const fileRef = useRef<HTMLInputElement>(null);
+  const canWrite = useAuthStore().can('projects.update');
 
   const [label, setLabel] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -132,6 +134,7 @@ export default function ProjectDocumentsPage() {
         </div>
       </div>
 
+      {canWrite && (
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -195,6 +198,7 @@ export default function ProjectDocumentsPage() {
           </p>
         )}
       </div>
+      )}
 
       <div className="mt-6">
         <h2 className="mb-2 text-sm font-medium">
@@ -245,14 +249,16 @@ export default function ProjectDocumentsPage() {
                         >
                           ⬇️
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingDelete(d)}
-                          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                          title="Eliminar"
-                        >
-                          🗑️
-                        </button>
+                        {canWrite && (
+                          <button
+                            type="button"
+                            onClick={() => setPendingDelete(d)}
+                            className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                            title="Eliminar"
+                          >
+                            🗑️
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

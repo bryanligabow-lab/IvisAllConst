@@ -200,7 +200,8 @@ export function EditUserModal({ open, onClose, user, onSaved }: Props) {
             permisos. <strong>admin</strong> puede gestionar proyectos, gastos, planillas,
             proveedores, clientes, nómina y proformas. <strong>operador</strong> (residente) solo
             accede a sus proyectos asignados, ve avances en %, carga órdenes de pago y registra
-            asistencia/bitácora. <strong>user</strong> tiene acceso de lectura.
+            asistencia/bitácora. <strong>viewer</strong> (solo lectura) ve toda la información pero
+            no puede crear, editar ni eliminar nada. <strong>user</strong> tiene acceso de lectura.
           </p>
         </div>
 

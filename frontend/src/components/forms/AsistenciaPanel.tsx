@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { apiGet, apiPost, ApiClientError } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 
 interface ProjectLite {
   id: string;
@@ -65,6 +66,7 @@ function monthRange(month: string): { from: string; to: string; days: number } {
 }
 
 export function AsistenciaPanel() {
+  const canWrite = useAuthStore().can('attendance.write');
   const { data: projects } = useSWR<ProjectLite[]>('/projects?perPage=200', apiGet);
   const [projectId, setProjectId] = useState('');
   const [date, setDate] = useState(today());
@@ -389,9 +391,11 @@ export function AsistenciaPanel() {
 
           <div className="flex items-center justify-end gap-3 pt-2">
             {savedMsg && <span className="text-xs text-success">{savedMsg}</span>}
-            <button onClick={save} disabled={saving} className="btn-primary disabled:opacity-50">
-              {saving ? 'Guardando…' : 'Guardar asistencia'}
-            </button>
+            {canWrite && (
+              <button onClick={save} disabled={saving} className="btn-primary disabled:opacity-50">
+                {saving ? 'Guardando…' : 'Guardar asistencia'}
+              </button>
+            )}
           </div>
         </div>
       )}

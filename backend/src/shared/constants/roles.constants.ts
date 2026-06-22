@@ -9,6 +9,8 @@ export const ROLES = {
   USER: 'user',
   // Residente de obra: acceso acotado y limitado a sus proyectos asignados.
   OPERADOR: 'operador',
+  // Solo lectura: ve toda la información del sistema, no puede editar nada.
+  VIEWER: 'viewer',
 } as const;
 export type RoleName = (typeof ROLES)[keyof typeof ROLES];
 

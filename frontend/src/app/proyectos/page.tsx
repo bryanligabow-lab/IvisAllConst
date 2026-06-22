@@ -8,6 +8,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency } from '@/lib/format';
 import { API_BASE_URL, ROUTES, STORAGE_KEYS } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { Project } from '@/types';
 
 interface ProjectStat {
@@ -77,6 +78,8 @@ async function downloadReport() {
 
 export default function ProyectosReportPage() {
   const { data, isLoading, error, mutate } = useSWR<Stats>('/projects/stats/global', apiGet);
+  const { can } = useAuthStore();
+  const canDelete = can('projects.delete');
   const [filter, setFilter] = useState<'ALL' | Project['status']>('ALL');
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
@@ -212,14 +215,16 @@ export default function ProyectosReportPage() {
                         {formatCurrency(p.pending)}
                       </td>
                       <td className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => setPendingDelete({ id: p.id, name: p.name })}
-                          className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                          title="Eliminar proyecto"
-                        >
-                          🗑️
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setPendingDelete({ id: p.id, name: p.name })}
+                            className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                            title="Eliminar proyecto"
+                          >
+                            🗑️
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))

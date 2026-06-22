@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateProformaModal, type ProformaEditData } from '@/components/forms/CreateProformaModal';
 import { apiGet } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
 
@@ -65,6 +66,7 @@ async function downloadExport(id: string, format: 'pdf' | 'xlsx', number: string
 export default function ProformaDetailPage() {
   const params = useParams<{ id: string }>();
   const { data, isLoading, mutate } = useSWR<ProformaDetail>(`/proformas/${params.id}`, apiGet);
+  const { can } = useAuthStore();
   const [editOpen, setEditOpen] = useState(false);
 
   if (isLoading || !data) {
@@ -92,9 +94,11 @@ export default function ProformaDetailPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setEditOpen(true)} className="btn-secondary">
-            ✏️ Editar
-          </button>
+          {can('proformas.write') && (
+            <button onClick={() => setEditOpen(true)} className="btn-secondary">
+              ✏️ Editar
+            </button>
+          )}
           <button
             onClick={() => downloadExport(data.id, 'pdf', data.number)}
             className="btn-primary"

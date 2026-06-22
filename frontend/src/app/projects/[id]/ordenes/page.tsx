@@ -37,6 +37,7 @@ export default function OrdenesPage() {
   const { can, isRestricted } = useAuthStore();
   // El operador puede crear órdenes pero NO aprobar/pagar/ver las listas.
   const canApprove = can('payment_orders.approve');
+  const canCreate = can('payment_orders.write');
   const restricted = isRestricted();
   // Solo cargamos el listado cuando el usuario puede aprobar/ver montos.
   const { data: orders, isLoading, mutate } = useSWR<PaymentOrder[]>(
@@ -73,13 +74,15 @@ export default function OrdenesPage() {
         <h1 className="text-lg font-medium">
           Órdenes de pago {summary ? `— ${summary.project.name}` : ''}
         </h1>
-        <button
-          onClick={() => (restricted ? setShowCreate(true) : setShowTypePicker(true))}
-          disabled={!summary}
-          className="btn-primary disabled:opacity-50"
-        >
-          + Nueva orden de pago
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => (restricted ? setShowCreate(true) : setShowTypePicker(true))}
+            disabled={!summary}
+            className="btn-primary disabled:opacity-50"
+          >
+            + Nueva orden de pago
+          </button>
+        )}
       </div>
 
       <p className="mb-3 text-xs text-ink-secondary">

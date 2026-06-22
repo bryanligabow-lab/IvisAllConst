@@ -10,10 +10,12 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import type { Gasto, ProjectSummary } from '@/types';
 
 export default function GastosPage() {
   const params = useParams<{ id: string }>();
+  const canWrite = useAuthStore().can('gastos.write');
   const { data: summary, mutate: mutateSummary } = useSWR<ProjectSummary>(
     `/projects/${params.id}/summary`,
     apiGet,
@@ -59,9 +61,11 @@ export default function GastosPage() {
         <h1 className="text-lg font-medium">
           Registro de gastos {summary ? `— ${summary.project.name}` : ''}
         </h1>
-        <button onClick={() => setShowCreate(true)} className="btn-primary">
-          + Nuevo gasto
-        </button>
+        {canWrite && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + Nuevo gasto
+          </button>
+        )}
       </div>
 
       <div className="mb-3 flex flex-wrap items-end gap-3">
@@ -121,14 +125,16 @@ export default function GastosPage() {
                   <div className="shrink-0 text-sm font-medium text-danger">
                     -{formatCurrency(Number(g.amount), true)}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete({ id: g.id, description: g.description })}
-                    className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                    title="Eliminar gasto"
-                  >
-                    🗑️
-                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete({ id: g.id, description: g.description })}
+                      className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                      title="Eliminar gasto"
+                    >
+                      🗑️
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

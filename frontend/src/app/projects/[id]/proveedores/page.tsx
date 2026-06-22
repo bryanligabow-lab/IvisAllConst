@@ -9,10 +9,12 @@ import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateProviderModal } from '@/components/forms/CreateProviderModal';
 import { apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
+import { useAuthStore } from '@/stores/authStore';
 import type { ProjectSummary, Provider } from '@/types';
 
 export default function ProjectProvidersPage() {
   const params = useParams<{ id: string }>();
+  const canWrite = useAuthStore().can('providers.write');
   const { data: summary } = useSWR<ProjectSummary>(
     `/projects/${params.id}/summary`,
     apiGet,
@@ -45,9 +47,11 @@ export default function ProjectProvidersPage() {
             )}
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
-          + Nuevo proveedor
-        </button>
+        {canWrite && (
+          <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap">
+            + Nuevo proveedor
+          </button>
+        )}
       </div>
 
       <CreateProviderModal

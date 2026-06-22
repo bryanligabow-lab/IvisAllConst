@@ -183,6 +183,44 @@ async function main() {
     });
   }
 
+  // ---------- Rol viewer (solo lectura) ----------
+  // Ve TODA la información del sistema pero no puede crear/editar/eliminar nada.
+  // Solo permisos *.read (de negocio) + exportar (descargar PDF/Excel = ver).
+  // No incluye users.* (no entra al Directorio).
+  const viewer = await prisma.role.upsert({
+    where: { name: 'viewer' },
+    update: {},
+    create: {
+      name: 'viewer',
+      description: 'Solo lectura: ve toda la información, no puede editar nada',
+      isSystem: true,
+    },
+  });
+
+  const viewerPermNames = [
+    'projects.read',
+    'rubros.read',
+    'gastos.read',
+    'planillas.read',
+    'planillas.export',
+    'payment_orders.read',
+    'providers.read',
+    'employees.read',
+    'payroll.read',
+    'proformas.read',
+    'proformas.export',
+    'clients.read',
+    'attendance.read',
+    'bitacora.read',
+  ];
+  for (const p of allPermissions.filter((x) => viewerPermNames.includes(x.name))) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: viewer.id, permissionId: p.id } },
+      update: {},
+      create: { roleId: viewer.id, permissionId: p.id },
+    });
+  }
+
   // ---------- Usuario admin ----------
   const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@ivisallconst.local';
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin123!';

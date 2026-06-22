@@ -5,7 +5,7 @@ import type { AuthUser } from '@/types';
 import { apiGet } from '@/lib/api';
 
 // Roles que NO están restringidos por proyecto (ven todo el sistema).
-const UNRESTRICTED_ROLES = ['super_admin', 'admin', 'user'];
+const UNRESTRICTED_ROLES = ['super_admin', 'admin', 'user', 'viewer'];
 
 interface AuthState {
   user: AuthUser | null;

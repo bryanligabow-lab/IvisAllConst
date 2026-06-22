@@ -10,6 +10,7 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 
 interface ProformaListItem {
   id: string;
@@ -40,6 +41,8 @@ const STATUS_CLASS = {
 export default function ProformasPage() {
   const router = useRouter();
   const { data, isLoading, mutate } = useSWR<ProformaListItem[]>('/proformas', apiGet);
+  const { can } = useAuthStore();
+  const canWrite = can('proformas.write');
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<ProformaEditData | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
@@ -68,9 +71,11 @@ export default function ProformasPage() {
           <Link href={ROUTES.PRODUCTOS} className="btn-secondary">
             📦 Productos
           </Link>
-          <button onClick={() => setShowCreate(true)} className="btn-primary">
-            + Nueva proforma
-          </button>
+          {canWrite && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary">
+              + Nueva proforma
+            </button>
+          )}
         </div>
       </div>
 
@@ -152,21 +157,25 @@ export default function ProformasPage() {
                       >
                         👁️
                       </Link>
-                      <button
-                        onClick={() => openEdit(p.id)}
-                        disabled={loadingEditId === p.id}
-                        className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted disabled:opacity-50"
-                        title="Editar"
-                      >
-                        {loadingEditId === p.id ? '…' : '✏️'}
-                      </button>
-                      <button
-                        onClick={() => setPendingDelete({ id: p.id, number: p.number, clientName: p.clientName })}
-                        className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
-                        title="Eliminar"
-                      >
-                        🗑️
-                      </button>
+                      {canWrite && (
+                        <>
+                          <button
+                            onClick={() => openEdit(p.id)}
+                            disabled={loadingEditId === p.id}
+                            className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted disabled:opacity-50"
+                            title="Editar"
+                          >
+                            {loadingEditId === p.id ? '…' : '✏️'}
+                          </button>
+                          <button
+                            onClick={() => setPendingDelete({ id: p.id, number: p.number, clientName: p.clientName })}
+                            className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
+                            title="Eliminar"
+                          >
+                            🗑️
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

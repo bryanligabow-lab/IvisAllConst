@@ -8,7 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
  * Roles que ven TODOS los proyectos (sin restricción por asignación).
  * El resto (p. ej. `operador`) queda limitado a sus proyectos asignados.
  */
-const UNRESTRICTED_ROLES: string[] = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.USER];
+const UNRESTRICTED_ROLES: string[] = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.USER, ROLES.VIEWER];
 
 export function isScopedUser(req: Request): boolean {
   if (!req.user) return false;

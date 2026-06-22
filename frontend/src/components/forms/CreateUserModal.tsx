@@ -12,6 +12,15 @@ interface Role {
   isSystem?: boolean;
 }
 
+// Etiquetas amigables por rol para el selector.
+const ROLE_INFO: Record<string, { label: string; desc: string }> = {
+  super_admin: { label: 'Super administrador', desc: 'Acceso total al sistema' },
+  admin: { label: 'Administrador', desc: 'Gestiona casi todo' },
+  user: { label: 'Usuario', desc: 'Operación general (crea y edita)' },
+  operador: { label: 'Operador (residente)', desc: 'Limitado a sus proyectos asignados' },
+  viewer: { label: 'Solo lectura', desc: 'Ve toda la información, no puede editar nada' },
+};
+
 interface ProjectLite {
   id: string;
   code: string;
@@ -243,10 +252,11 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
                 {roles.map((r) => (
                   <label
                     key={r.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                    className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
                   >
                     <input
                       type="checkbox"
+                      className="mt-0.5"
                       checked={selectedRoles.includes(r.id)}
                       onChange={(e) => {
                         setSelectedRoles((prev) =>
@@ -254,7 +264,14 @@ export function CreateUserModal({ open, onClose, onCreated }: Props) {
                         );
                       }}
                     />
-                    <span>{r.name}</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium">{ROLE_INFO[r.name]?.label ?? r.name}</span>
+                      {ROLE_INFO[r.name]?.desc && (
+                        <span className="block text-[11px] text-slate-500">
+                          {ROLE_INFO[r.name].desc}
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))}
               </div>
