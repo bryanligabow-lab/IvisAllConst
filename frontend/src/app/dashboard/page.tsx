@@ -34,6 +34,7 @@ interface DashboardProjectStat {
   balance: number;
   progressContract: number;
   progressBudget: number;
+  workProgressPercent?: number;
 }
 
 interface DashboardStats {
@@ -283,10 +284,16 @@ function ProjectMiniCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const pctBudget = Math.round(project.progressBudget * 100);
-  const isOver = project.budgeted > 0 && project.spent > project.budgeted;
-  // Saldo = lo contratado menos lo ejecutado (lo que queda).
-  const saldo = project.contractAmount - project.spent;
+  // Utilidad = lo contratado menos lo ejecutado (lo que se ha ganado).
+  const utilidad = project.contractAmount - project.spent;
+  const utilidadPct =
+    project.contractAmount > 0 ? Math.round((utilidad / project.contractAmount) * 100) : 0;
+  // Avance FÍSICO de obra (manual). Proyecto completado → 100%.
+  const avanceObra = Math.round(
+    project.status === 'COMPLETED' && !project.workProgressPercent
+      ? 100
+      : (project.workProgressPercent ?? 0),
+  );
 
   return (
     <div className="group relative rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
@@ -356,34 +363,47 @@ function ProjectMiniCard({
               <span className="font-medium">{formatCurrency(project.spent)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-ink-tertiary">Saldo</span>
-              <span className={`font-medium ${saldo < 0 ? 'text-danger' : 'text-success'}`}>
-                {formatCurrency(saldo)}
+              <span className="text-ink-tertiary">Utilidad</span>
+              <span className={`font-medium ${utilidad < 0 ? 'text-danger' : 'text-success'}`}>
+                {formatCurrency(utilidad)}
               </span>
             </div>
           </div>
         )}
 
+        {/* Barra: avance físico de obra */}
         <div className="mt-2">
           <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
-            <span>Avance vs presupuesto</span>
-            <span className={`font-semibold ${isOver ? 'text-danger' : 'text-ink-primary'}`}>
-              {project.budgeted > 0 ? `${pctBudget}%` : '—'}
-            </span>
+            <span>Avance de obra</span>
+            <span className="font-semibold text-ink-primary">{avanceObra}%</span>
           </div>
           <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
             <div
               className={`h-full transition-all ${
-                isOver
-                  ? 'bg-danger'
-                  : pctBudget > 85
-                    ? 'bg-warning'
-                    : 'bg-gradient-to-r from-brand to-brand-accent'
+                avanceObra >= 100 ? 'bg-success' : 'bg-gradient-to-r from-brand to-brand-accent'
               }`}
-              style={{ width: `${Math.min(100, pctBudget)}%` }}
+              style={{ width: `${Math.min(100, avanceObra)}%` }}
             />
           </div>
         </div>
+
+        {/* Barra: utilidad (% del contrato) + monto */}
+        {!hideMoney && (
+          <div className="mt-2">
+            <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
+              <span>Utilidad (vs contrato)</span>
+              <span className={`font-semibold ${utilidad < 0 ? 'text-danger' : 'text-success'}`}>
+                {utilidadPct}% · {formatCurrency(utilidad)}
+              </span>
+            </div>
+            <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
+              <div
+                className={`h-full transition-all ${utilidad < 0 ? 'bg-danger' : 'bg-success'}`}
+                style={{ width: `${Math.min(100, Math.max(0, utilidadPct))}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {!hideMoney && project.pending > 0 && (
           <div className="mt-2 flex items-center justify-between rounded-md bg-danger-soft px-2 py-1 text-[10px]">

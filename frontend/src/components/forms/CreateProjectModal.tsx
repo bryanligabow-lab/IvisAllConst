@@ -20,6 +20,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [executionType, setExecutionType] = useState<ExecutionType>('OWN');
   const [subcontractorId, setSubcontractorId] = useState('');
   const [creacomProfitPercent, setCreacomProfitPercent] = useState('0');
+  const [workProgressPercent, setWorkProgressPercent] = useState('0');
   const [city, setCity] = useState('');
   // Catálogos para los desplegables.
   const [clients, setClients] = useState<Client[]>([]);
@@ -67,6 +68,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setExecutionType(initial.executionType ?? 'OWN');
       setSubcontractorId(initial.subcontractorId ?? '');
       setCreacomProfitPercent(String(initial.creacomProfitPercent ?? 0));
+      setWorkProgressPercent(String(initial.workProgressPercent ?? 0));
       setCity(initial.city ?? '');
       setContractAmount(String(initial.contractAmount));
       setAdvancePercent(String(initial.advancePercent));
@@ -98,6 +100,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setStartDate('');
       setEndDate('');
       setStatus('ACTIVE');
+      setWorkProgressPercent('0');
     }
     setNewClientName('');
     setNewSubName('');
@@ -163,6 +166,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
         isWithholdingAgent,
         vatRetentionPercent: isWithholdingAgent ? Number(vatRetentionPercent) : 0,
         incomeRetentionPercent: isWithholdingAgent ? Number(incomeRetentionPercent) : 0,
+        workProgressPercent: Number(workProgressPercent) || 0,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         status,
@@ -502,6 +506,23 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
             </select>
           </Field>
         </div>
+
+        <Field
+          label="Avance de obra %"
+          hint="Avance FÍSICO de la obra (lo registra el residente). 100 = terminada. Se ve en la tarjeta del dashboard."
+        >
+          <input
+            type="number"
+            inputMode="decimal"
+            step="1"
+            min="0"
+            max="100"
+            value={workProgressPercent}
+            onChange={(e) => setWorkProgressPercent(e.target.value)}
+            className="input"
+            placeholder="0"
+          />
+        </Field>
 
         {error && (
           <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>

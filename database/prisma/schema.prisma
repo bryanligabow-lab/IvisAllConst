@@ -215,6 +215,8 @@ model Project {
   incomeRetentionPercent Float   @default(0) @map("income_retention_percent")
   // % de ganancia de CREACOM cuando la obra es subcontratada.
   creacomProfitPercent   Float   @default(0) @map("creacom_profit_percent")
+  // % de avance FÍSICO de obra (lo registra el residente; 100 = terminada).
+  workProgressPercent    Float   @default(0) @map("work_progress_percent")
   startDate        DateTime? @map("start_date")
   endDate          DateTime? @map("end_date")
   status           String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED

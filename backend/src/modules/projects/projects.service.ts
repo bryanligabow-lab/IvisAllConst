@@ -177,6 +177,7 @@ export class ProjectsService {
         subcontractorId: executionType === 'SUBCONTRACTED' ? (dto.subcontractorId ?? null) : null,
         creacomProfitPercent:
           executionType === 'SUBCONTRACTED' ? (dto.creacomProfitPercent ?? 0) : 0,
+        workProgressPercent: dto.workProgressPercent ?? 0,
         description: dto.description ?? null,
         city: dto.city ?? null,
         latitude: dto.latitude ?? null,
@@ -330,6 +331,12 @@ export class ProjectsService {
         balance: budgeted - spent,
         progressContract: Math.min(1, progressContract),
         progressBudget: Math.min(1, progressBudget),
+        // Avance físico de obra registrado (manual). Si está en 0 y el proyecto
+        // ya está COMPLETED, mostramos 100%.
+        workProgressPercent:
+          Number(p.workProgressPercent ?? 0) === 0 && p.status === 'COMPLETED'
+            ? 100
+            : Number(p.workProgressPercent ?? 0),
       };
     });
 

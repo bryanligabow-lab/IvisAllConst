@@ -27,6 +27,7 @@ export interface Project {
   vatRetentionPercent?: string | number;
   incomeRetentionPercent?: string | number;
   creacomProfitPercent?: string | number;
+  workProgressPercent?: string | number;
   startDate: string | null;
   endDate: string | null;
   status: ProjectStatus;

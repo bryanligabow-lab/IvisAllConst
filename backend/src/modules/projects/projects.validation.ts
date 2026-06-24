@@ -25,6 +25,8 @@ export const createProjectSchema = z.object({
   subcontractorId: z.string().uuid().optional().nullable(),
   // % de ganancia de CREACOM cuando la obra es subcontratada.
   creacomProfitPercent: z.coerce.number().min(0).max(100).default(0).optional(),
+  // % de avance físico de obra (0–100).
+  workProgressPercent: z.coerce.number().min(0).max(100).default(0).optional(),
   description: z.string().max(2000).optional(),
   city: z.string().max(120).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
