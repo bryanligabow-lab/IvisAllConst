@@ -98,6 +98,7 @@ export interface Gasto {
   gastoDate: string;
   providerId?: string | null;
   paymentOrderId?: string | null;
+  invoiceImageMime?: string | null;
   rubro?: { code: string; name: string };
   provider?: { id: string; name: string; service?: string | null } | null;
   paymentOrder?: { id: string; description: string } | null;
@@ -188,6 +189,7 @@ export interface PaymentOrder {
   status: PaymentOrderStatus;
   paidAmount: number;
   pendingAmount: number;
+  invoiceImageMime?: string | null;
   rubro?: { code: string; name: string } | null;
   items?: PaymentOrderItem[];
   provider?: { id: string; name: string; ruc?: string | null; service?: string | null } | null;

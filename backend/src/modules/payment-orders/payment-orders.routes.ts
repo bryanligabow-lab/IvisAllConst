@@ -48,6 +48,13 @@ const createSchema = z
     rubroId: z.string().uuid().optional(),
     amount: z.coerce.number().positive().optional(),
     items: z.array(orderItemSchema).min(1).optional(),
+    // Foto/PDF de la factura (base64 sin prefijo).
+    invoiceBase64: z.string().min(10).nullable().optional(),
+    invoiceMime: z
+      .string()
+      .regex(/^(image\/|application\/pdf$)/, 'Tipo de archivo no válido')
+      .nullable()
+      .optional(),
   })
   .refine((d) => (d.items && d.items.length > 0) || (d.rubroId && d.amount), {
     message: 'Indica un rubro con su monto o un desglose por rubros',
@@ -108,9 +115,32 @@ paymentOrdersRouter.get(
         ...(req.query.status ? { status: req.query.status as string } : {}),
       },
       include: orderInclude,
+      omit: { invoiceImageData: true },
       orderBy: { scheduledDate: 'asc' },
     });
     return success(res, items.map(decorateOrder));
+  }),
+);
+
+// Sirve la foto/PDF de la factura de la orden (protegido por token + scope).
+paymentOrdersRouter.get(
+  '/:id/invoice',
+  requirePermission(PERMISSIONS.PAYMENT_ORDERS_READ),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    const o = await prisma.paymentOrder.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+      select: { projectId: true, invoiceImageData: true, invoiceImageMime: true },
+    });
+    if (!o || !o.invoiceImageData || !o.invoiceImageMime) {
+      throw new NotFoundError('Factura no encontrada');
+    }
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(o.projectId)) {
+      throw new ForbiddenError('No tienes acceso a este proyecto');
+    }
+    res.setHeader('Content-Type', o.invoiceImageMime);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(o.invoiceImageData));
   }),
 );
 
@@ -146,6 +176,7 @@ paymentOrdersRouter.post(
     });
     if (!provider) throw new NotFoundError('Proveedor no encontrado');
 
+    const hasImg = !!req.body.invoiceBase64;
     const created = await prisma.paymentOrder.create({
       data: {
         projectId: req.body.projectId,
@@ -157,12 +188,15 @@ paymentOrdersRouter.post(
         paymentMethod: req.body.paymentMethod ?? null,
         amount: totalAmount,
         scheduledDate: req.body.scheduledDate,
+        invoiceImageData: hasImg ? Buffer.from(req.body.invoiceBase64, 'base64') : null,
+        invoiceImageMime: hasImg ? (req.body.invoiceMime ?? 'image/jpeg') : null,
         createdBy: req.user.id,
         items: {
           create: lines.map((l) => ({ rubroId: l.rubroId, amount: Number(l.amount) })),
         },
       },
       include: orderInclude,
+      omit: { invoiceImageData: true },
     });
     return success(res, decorateOrder(created), 201);
   }),
@@ -254,6 +288,9 @@ paymentOrdersRouter.post(
             paymentOrderId: order.id,
             description: lines.length > 1 ? `${baseDesc} (rubro)` : baseDesc,
             invoiceNumber: order.invoiceNumber,
+            // Hereda la foto de la factura cargada en la orden.
+            invoiceImageData: order.invoiceImageData,
+            invoiceImageMime: order.invoiceImageMime,
             amount: sh.amount,
             gastoDate: now,
             createdBy: userId,
@@ -271,6 +308,7 @@ paymentOrdersRouter.post(
           ...(isFullyPaid ? { status: 'PAID', paidAt: now } : {}),
         },
         include: orderInclude,
+        omit: { invoiceImageData: true },
       });
 
       return updated;

@@ -9,6 +9,7 @@ import { CreatePaymentOrderModal } from '@/components/forms/CreatePaymentOrderMo
 import { PaymentDialog } from '@/components/forms/PaymentDialog';
 import { PaymentTypePicker, type PaymentType } from '@/components/forms/PaymentTypePicker';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
+import { InvoiceThumb } from '@/components/ui/InvoiceThumb';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatDate, formatCalendarDate } from '@/lib/format';
@@ -313,6 +314,11 @@ function OrderCard({ order, statusLabel, statusClass, onPay, onDelete, canPay = 
           {order.paymentMethod && (
             <div className="mt-0.5 text-xs text-ink-secondary">
               💳 Método: <span className="font-medium text-ink-primary">{PAYMENT_METHOD_LABEL[order.paymentMethod]}</span>
+            </div>
+          )}
+          {order.invoiceImageMime && (
+            <div className="mt-1">
+              <InvoiceThumb path={`/payment-orders/${order.id}/invoice`} mime={order.invoiceImageMime} />
             </div>
           )}
         </div>

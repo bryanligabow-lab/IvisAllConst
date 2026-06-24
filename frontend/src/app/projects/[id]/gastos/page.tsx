@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateGastoModal } from '@/components/forms/CreateGastoModal';
+import { InvoiceThumb } from '@/components/ui/InvoiceThumb';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiGet } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
@@ -122,6 +123,11 @@ export default function GastosPage() {
                       {g.invoiceNumber && ` · Factura ${g.invoiceNumber}`}
                     </div>
                   </div>
+                  {g.invoiceImageMime && (
+                    <div className="shrink-0">
+                      <InvoiceThumb path={`/gastos/${g.id}/invoice`} mime={g.invoiceImageMime} />
+                    </div>
+                  )}
                   <div className="shrink-0 text-sm font-medium text-danger">
                     -{formatCurrency(Number(g.amount), true)}
                   </div>

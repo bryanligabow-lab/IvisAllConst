@@ -1,7 +1,8 @@
 // IvisAllConst — Esquema de base de datos
 // Producción: PostgreSQL (Railway lo provee vía DATABASE_URL).
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
@@ -333,6 +334,9 @@ model Gasto {
   amount         Float
   gastoDate      DateTime  @map("gasto_date")
   attachmentUrl  String?   @map("attachment_url")
+  // Foto/PDF de la factura (binario en BD).
+  invoiceImageData Bytes?  @map("invoice_image_data")
+  invoiceImageMime String? @map("invoice_image_mime")
   paymentOrderId String?   @map("payment_order_id")
   providerId     String?   @map("provider_id")
   employeeId     String?   @map("employee_id")
@@ -417,6 +421,9 @@ model PaymentOrder {
   description   String
   amount        Float
   invoiceNumber String?   @map("invoice_number")
+  // Foto/PDF de la factura (binario en BD); se copia a los gastos al pagar.
+  invoiceImageData Bytes?  @map("invoice_image_data")
+  invoiceImageMime String? @map("invoice_image_mime")
   paymentMethod String?   @map("payment_method") // CASH | TRANSFER | CHECK | CREDIT_CARD | DEBIT_CARD | OTHER
   scheduledDate DateTime  @map("scheduled_date")
   paidAt        DateTime? @map("paid_at")

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
+import { InvoiceUpload, type InvoiceFile } from '@/components/forms/InvoiceUpload';
 import { apiPost, ApiClientError } from '@/lib/api';
 import type { Gasto, RubroSummary } from '@/types';
 
@@ -21,6 +22,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [gastoDate, setGastoDate] = useState(new Date().toISOString().slice(0, 10));
+  const [invoice, setInvoice] = useState<InvoiceFile | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +33,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
     setInvoiceNumber('');
     setAmount('');
     setGastoDate(new Date().toISOString().slice(0, 10));
+    setInvoice(null);
     setError(null);
   }
 
@@ -51,6 +54,8 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
         invoiceNumber: invoiceNumber || undefined,
         amount: Number(amount),
         gastoDate,
+        invoiceBase64: invoice?.base64,
+        invoiceMime: invoice?.mime,
       });
       reset();
       onCreated();
@@ -124,6 +129,8 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
         </Field>
 
         <ProviderSelector value={providerId} onChange={setProviderId} />
+
+        <InvoiceUpload value={invoice} onChange={setInvoice} onError={setError} />
 
         {error && (
           <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>

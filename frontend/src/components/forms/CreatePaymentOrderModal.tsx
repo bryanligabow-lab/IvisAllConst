@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
+import { InvoiceUpload, type InvoiceFile } from '@/components/forms/InvoiceUpload';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { apiPost, ApiClientError } from '@/lib/api';
 import type { RubroSummary } from '@/types';
@@ -33,6 +34,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
     return d.toISOString().slice(0, 10);
   })();
   const [scheduledDate, setScheduledDate] = useState(defaultDate);
+  const [invoice, setInvoice] = useState<InvoiceFile | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +46,7 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
     setInvoiceNumber('');
     setLines([{ rubroId: '', amount: '' }]);
     setScheduledDate(defaultDate);
+    setInvoice(null);
     setError(null);
   }
 
@@ -83,6 +86,8 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
         // Siempre enviamos el desglose; el backend resuelve 1 o varios rubros.
         items: cleanLines,
         scheduledDate,
+        invoiceBase64: invoice?.base64,
+        invoiceMime: invoice?.mime,
       });
       reset();
       onCreated();
@@ -183,6 +188,8 @@ export function CreatePaymentOrderModal({ open, onClose, projectId, rubros, onCr
             className="input"
           />
         </Field>
+
+        <InvoiceUpload value={invoice} onChange={setInvoice} onError={setError} />
 
         <p className="text-xs text-ink-secondary">
           La orden queda en estado <strong>pendiente</strong>. El <strong>método de pago</strong> se

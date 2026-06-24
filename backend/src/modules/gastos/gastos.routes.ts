@@ -24,6 +24,13 @@ const createGastoSchema = z.object({
   amount: z.coerce.number().positive(),
   gastoDate: calendarDateSchema,
   attachmentUrl: z.string().url().max(2000).optional(),
+  // Foto/PDF de la factura (base64 sin prefijo). null para quitarla.
+  invoiceBase64: z.string().min(10).nullable().optional(),
+  invoiceMime: z
+    .string()
+    .regex(/^(image\/|application\/pdf$)/, 'Tipo de archivo no válido')
+    .nullable()
+    .optional(),
 });
 
 const updateGastoSchema = createGastoSchema.partial().omit({ projectId: true });
@@ -61,6 +68,7 @@ gastosRouter.get(
         skip,
         take,
         orderBy: { gastoDate: 'desc' },
+        omit: { invoiceImageData: true },
         include: {
           rubro: { select: { code: true, name: true } },
           provider: { select: { id: true, name: true, service: true } },
@@ -86,13 +94,17 @@ gastosRouter.post(
     });
     if (!rubro) throw new NotFoundError(ERRORS.RUBRO_NOT_IN_PROJECT);
 
-    const { providerId, ...rest } = req.body;
+    const { providerId, invoiceBase64, invoiceMime, ...rest } = req.body;
+    const hasImg = !!invoiceBase64;
     const created = await prisma.gasto.create({
       data: {
         ...rest,
         providerId: providerId || null,
+        invoiceImageData: hasImg ? Buffer.from(invoiceBase64, 'base64') : null,
+        invoiceImageMime: hasImg ? (invoiceMime ?? 'image/jpeg') : null,
         createdBy: req.user.id,
       },
+      omit: { invoiceImageData: true },
     });
     return success(res, created, 201);
   }),
@@ -108,11 +120,40 @@ gastosRouter.patch(
       where: { id: req.params.id, deletedAt: null },
     });
     if (!exists) throw new NotFoundError(ERRORS.GASTO_NOT_FOUND);
+    const { invoiceBase64, invoiceMime, ...rest } = req.body;
+    const data: Record<string, unknown> = { ...rest };
+    if (invoiceBase64 === null) {
+      data.invoiceImageData = null;
+      data.invoiceImageMime = null;
+    } else if (typeof invoiceBase64 === 'string') {
+      data.invoiceImageData = Buffer.from(invoiceBase64, 'base64');
+      data.invoiceImageMime = invoiceMime ?? 'image/jpeg';
+    }
     const updated = await prisma.gasto.update({
       where: { id: req.params.id },
-      data: req.body,
+      data,
+      omit: { invoiceImageData: true },
     });
     return success(res, updated);
+  }),
+);
+
+// Sirve la foto/PDF de la factura del gasto (protegido por token).
+gastosRouter.get(
+  '/:id/invoice',
+  requirePermission(PERMISSIONS.GASTOS_READ),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    const g = await prisma.gasto.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+      select: { invoiceImageData: true, invoiceImageMime: true },
+    });
+    if (!g || !g.invoiceImageData || !g.invoiceImageMime) {
+      throw new NotFoundError('Factura no encontrada');
+    }
+    res.setHeader('Content-Type', g.invoiceImageMime);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(g.invoiceImageData));
   }),
 );
 
