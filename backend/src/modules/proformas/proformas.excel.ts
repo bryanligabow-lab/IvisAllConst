@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { toRenderableImage } from '../../shared/utils/image.util';
+import { buildAttachment } from './proforma-filename';
 
 const RED = 'FFC73E2C';
 const WHITE = 'FFFFFFFF';
@@ -233,9 +234,6 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   );
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="proforma-${p.number}.xlsx"`,
-  );
+  res.setHeader('Content-Disposition', buildAttachment(p, 'xlsx'));
   res.send(Buffer.from(buffer));
 }

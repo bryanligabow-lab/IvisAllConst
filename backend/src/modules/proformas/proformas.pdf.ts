@@ -6,6 +6,7 @@ import fs from 'fs';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { toRenderableImage } from '../../shared/utils/image.util';
+import { buildAttachment } from './proforma-filename';
 
 const RED = '#C73E2C';
 const DARK = '#1A1A1A';
@@ -44,10 +45,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   });
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename="proforma-${p.number}.pdf"`,
-  );
+  res.setHeader('Content-Disposition', buildAttachment(p, 'pdf'));
   doc.pipe(res);
 
   const PAGE_W = doc.page.width;
