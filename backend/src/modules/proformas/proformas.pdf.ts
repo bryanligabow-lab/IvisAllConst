@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
+import { toRenderableImage } from '../../shared/utils/image.util';
 
 const RED = '#C73E2C';
 const DARK = '#1A1A1A';
@@ -143,6 +144,13 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   doc.text('V. UNITARIO', colX[3], headerTextY, { width: colWidths[3], align: 'center' });
   doc.text('V. TOTAL', colX[4], headerTextY, { width: colWidths[4], align: 'center' });
 
+  // Pre-convertir cada imagen a PNG/JPEG (pdfkit no dibuja AVIF/WebP/HEIC…).
+  const renderable = new Map<string, Buffer>();
+  for (const img of p.images) {
+    const r = await toRenderableImage(Buffer.from(img.data), img.mimeType);
+    renderable.set(img.id, r.buffer);
+  }
+
   // Agrupar imágenes: por rubro (itemIndex) vs generales (sin ítem → al final).
   const imagesByItem = new Map<number, typeof p.images>();
   const generalImages: typeof p.images = [];
@@ -208,8 +216,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
       const gap = 4;
       const cw = (imgAreaW - gap * (n - 1)) / n;
       for (let k = 0; k < n; k++) {
+        const buf = renderable.get(imgs[k].id);
+        if (!buf) continue;
         try {
-          doc.image(Buffer.from(imgs[k].data), imgAreaX + k * (cw + gap), rowY + 7, {
+          doc.image(buf, imgAreaX + k * (cw + gap), rowY + 7, {
             fit: [cw, imgBoxH],
             align: 'center',
             valign: 'center',
@@ -254,8 +264,9 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     let icol = 0;
     for (const img of generalImages) {
       const ix = M + icol * (cellW + gap);
+      const buf = renderable.get(img.id) ?? Buffer.from(img.data);
       try {
-        doc.image(Buffer.from(img.data), ix, iy, {
+        doc.image(buf, ix, iy, {
           fit: [cellW, boxH],
           align: 'center',
           valign: 'center',

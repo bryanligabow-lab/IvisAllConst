@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import type { Response } from 'express';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
+import { toRenderableImage } from '../../shared/utils/image.util';
 
 const RED = 'FFC73E2C';
 const WHITE = 'FFFFFFFF';
@@ -201,11 +202,14 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
 
     let imgRow = 3;
     for (const img of p.images) {
-      const ext = (img.mimeType.split('/')[1] || 'png').toLowerCase();
-      const extension = ext === 'jpg' ? 'jpeg' : (ext as 'png' | 'jpeg' | 'gif');
       try {
+        // exceljs solo acepta png/jpeg/gif → convertimos AVIF/WebP/HEIC… a PNG.
+        const { buffer, ext: extension } = await toRenderableImage(
+          Buffer.from(img.data),
+          img.mimeType,
+        );
         const imgId = wb.addImage({
-          buffer: Buffer.from(img.data) as unknown as ArrayBuffer,
+          buffer: buffer as unknown as ArrayBuffer,
           extension,
         });
         imgSheet.addImage(imgId, {
