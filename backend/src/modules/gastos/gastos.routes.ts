@@ -15,6 +15,12 @@ import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
 import { exportGastosExcel } from './gastos.excel';
 
+const docSchema = z.object({
+  base64: z.string().min(10),
+  mime: z.string().regex(/^(image\/|application\/pdf$)/, 'Tipo de archivo no válido'),
+  filename: z.string().max(200).optional(),
+});
+
 const createGastoSchema = z.object({
   projectId: z.string().uuid(),
   rubroId: z.string().uuid(),
@@ -33,9 +39,14 @@ const createGastoSchema = z.object({
     .regex(/^(image\/|application\/pdf$)/, 'Tipo de archivo no válido')
     .nullable()
     .optional(),
+  // Varias facturas/documentos (foto o PDF) a adjuntar.
+  documents: z.array(docSchema).max(15).optional(),
 });
 
-const updateGastoSchema = createGastoSchema.partial().omit({ projectId: true });
+const updateGastoSchema = createGastoSchema
+  .partial()
+  .omit({ projectId: true })
+  .extend({ removeDocumentIds: z.array(z.string().uuid()).optional() });
 
 const listQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
@@ -75,6 +86,10 @@ gastosRouter.get(
           rubro: { select: { code: true, name: true } },
           provider: { select: { id: true, name: true, service: true } },
           paymentOrder: { select: { id: true, description: true } },
+          documents: {
+            select: { id: true, mimeType: true, filename: true },
+            orderBy: { orderIndex: 'asc' },
+          },
         },
       }),
       prisma.gasto.count({ where }),
@@ -96,14 +111,23 @@ gastosRouter.post(
     });
     if (!rubro) throw new NotFoundError(ERRORS.RUBRO_NOT_IN_PROJECT);
 
-    const { providerId, invoiceBase64, invoiceMime, ...rest } = req.body;
+    const { providerId, invoiceBase64, invoiceMime, documents, ...rest } = req.body;
     const hasImg = !!invoiceBase64;
+    const docs = (documents ?? []) as Array<z.infer<typeof docSchema>>;
     const created = await prisma.gasto.create({
       data: {
         ...rest,
         providerId: providerId || null,
         invoiceImageData: hasImg ? Buffer.from(invoiceBase64, 'base64') : null,
         invoiceImageMime: hasImg ? (invoiceMime ?? 'image/jpeg') : null,
+        documents: {
+          create: docs.map((d, i) => ({
+            orderIndex: i,
+            mimeType: d.mime,
+            data: Buffer.from(d.base64, 'base64'),
+            filename: d.filename ?? null,
+          })),
+        },
         createdBy: req.user.id,
       },
       omit: { invoiceImageData: true },
@@ -122,7 +146,7 @@ gastosRouter.patch(
       where: { id: req.params.id, deletedAt: null },
     });
     if (!exists) throw new NotFoundError(ERRORS.GASTO_NOT_FOUND);
-    const { invoiceBase64, invoiceMime, ...rest } = req.body;
+    const { invoiceBase64, invoiceMime, documents, removeDocumentIds, ...rest } = req.body;
     const data: Record<string, unknown> = { ...rest };
     if (invoiceBase64 === null) {
       data.invoiceImageData = null;
@@ -131,6 +155,27 @@ gastosRouter.patch(
       data.invoiceImageData = Buffer.from(invoiceBase64, 'base64');
       data.invoiceImageMime = invoiceMime ?? 'image/jpeg';
     }
+
+    const docs = (documents ?? []) as Array<z.infer<typeof docSchema>>;
+    const toRemove = (removeDocumentIds ?? []) as string[];
+    if (toRemove.length > 0) {
+      await prisma.gastoDocument.deleteMany({
+        where: { id: { in: toRemove }, gastoId: req.params.id },
+      });
+    }
+    if (docs.length > 0) {
+      const base = await prisma.gastoDocument.count({ where: { gastoId: req.params.id } });
+      await prisma.gastoDocument.createMany({
+        data: docs.map((d, i) => ({
+          gastoId: req.params.id,
+          orderIndex: base + i,
+          mimeType: d.mime,
+          data: Buffer.from(d.base64, 'base64'),
+          filename: d.filename ?? null,
+        })),
+      });
+    }
+
     const updated = await prisma.gasto.update({
       where: { id: req.params.id },
       data,
@@ -156,6 +201,22 @@ gastosRouter.get(
     res.setHeader('Content-Type', g.invoiceImageMime);
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(Buffer.from(g.invoiceImageData));
+  }),
+);
+
+// Sirve un documento (factura) específico del gasto.
+gastosRouter.get(
+  '/:id/documents/:docId',
+  requirePermission(PERMISSIONS.GASTOS_READ),
+  asyncHandler(async (req, res) => {
+    const doc = await prisma.gastoDocument.findFirst({
+      where: { id: req.params.docId, gastoId: req.params.id },
+      select: { mimeType: true, data: true },
+    });
+    if (!doc) throw new NotFoundError('Documento no encontrado');
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(Buffer.from(doc.data));
   }),
 );
 

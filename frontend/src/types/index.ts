@@ -100,6 +100,7 @@ export interface Gasto {
   paymentOrderId?: string | null;
   kind?: string;
   invoiceImageMime?: string | null;
+  documents?: Array<{ id: string; mimeType: string; filename: string | null }>;
   rubro?: { code: string; name: string };
   provider?: { id: string; name: string; service?: string | null } | null;
   paymentOrder?: { id: string; description: string } | null;

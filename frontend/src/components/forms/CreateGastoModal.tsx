@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
-import { InvoiceUpload, type InvoiceFile } from '@/components/forms/InvoiceUpload';
+import type { InvoiceFile } from '@/components/forms/InvoiceUpload';
+import { GastoDocsField, type ExistingDoc } from '@/components/forms/GastoDocsField';
 import { apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import type { Gasto, RubroSummary } from '@/types';
 
@@ -26,10 +27,31 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, initial, on
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [gastoDate, setGastoDate] = useState(new Date().toISOString().slice(0, 10));
-  const [invoice, setInvoice] = useState<InvoiceFile | null>(null);
-  const [removedInvoice, setRemovedInvoice] = useState(false);
+  // Documentos nuevos a subir + ids de documentos existentes a quitar.
+  const [newDocs, setNewDocs] = useState<InvoiceFile[]>([]);
+  const [removedDocIds, setRemovedDocIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Documentos ya guardados (al editar): factura legacy + GastoDocument.
+  const existingDocs: ExistingDoc[] = initial
+    ? [
+        ...(initial.invoiceImageMime
+          ? [
+              {
+                id: 'legacy',
+                path: `/gastos/${initial.id}/invoice`,
+                mime: initial.invoiceImageMime,
+              },
+            ]
+          : []),
+        ...(initial.documents ?? []).map((d) => ({
+          id: d.id,
+          path: `/gastos/${initial.id}/documents/${d.id}`,
+          mime: d.mimeType,
+        })),
+      ]
+    : [];
 
   useEffect(() => {
     if (!open) return;
@@ -50,8 +72,8 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, initial, on
       setAmount('');
       setGastoDate(new Date().toISOString().slice(0, 10));
     }
-    setInvoice(null);
-    setRemovedInvoice(false);
+    setNewDocs([]);
+    setRemovedDocIds([]);
     setError(null);
   }, [open, initial]);
 
@@ -64,13 +86,12 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, initial, on
     setSubmitting(true);
     setError(null);
     try {
-      // Factura: nueva imagen → se envía; quitada (en edición) → null; si no, no se toca.
-      const invoicePayload = invoice
-        ? { invoiceBase64: invoice.base64, invoiceMime: invoice.mime }
-        : isEdit && removedInvoice
-          ? { invoiceBase64: null }
-          : {};
-      const payload = {
+      const documents = newDocs.map((d) => ({
+        base64: d.base64,
+        mime: d.mime,
+        filename: d.name,
+      }));
+      const payload: Record<string, unknown> = {
         rubroId,
         providerId: providerId || undefined,
         description,
@@ -78,9 +99,13 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, initial, on
         amount: Number(amount),
         gastoDate,
         kind: tipo === 'SUBCONTRATISTA' ? 'SUBCONTRACTOR' : 'EXPENSE',
-        ...invoicePayload,
+        ...(documents.length ? { documents } : {}),
       };
       if (isEdit && initial) {
+        // Quitar documentos existentes marcados (incluida la factura legacy).
+        const removeDocumentIds = removedDocIds.filter((id) => id !== 'legacy');
+        if (removeDocumentIds.length) payload.removeDocumentIds = removeDocumentIds;
+        if (removedDocIds.includes('legacy')) payload.invoiceBase64 = null;
         await apiPatch<Gasto>(`/gastos/${initial.id}`, payload);
       } else {
         await apiPost<Gasto>('/gastos', { projectId, ...payload });
@@ -183,14 +208,14 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, initial, on
           subcontractor={tipo === 'SUBCONTRATISTA'}
         />
 
-        <InvoiceUpload
-          value={invoice}
-          onChange={setInvoice}
+        <GastoDocsField
+          existing={existingDocs}
+          removedIds={removedDocIds}
+          onToggleRemove={(id) => setRemovedDocIds((prev) => [...prev, id])}
+          newDocs={newDocs}
+          onAdd={(f) => setNewDocs((prev) => [...prev, f])}
+          onRemoveNew={(idx) => setNewDocs((prev) => prev.filter((_, i) => i !== idx))}
           onError={setError}
-          existingPath={isEdit && initial ? `/gastos/${initial.id}/invoice` : undefined}
-          existingMime={isEdit ? initial?.invoiceImageMime : undefined}
-          existingRemoved={removedInvoice}
-          onRemoveExisting={() => setRemovedInvoice(true)}
         />
 
         {error && (

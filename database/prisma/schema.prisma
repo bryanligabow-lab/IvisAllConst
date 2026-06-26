@@ -353,6 +353,7 @@ model Gasto {
   paymentOrder PaymentOrder? @relation(fields: [paymentOrderId], references: [id])
   provider     Provider?     @relation(fields: [providerId], references: [id])
   employee     Employee?     @relation(fields: [employeeId], references: [id])
+  documents    GastoDocument[]
 
   @@index([projectId, gastoDate])
   @@index([rubroId])
@@ -361,6 +362,22 @@ model Gasto {
   @@index([employeeId])
   @@index([deletedAt])
   @@map("gastos")
+}
+
+// Varias facturas/documentos por gasto (además de la `invoiceImageData` legacy).
+model GastoDocument {
+  id         String   @id @default(uuid())
+  gastoId    String   @map("gasto_id")
+  mimeType   String   @map("mime_type")
+  data       Bytes
+  filename   String?
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  gasto Gasto @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+
+  @@index([gastoId])
+  @@map("gasto_documents")
 }
 
 model Planilla {

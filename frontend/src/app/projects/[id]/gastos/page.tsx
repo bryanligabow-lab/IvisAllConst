@@ -124,9 +124,18 @@ export default function GastosPage() {
                       {g.invoiceNumber && ` · Factura ${g.invoiceNumber}`}
                     </div>
                   </div>
-                  {g.invoiceImageMime && (
-                    <div className="shrink-0">
-                      <InvoiceThumb path={`/gastos/${g.id}/invoice`} mime={g.invoiceImageMime} />
+                  {(g.invoiceImageMime || (g.documents && g.documents.length > 0)) && (
+                    <div className="flex shrink-0 items-center gap-1">
+                      {g.invoiceImageMime && (
+                        <InvoiceThumb path={`/gastos/${g.id}/invoice`} mime={g.invoiceImageMime} />
+                      )}
+                      {g.documents?.map((d) => (
+                        <InvoiceThumb
+                          key={d.id}
+                          path={`/gastos/${g.id}/documents/${d.id}`}
+                          mime={d.mimeType}
+                        />
+                      ))}
                     </div>
                   )}
                   <div className="shrink-0 text-sm font-medium text-danger">
