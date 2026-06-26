@@ -41,7 +41,29 @@ interface ProformaDetail {
   }>;
 }
 
-async function downloadExport(id: string, format: 'pdf' | 'xlsx', number: string) {
+// Saca el nombre del archivo del header Content-Disposition (lo arma el backend
+// e incluye el proyecto). Si no se puede leer, usa el fallback.
+function filenameFromDisposition(cd: string | null, fallback: string): string {
+  if (!cd) return fallback;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      /* ignore */
+    }
+  }
+  const plain = /filename="([^"]+)"/i.exec(cd);
+  if (plain) return plain[1];
+  return fallback;
+}
+
+async function downloadExport(
+  id: string,
+  format: 'pdf' | 'xlsx',
+  number: string,
+  projectLabel?: string | null,
+) {
   const token =
     typeof window !== 'undefined' ? sessionStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN) : null;
   const res = await fetch(`${API_BASE_URL}/proformas/${id}/export?format=${format}`, {
@@ -52,11 +74,18 @@ async function downloadExport(id: string, format: 'pdf' | 'xlsx', number: string
     window.alert(`No se pudo generar el ${format.toUpperCase()}`);
     return;
   }
+  // Nombre por defecto incluyendo el proyecto (por si no se puede leer el header).
+  const proyecto = (projectLabel ?? '').replace(/[\\/:*?"<>|]+/g, ' ').trim();
+  const fallback = proyecto
+    ? `Proforma ${number} - ${proyecto}.${format}`
+    : `Proforma ${number}.${format}`;
+  const filename = filenameFromDisposition(res.headers.get('content-disposition'), fallback);
+
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `proforma-${number}.${format}`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -100,13 +129,13 @@ export default function ProformaDetailPage() {
             </button>
           )}
           <button
-            onClick={() => downloadExport(data.id, 'pdf', data.number)}
+            onClick={() => downloadExport(data.id, 'pdf', data.number, data.projectLabel)}
             className="btn-primary"
           >
             📄 Exportar PDF
           </button>
           <button
-            onClick={() => downloadExport(data.id, 'xlsx', data.number)}
+            onClick={() => downloadExport(data.id, 'xlsx', data.number, data.projectLabel)}
             className="btn-success"
           >
             📊 Exportar Excel

@@ -43,6 +43,8 @@ export function buildApp() {
     cors({
       origin: env.CORS_ORIGIN.split(',').map((o) => o.trim()),
       credentials: true,
+      // Permite que el frontend lea el nombre de archivo de las descargas.
+      exposedHeaders: ['Content-Disposition'],
     }),
   );
 
