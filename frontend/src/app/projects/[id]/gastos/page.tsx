@@ -27,6 +27,7 @@ export default function GastosPage() {
     : `/gastos?projectId=${params.id}&perPage=100`;
   const { data: gastos, isLoading, mutate: mutateGastos } = useSWR<Gasto[]>(gastosKey, apiGet);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Gasto | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; description: string } | null>(null);
 
   async function handleExport() {
@@ -134,6 +135,16 @@ export default function GastosPage() {
                   {canWrite && (
                     <button
                       type="button"
+                      onClick={() => setEditing(g)}
+                      className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted hover:text-ink-primary"
+                      title="Editar gasto"
+                    >
+                      ✏️
+                    </button>
+                  )}
+                  {canWrite && (
+                    <button
+                      type="button"
                       onClick={() => setPendingDelete({ id: g.id, description: g.description })}
                       className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-danger-soft hover:text-danger"
                       title="Eliminar gasto"
@@ -170,6 +181,21 @@ export default function GastosPage() {
           onCreated={() => {
             mutateGastos();
             mutateSummary();
+          }}
+        />
+      )}
+
+      {summary && (
+        <CreateGastoModal
+          open={!!editing}
+          initial={editing}
+          onClose={() => setEditing(null)}
+          projectId={params.id}
+          rubros={summary.rubros}
+          onCreated={() => {
+            mutateGastos();
+            mutateSummary();
+            setEditing(null);
           }}
         />
       )}

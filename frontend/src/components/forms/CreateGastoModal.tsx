@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { ProviderSelector } from '@/components/forms/ProviderSelector';
 import { InvoiceUpload, type InvoiceFile } from '@/components/forms/InvoiceUpload';
-import { apiPost, ApiClientError } from '@/lib/api';
+import { apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import type { Gasto, RubroSummary } from '@/types';
 
 interface Props {
@@ -12,10 +12,12 @@ interface Props {
   onClose: () => void;
   projectId: string;
   rubros: RubroSummary[];
+  initial?: Gasto | null; // si viene → edición
   onCreated: () => void;
 }
 
-export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }: Props) {
+export function CreateGastoModal({ open, onClose, projectId, rubros, initial, onCreated }: Props) {
+  const isEdit = !!initial;
   const [rubroId, setRubroId] = useState('');
   // Tipo de gasto: a un proveedor (materiales) o a un subcontratista (anticipo/mano de obra).
   const [tipo, setTipo] = useState<'PROVEEDOR' | 'SUBCONTRATISTA'>('PROVEEDOR');
@@ -25,20 +27,33 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
   const [amount, setAmount] = useState('');
   const [gastoDate, setGastoDate] = useState(new Date().toISOString().slice(0, 10));
   const [invoice, setInvoice] = useState<InvoiceFile | null>(null);
+  const [removedInvoice, setRemovedInvoice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function reset() {
-    setRubroId('');
-    setTipo('PROVEEDOR');
-    setProviderId('');
-    setDescription('');
-    setInvoiceNumber('');
-    setAmount('');
-    setGastoDate(new Date().toISOString().slice(0, 10));
+  useEffect(() => {
+    if (!open) return;
+    if (initial) {
+      setRubroId(initial.rubroId ?? '');
+      setTipo(initial.kind === 'SUBCONTRACTOR' ? 'SUBCONTRATISTA' : 'PROVEEDOR');
+      setProviderId(initial.providerId ?? '');
+      setDescription(initial.description ?? '');
+      setInvoiceNumber(initial.invoiceNumber ?? '');
+      setAmount(String(initial.amount ?? ''));
+      setGastoDate(initial.gastoDate ? initial.gastoDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    } else {
+      setRubroId('');
+      setTipo('PROVEEDOR');
+      setProviderId('');
+      setDescription('');
+      setInvoiceNumber('');
+      setAmount('');
+      setGastoDate(new Date().toISOString().slice(0, 10));
+    }
     setInvoice(null);
+    setRemovedInvoice(false);
     setError(null);
-  }
+  }, [open, initial]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,8 +64,13 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
     setSubmitting(true);
     setError(null);
     try {
-      await apiPost<Gasto>('/gastos', {
-        projectId,
+      // Factura: nueva imagen → se envía; quitada (en edición) → null; si no, no se toca.
+      const invoicePayload = invoice
+        ? { invoiceBase64: invoice.base64, invoiceMime: invoice.mime }
+        : isEdit && removedInvoice
+          ? { invoiceBase64: null }
+          : {};
+      const payload = {
         rubroId,
         providerId: providerId || undefined,
         description,
@@ -58,21 +78,24 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
         amount: Number(amount),
         gastoDate,
         kind: tipo === 'SUBCONTRATISTA' ? 'SUBCONTRACTOR' : 'EXPENSE',
-        invoiceBase64: invoice?.base64,
-        invoiceMime: invoice?.mime,
-      });
-      reset();
+        ...invoicePayload,
+      };
+      if (isEdit && initial) {
+        await apiPatch<Gasto>(`/gastos/${initial.id}`, payload);
+      } else {
+        await apiPost<Gasto>('/gastos', { projectId, ...payload });
+      }
       onCreated();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Error al registrar el gasto');
+      setError(err instanceof ApiClientError ? err.message : 'Error al guardar el gasto');
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Registrar gasto">
+    <Modal open={open} onClose={onClose} title={isEdit ? 'Editar gasto' : 'Registrar gasto'}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <Field label="Rubro" required>
           <select
@@ -160,7 +183,15 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
           subcontractor={tipo === 'SUBCONTRATISTA'}
         />
 
-        <InvoiceUpload value={invoice} onChange={setInvoice} onError={setError} />
+        <InvoiceUpload
+          value={invoice}
+          onChange={setInvoice}
+          onError={setError}
+          existingPath={isEdit && initial ? `/gastos/${initial.id}/invoice` : undefined}
+          existingMime={isEdit ? initial?.invoiceImageMime : undefined}
+          existingRemoved={removedInvoice}
+          onRemoveExisting={() => setRemovedInvoice(true)}
+        />
 
         {error && (
           <div className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">{error}</div>
@@ -171,7 +202,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
             Cancelar
           </button>
           <button type="submit" disabled={submitting} className="btn-primary disabled:opacity-50">
-            {submitting ? 'Guardando…' : 'Registrar gasto'}
+            {submitting ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Registrar gasto'}
           </button>
         </div>
       </form>

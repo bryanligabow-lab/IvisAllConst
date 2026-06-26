@@ -1,6 +1,7 @@
 'use client';
 
 import { Field } from '@/components/ui/Modal';
+import { InvoiceThumb } from '@/components/ui/InvoiceThumb';
 
 export interface InvoiceFile {
   base64: string; // sin prefijo data:
@@ -29,11 +30,25 @@ interface Props {
   onChange: (v: InvoiceFile | null) => void;
   label?: string;
   onError?: (msg: string) => void;
+  /** Factura ya guardada (modo edición): ruta protegida + mime. */
+  existingPath?: string;
+  existingMime?: string | null;
+  existingRemoved?: boolean;
+  onRemoveExisting?: () => void;
 }
 
 // Subir foto (o PDF) de la factura. En el celular permite tomar foto o elegir
-// de la galería.
-export function InvoiceUpload({ value, onChange, label = 'Foto de la factura', onError }: Props) {
+// de la galería. En edición muestra la factura ya guardada.
+export function InvoiceUpload({
+  value,
+  onChange,
+  label = 'Foto de la factura',
+  onError,
+  existingPath,
+  existingMime,
+  existingRemoved,
+  onRemoveExisting,
+}: Props) {
   async function handle(file: File | undefined | null) {
     if (!file) return;
     const isImage = file.type.startsWith('image/');
@@ -49,6 +64,8 @@ export function InvoiceUpload({ value, onChange, label = 'Foto de la factura', o
     const { dataUrl, base64 } = await fileToData(file);
     onChange({ base64, mime: file.type, preview: dataUrl, name: file.name, isImage });
   }
+
+  const showExisting = !value && !!existingPath && !!existingMime && !existingRemoved;
 
   return (
     <Field label={label} hint="Opcional · foto o PDF (máx 6 MB). En el celular puedes tomar la foto.">
@@ -66,6 +83,10 @@ export function InvoiceUpload({ value, onChange, label = 'Foto de la factura', o
               📄
             </div>
           )
+        ) : showExisting ? (
+          <div className="shrink-0">
+            <InvoiceThumb path={existingPath!} mime={existingMime} className="h-16 w-16" />
+          </div>
         ) : (
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-dashed border-surface-border text-[10px] text-ink-tertiary">
             sin factura
@@ -73,7 +94,7 @@ export function InvoiceUpload({ value, onChange, label = 'Foto de la factura', o
         )}
         <div className="flex flex-col gap-1">
           <label className="btn-secondary cursor-pointer text-xs">
-            {value ? 'Cambiar' : '📷 Subir factura'}
+            {value || showExisting ? 'Cambiar' : '📷 Subir factura'}
             <input
               type="file"
               accept="image/*,application/pdf"
@@ -85,6 +106,15 @@ export function InvoiceUpload({ value, onChange, label = 'Foto de la factura', o
             <button
               type="button"
               onClick={() => onChange(null)}
+              className="text-xs text-ink-secondary hover:text-danger"
+            >
+              Quitar
+            </button>
+          )}
+          {showExisting && onRemoveExisting && (
+            <button
+              type="button"
+              onClick={onRemoveExisting}
               className="text-xs text-ink-secondary hover:text-danger"
             >
               Quitar
