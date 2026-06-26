@@ -17,6 +17,7 @@ const createSchema = z.object({
   phone: z.string().max(40).optional(),
   email: z.string().email().max(200).optional().or(z.literal('')),
   service: z.string().max(300).optional(),
+  isSubcontractor: z.coerce.boolean().optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -36,10 +37,14 @@ async function computeProviderStats(projectId?: string) {
   // For each provider, aggregate gastos (totalSpent) + pending payment orders (totalDebt).
   const stats = await Promise.all(
     providers.map(async (p) => {
-      const [spentAgg, ordersAll] = await Promise.all([
+      const [spentAgg, subAgg, ordersAll] = await Promise.all([
         prisma.gasto.aggregate({
           _sum: { amount: true },
           where: { providerId: p.id, deletedAt: null, ...projectFilter },
+        }),
+        prisma.gasto.aggregate({
+          _sum: { amount: true },
+          where: { providerId: p.id, deletedAt: null, kind: 'SUBCONTRACTOR', ...projectFilter },
         }),
         prisma.paymentOrder.findMany({
           where: {
@@ -69,6 +74,8 @@ async function computeProviderStats(projectId?: string) {
       return {
         ...p,
         totalSpent: spentAgg._sum.amount ?? 0,
+        // Total de anticipos/gastos como subcontratista (kind=SUBCONTRACTOR).
+        totalSubcontract: subAgg._sum.amount ?? 0,
         totalDebt,
         pendingOrdersCount,
         projectsWithDebtCount: projectsWithDebt.size,
@@ -84,7 +91,16 @@ providersRouter.get(
   requirePermission(PERMISSIONS.PROVIDERS_READ),
   asyncHandler(async (req, res) => {
     const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+    const onlySub = req.query.subcontractor === 'true';
     const stats = await computeProviderStats(projectId);
+
+    // Solo subcontratistas: marcados como tal o con anticipos como subcontratista.
+    if (onlySub) {
+      return success(
+        res,
+        stats.filter((s) => s.isSubcontractor || Number(s.totalSubcontract) > 0),
+      );
+    }
 
     // When scoped to project, filter out providers with no activity in that project.
     if (projectId) {
@@ -224,6 +240,7 @@ providersRouter.post(
         phone: req.body.phone || null,
         email: req.body.email || null,
         service: req.body.service || null,
+        isSubcontractor: req.body.isSubcontractor ?? false,
         createdBy: req.user.id,
       },
     });

@@ -9,10 +9,18 @@ interface Props {
   open: boolean;
   onClose: () => void;
   initial?: Provider | null; // when set → edit mode
+  /** Si es true, el nuevo registro se marca como subcontratista. */
+  asSubcontractor?: boolean;
   onSaved: (saved: Provider) => void;
 }
 
-export function CreateProviderModal({ open, onClose, initial, onSaved }: Props) {
+export function CreateProviderModal({
+  open,
+  onClose,
+  initial,
+  asSubcontractor = false,
+  onSaved,
+}: Props) {
   const [name, setName] = useState('');
   const [ruc, setRuc] = useState('');
   const [phone, setPhone] = useState('');
@@ -47,7 +55,10 @@ export function CreateProviderModal({ open, onClose, initial, onSaved }: Props) 
       if (initial?.id) {
         saved = (await apiPatch<Provider>(`/providers/${initial.id}`, payload)) as Provider;
       } else {
-        saved = (await apiPost<Provider>('/providers', payload)) as Provider;
+        saved = (await apiPost<Provider>('/providers', {
+          ...payload,
+          ...(asSubcontractor ? { isSubcontractor: true } : {}),
+        })) as Provider;
       }
       onSaved(saved);
       onClose();
@@ -59,16 +70,26 @@ export function CreateProviderModal({ open, onClose, initial, onSaved }: Props) 
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={initial ? 'Editar proveedor' : 'Nuevo proveedor'}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={
+        initial
+          ? 'Editar proveedor'
+          : asSubcontractor
+            ? 'Nuevo subcontratista'
+            : 'Nuevo proveedor'
+      }
+    >
       <form onSubmit={handleSubmit} className="space-y-3">
-        <Field label="Nombre / razón social" required>
+        <Field label={asSubcontractor ? 'Nombre del subcontratista' : 'Nombre / razón social'} required>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             maxLength={200}
             className="input"
-            placeholder="Brajan Suministros"
+            placeholder={asSubcontractor ? 'Juan Pérez (maestro de obra)' : 'Brajan Suministros'}
           />
         </Field>
 

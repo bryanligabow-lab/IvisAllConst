@@ -98,6 +98,7 @@ export interface Gasto {
   gastoDate: string;
   providerId?: string | null;
   paymentOrderId?: string | null;
+  kind?: string;
   invoiceImageMime?: string | null;
   rubro?: { code: string; name: string };
   provider?: { id: string; name: string; service?: string | null } | null;
@@ -111,7 +112,9 @@ export interface Provider {
   phone: string | null;
   email: string | null;
   service: string | null;
+  isSubcontractor?: boolean;
   totalSpent?: number;
+  totalSubcontract?: number;
   totalDebt?: number;
   pendingOrdersCount?: number;
   projectsWithDebtCount?: number;

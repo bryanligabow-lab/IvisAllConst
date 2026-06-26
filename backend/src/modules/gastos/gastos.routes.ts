@@ -23,6 +23,8 @@ const createGastoSchema = z.object({
   invoiceNumber: z.string().max(80).optional(),
   amount: z.coerce.number().positive(),
   gastoDate: calendarDateSchema,
+  // Tipo de gasto: normal (proveedor) o anticipo/pago a subcontratista.
+  kind: z.enum(['EXPENSE', 'SUBCONTRACTOR']).optional(),
   attachmentUrl: z.string().url().max(2000).optional(),
   // Foto/PDF de la factura (base64 sin prefijo). null para quitarla.
   invoiceBase64: z.string().min(10).nullable().optional(),

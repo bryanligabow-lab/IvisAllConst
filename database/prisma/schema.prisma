@@ -471,6 +471,8 @@ model Provider {
   phone     String?
   email     String?
   service   String?
+  // Marca al proveedor como subcontratista (se gestiona en la pestaña Subcontratistas).
+  isSubcontractor Boolean @default(false) @map("is_subcontractor")
   createdBy String    @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

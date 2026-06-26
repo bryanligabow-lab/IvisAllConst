@@ -17,6 +17,8 @@ interface Props {
 
 export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }: Props) {
   const [rubroId, setRubroId] = useState('');
+  // Tipo de gasto: a un proveedor (materiales) o a un subcontratista (anticipo/mano de obra).
+  const [tipo, setTipo] = useState<'PROVEEDOR' | 'SUBCONTRATISTA'>('PROVEEDOR');
   const [providerId, setProviderId] = useState('');
   const [description, setDescription] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -28,6 +30,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
 
   function reset() {
     setRubroId('');
+    setTipo('PROVEEDOR');
     setProviderId('');
     setDescription('');
     setInvoiceNumber('');
@@ -54,6 +57,7 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
         invoiceNumber: invoiceNumber || undefined,
         amount: Number(amount),
         gastoDate,
+        kind: tipo === 'SUBCONTRATISTA' ? 'SUBCONTRACTOR' : 'EXPENSE',
         invoiceBase64: invoice?.base64,
         invoiceMime: invoice?.mime,
       });
@@ -128,7 +132,33 @@ export function CreateGastoModal({ open, onClose, projectId, rubros, onCreated }
           />
         </Field>
 
-        <ProviderSelector value={providerId} onChange={setProviderId} />
+        <Field label="Tipo de gasto">
+          <div className="flex gap-2">
+            {(['PROVEEDOR', 'SUBCONTRATISTA'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setTipo(t);
+                  setProviderId('');
+                }}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  tipo === t
+                    ? 'border-brand bg-brand-light font-medium text-brand'
+                    : 'border-surface-border text-ink-secondary hover:bg-surface-muted'
+                }`}
+              >
+                {t === 'PROVEEDOR' ? '🏢 Proveedor' : '👷 Subcontratista'}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <ProviderSelector
+          value={providerId}
+          onChange={setProviderId}
+          subcontractor={tipo === 'SUBCONTRATISTA'}
+        />
 
         <InvoiceUpload value={invoice} onChange={setInvoice} onError={setError} />
 
