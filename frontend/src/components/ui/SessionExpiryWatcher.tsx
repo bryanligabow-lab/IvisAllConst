@@ -1,19 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getSessionExpiry, refreshSession } from '@/lib/api';
 
 // Avisar cuando falten 2 minutos para que expire el token de acceso.
 const WARN_BEFORE_MS = 2 * 60 * 1000;
+// Renovar en silencio cuando falten 90s (antes de que expire), para que la
+// sesión no se caiga ni aparezca el cuadro durante el uso normal.
+const AUTO_REFRESH_BEFORE_MS = 90 * 1000;
 
 export function SessionExpiryWatcher({ onLogout }: { onLogout: () => void }) {
   const [show, setShow] = useState(false);
   const [remainingMs, setRemainingMs] = useState(0);
   const [extending, setExtending] = useState(false);
   const [error, setError] = useState(false);
+  // Para no intentar el refresh silencioso más de una vez por token.
+  const autoTriedExp = useRef<number | null>(null);
+  const autoFailed = useRef(false);
 
   useEffect(() => {
-    const tick = () => {
+    const tick = async () => {
       const exp = getSessionExpiry();
       if (!exp) {
         setShow(false);
@@ -21,10 +27,21 @@ export function SessionExpiryWatcher({ onLogout }: { onLogout: () => void }) {
       }
       const rem = exp - Date.now();
       setRemainingMs(rem);
-      setShow(rem <= WARN_BEFORE_MS); // incluye rem <= 0 (ya expiró)
+
+      // Refresh silencioso proactivo: una sola vez por token, cuando falta poco.
+      if (rem <= AUTO_REFRESH_BEFORE_MS && autoTriedExp.current !== exp) {
+        autoTriedExp.current = exp;
+        const ok = await refreshSession();
+        autoFailed.current = !ok;
+        return; // se reevalúa con el nuevo token en el siguiente tick
+      }
+
+      // El cuadro solo aparece si está por expirar Y el refresh silencioso falló
+      // (sesión realmente caduca). Si el silencioso funciona, nunca se ve.
+      setShow(rem <= WARN_BEFORE_MS && autoFailed.current);
     };
-    tick();
-    const id = setInterval(tick, 1000);
+    void tick();
+    const id = setInterval(() => void tick(), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -33,8 +50,13 @@ export function SessionExpiryWatcher({ onLogout }: { onLogout: () => void }) {
     setError(false);
     const ok = await refreshSession();
     setExtending(false);
-    if (ok) setShow(false);
-    else setError(true);
+    if (ok) {
+      autoFailed.current = false;
+      autoTriedExp.current = null;
+      setShow(false);
+    } else {
+      setError(true);
+    }
   }
 
   if (!show) return null;

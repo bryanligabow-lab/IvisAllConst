@@ -47,7 +47,22 @@ export function clearSession(): void {
   setRefreshToken(null);
 }
 
-async function tryRefresh(): Promise<string | null> {
+// Single-flight: el backend ROTA el refresh token (un solo uso). Si varias
+// peticiones dan 401 a la vez y cada una refresca con el MISMO token, solo una
+// gana y las demás fallan con un token ya revocado → se caía la sesión. Con
+// esto, todas las peticiones concurrentes esperan el MISMO refresh.
+let refreshInflight: Promise<string | null> | null = null;
+
+function tryRefresh(): Promise<string | null> {
+  if (!refreshInflight) {
+    refreshInflight = doRefresh().finally(() => {
+      refreshInflight = null;
+    });
+  }
+  return refreshInflight;
+}
+
+async function doRefresh(): Promise<string | null> {
   try {
     // Mandamos el refresh token en el body (la cookie es third-party entre los
     // subdominios de Railway y el navegador la bloquea). La cookie queda como
