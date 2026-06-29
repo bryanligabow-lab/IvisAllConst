@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { apiFetchBlob, apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
+import { useDraft } from '@/hooks/useDraft';
 import type { Product, Project } from '@/types';
+
+const DRAFT_KEY = 'draft:proforma:new';
 
 interface ImageItem {
   preview: string; // base64 data URL
@@ -123,11 +126,95 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   // para no perderlas si el usuario guarda demasiado rápido.
   const [imagesLoading, setImagesLoading] = useState(false);
 
+  // ----- Borrador automático (solo al crear, no al editar) -----
+  const [draftDismissed, setDraftDismissed] = useState(false);
+  const hasContent =
+    clientName.trim() !== '' ||
+    projectLabel.trim() !== '' ||
+    items.some((it) => it.description.trim() !== '' || it.unitPrice.trim() !== '');
+  // Lo que se guarda en el borrador (sin imágenes; solo texto e ítems).
+  const draftValue = useMemo(
+    () => ({
+      date,
+      clientId,
+      clientName,
+      clientRuc,
+      clientAddress,
+      clientResponsible,
+      projectId,
+      projectLabel,
+      ivaPercent,
+      creditTerm,
+      paymentTerms,
+      validity,
+      topClients,
+      signerName,
+      signerTitle,
+      items: items.map((it) => ({
+        quantity: it.quantity,
+        unit: it.unit,
+        description: it.description,
+        unitPrice: it.unitPrice,
+      })),
+    }),
+    [
+      date,
+      clientId,
+      clientName,
+      clientRuc,
+      clientAddress,
+      clientResponsible,
+      projectId,
+      projectLabel,
+      ivaPercent,
+      creditTerm,
+      paymentTerms,
+      validity,
+      topClients,
+      signerName,
+      signerTitle,
+      items,
+    ],
+  );
+  type DraftValue = typeof draftValue;
+  const { available: draft, clear: clearDraft } = useDraft<DraftValue>(
+    DRAFT_KEY,
+    draftValue,
+    open && !isEdit,
+    open && !isEdit && hasContent,
+  );
+
+  function restoreDraft() {
+    if (!draft) return;
+    setDate(draft.date ?? new Date().toISOString().slice(0, 10));
+    setClientId(draft.clientId ?? '');
+    setClientName(draft.clientName ?? '');
+    setClientRuc(draft.clientRuc ?? '');
+    setClientAddress(draft.clientAddress ?? '');
+    setClientResponsible(draft.clientResponsible ?? '');
+    setProjectId(draft.projectId ?? '');
+    setProjectLabel(draft.projectLabel ?? '');
+    setIvaPercent(draft.ivaPercent ?? '15');
+    setCreditTerm(draft.creditTerm ?? '');
+    setPaymentTerms(draft.paymentTerms ?? '');
+    setValidity(draft.validity ?? '');
+    setTopClients(draft.topClients ?? DEFAULT_TOP_CLIENTS);
+    setSignerName(draft.signerName ?? '');
+    setSignerTitle(draft.signerTitle ?? '');
+    setItems(
+      draft.items && draft.items.length > 0
+        ? draft.items.map((it) => ({ ...it, image: null }))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }],
+    );
+    setDraftDismissed(true);
+  }
+
   useEffect(() => {
     if (!open) return;
     setNotice(null);
     setError(null);
     setImagesLoading(false);
+    setDraftDismissed(false);
     if (initial) {
       setDate(initial.date ? initial.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
       setClientId(initial.clientId ?? '');
@@ -395,6 +482,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         const created = (await apiPost<{ id: string }>('/proformas', payload)) as { id: string };
         onCreated(created.id);
       }
+      clearDraft(); // se guardó OK → ya no hace falta el borrador
       onClose();
     } catch (err) {
       setError(
@@ -417,6 +505,29 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       width="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {!isEdit && draft && !draftDismissed && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs">
+            <span className="text-ink-primary">
+              💾 Tienes un <strong>borrador</strong> de una proforma sin terminar. ¿Lo recuperas?
+            </span>
+            <span className="flex gap-2">
+              <button type="button" onClick={restoreDraft} className="btn-primary px-3 py-1 text-xs">
+                Recuperar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearDraft();
+                  setDraftDismissed(true);
+                }}
+                className="btn-secondary px-3 py-1 text-xs"
+              >
+                Descartar
+              </button>
+            </span>
+          </div>
+        )}
+
         {/* Cliente */}
         <div className="rounded-lg border border-surface-border p-3">
           <div className="mb-2 flex items-center justify-between">

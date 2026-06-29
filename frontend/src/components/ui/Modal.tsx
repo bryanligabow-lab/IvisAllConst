@@ -13,16 +13,13 @@ interface ModalProps {
 export function Modal({ open, onClose, title, children, width = 'md' }: ModalProps) {
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    // No cerramos con Escape ni con clic afuera para no perder datos a medio
+    // llenar: el modal solo se cierra con la X o el botón Cancelar.
     document.body.style.overflow = 'hidden';
-    document.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = '';
-      document.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -31,14 +28,14 @@ export function Modal({ open, onClose, title, children, width = 'md' }: ModalPro
 
   return (
     <div
+      // OJO: hacer clic en el fondo NO cierra el modal (se perdían datos a
+      // medio llenar). Solo cierran la X del encabezado o el botón Cancelar.
       className="fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-black/40 p-0 sm:items-start sm:px-4 sm:py-8"
-      onClick={onClose}
       role="dialog"
       aria-modal="true"
     >
       <div
         className={`relative flex min-h-full w-full flex-col border-surface-border bg-surface shadow-xl sm:min-h-0 sm:rounded-lg sm:border ${maxW}`}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-surface-border bg-surface px-5 py-3 sm:rounded-t-lg">
           <h2 className="text-sm font-medium">{title}</h2>
