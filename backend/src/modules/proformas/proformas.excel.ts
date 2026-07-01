@@ -4,6 +4,7 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { toRenderableImage } from '../../shared/utils/image.util';
 import { buildAttachment } from './proforma-filename';
+import { computeProformaTotals } from './proforma-totals';
 
 const RED = 'FFC73E2C';
 const WHITE = 'FFFFFFFF';
@@ -110,10 +111,8 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
   ];
 
   let row = HEADER_ROW + 1;
-  let subtotal = 0;
   for (const it of p.items) {
     const total = it.quantity * it.unitPrice;
-    subtotal += total;
     sheet.getCell(row, 1).value = it.quantity;
     sheet.getCell(row, 2).value = it.unit;
     sheet.mergeCells(row, 3, row, 5);
@@ -133,8 +132,7 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     row += 1;
   }
 
-  const iva = subtotal * (p.ivaPercent / 100);
-  const total = subtotal + iva;
+  const totals = computeProformaTotals(p.items, p.ivaPercent);
 
   row += 1;
   // Notes box (left)
@@ -167,23 +165,19 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     }
   }
 
-  // Totals box (right) — anchor to NOTES_TOP
-  sheet.getCell(NOTES_TOP, 6).value = 'SUBTOTAL:';
-  sheet.getCell(NOTES_TOP, 6).font = { bold: true };
-  sheet.getCell(NOTES_TOP, 7).value = subtotal;
-  sheet.getCell(NOTES_TOP, 7).numFmt = '"$"#,##0.00';
-  sheet.getCell(NOTES_TOP, 7).font = { bold: true };
-
-  sheet.getCell(NOTES_TOP + 1, 6).value = `IVA ${p.ivaPercent}%`;
-  sheet.getCell(NOTES_TOP + 1, 6).font = { bold: true };
-  sheet.getCell(NOTES_TOP + 1, 7).value = iva;
-  sheet.getCell(NOTES_TOP + 1, 7).numFmt = '"$"#,##0.00';
-
-  sheet.getCell(NOTES_TOP + 2, 6).value = 'TOTAL:';
-  sheet.getCell(NOTES_TOP + 2, 6).font = { bold: true, color: { argb: RED } };
-  sheet.getCell(NOTES_TOP + 2, 7).value = total;
-  sheet.getCell(NOTES_TOP + 2, 7).numFmt = '"$"#,##0.00';
-  sheet.getCell(NOTES_TOP + 2, 7).font = { bold: true, color: { argb: RED } };
+  // Totals box (right) — desglose por tarifa de IVA, anclado a NOTES_TOP.
+  let tRow = NOTES_TOP;
+  const putTotal = (label: string, value: number, accent = false) => {
+    sheet.getCell(tRow, 6).value = label;
+    sheet.getCell(tRow, 6).font = accent ? { bold: true, color: { argb: RED } } : { bold: true };
+    sheet.getCell(tRow, 7).value = value;
+    sheet.getCell(tRow, 7).numFmt = '"$"#,##0.00';
+    sheet.getCell(tRow, 7).font = accent ? { bold: true, color: { argb: RED } } : { bold: true };
+    tRow += 1;
+  };
+  for (const b of totals.breakdown) putTotal(`SUB TOTAL ${b.rate}%`, b.base);
+  for (const b of totals.breakdown) putTotal(`IVA ${b.rate}%`, b.iva);
+  putTotal('TOTAL:', totals.total, true);
 
   // Signature
   row += 2;

@@ -31,6 +31,7 @@ interface ProformaDetail {
   subtotal: number;
   iva: number;
   total: number;
+  vatBreakdown?: Array<{ rate: number; base: number; iva: number }>;
   project?: { id: string; name: string; code: string } | null;
   items: Array<{
     id: string;
@@ -38,6 +39,7 @@ interface ProformaDetail {
     unit: string;
     description: string;
     unitPrice: number;
+    vatPercent?: number | null;
   }>;
 }
 
@@ -229,14 +231,30 @@ export default function ProformaDetailPage() {
             )}
           </div>
           <div>
-            <div className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold">
-              <span>SUBTOTAL:</span>
-              <span>{formatCurrency(data.subtotal, true)}</span>
-            </div>
-            <div className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold">
-              <span>IVA {data.ivaPercent}%</span>
-              <span>{formatCurrency(data.iva, true)}</span>
-            </div>
+            {(data.vatBreakdown && data.vatBreakdown.length > 0
+              ? data.vatBreakdown
+              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva }]
+            ).map((b) => (
+              <div
+                key={`sub-${b.rate}`}
+                className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold"
+              >
+                <span>SUBTOTAL {b.rate}%</span>
+                <span>{formatCurrency(b.base, true)}</span>
+              </div>
+            ))}
+            {(data.vatBreakdown && data.vatBreakdown.length > 0
+              ? data.vatBreakdown
+              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva }]
+            ).map((b) => (
+              <div
+                key={`iva-${b.rate}`}
+                className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold"
+              >
+                <span>IVA {b.rate}%</span>
+                <span>{formatCurrency(b.iva, true)}</span>
+              </div>
+            ))}
             <div className="flex justify-between bg-brand-light px-2 py-2 text-lg font-bold text-brand">
               <span>TOTAL:</span>
               <span>{formatCurrency(data.total, true)}</span>

@@ -13,12 +13,15 @@ import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
 import { exportProformaExcel } from './proformas.excel';
 import { exportProformaPdf } from './proformas.pdf';
+import { computeProformaTotals } from './proforma-totals';
 
 const itemSchema = z.object({
   quantity: z.coerce.number().nonnegative(),
   unit: z.string().min(1).max(40),
   description: z.string().min(1).max(500),
   unitPrice: z.coerce.number().nonnegative(),
+  // % de IVA de este rubro (null/ausente = usa el IVA general).
+  vatPercent: z.coerce.number().min(0).max(100).nullable().optional(),
 });
 
 const imageSchema = z.object({
@@ -108,9 +111,15 @@ proformasRouter.get(
       orderBy: { createdAt: 'desc' },
     });
     const withTotals = items.map((p) => {
-      const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-      const iva = subtotal * (p.ivaPercent / 100);
-      return { ...p, subtotal, iva, total: subtotal + iva, imagesCount: p.images.length };
+      const t = computeProformaTotals(p.items, p.ivaPercent);
+      return {
+        ...p,
+        subtotal: t.subtotal,
+        iva: t.iva,
+        total: t.total,
+        vatBreakdown: t.breakdown,
+        imagesCount: p.images.length,
+      };
     });
     return success(res, withTotals);
   }),
@@ -141,9 +150,14 @@ proformasRouter.get(
       },
     });
     if (!p) throw new NotFoundError('Proforma no encontrada');
-    const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-    const iva = subtotal * (p.ivaPercent / 100);
-    return success(res, { ...p, subtotal, iva, total: subtotal + iva });
+    const t = computeProformaTotals(p.items, p.ivaPercent);
+    return success(res, {
+      ...p,
+      subtotal: t.subtotal,
+      iva: t.iva,
+      total: t.total,
+      vatBreakdown: t.breakdown,
+    });
   }),
 );
 
@@ -224,6 +238,7 @@ proformasRouter.post(
             unit: it.unit,
             description: it.description,
             unitPrice: it.unitPrice,
+            vatPercent: it.vatPercent ?? null,
           })),
         },
         images: {
@@ -280,6 +295,7 @@ proformasRouter.patch(
             unit: it.unit,
             description: it.description,
             unitPrice: it.unitPrice,
+            vatPercent: it.vatPercent ?? null,
           })),
         });
       }

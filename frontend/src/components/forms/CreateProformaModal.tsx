@@ -25,6 +25,7 @@ interface Item {
   unit: string;
   description: string;
   unitPrice: string;
+  vatPercent: string; // % de IVA de este rubro (15, 0, …)
   image?: ImageItem | null; // imagen del rubro (sale al lado de la descripción)
 }
 
@@ -46,7 +47,13 @@ export interface ProformaEditData {
   topClients: string | null;
   signerName: string | null;
   signerTitle: string | null;
-  items: Array<{ quantity: number; unit: string; description: string; unitPrice: number }>;
+  items: Array<{
+    quantity: number;
+    unit: string;
+    description: string;
+    unitPrice: number;
+    vatPercent?: number | null;
+  }>;
   images: Array<{
     id: string;
     mimeType: string;
@@ -112,7 +119,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
   const [items, setItems] = useState<Item[]>([
-    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null },
+    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null },
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -155,6 +162,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         unit: it.unit,
         description: it.description,
         unitPrice: it.unitPrice,
+        vatPercent: it.vatPercent,
       })),
     }),
     [
@@ -203,8 +211,8 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setSignerTitle(draft.signerTitle ?? '');
     setItems(
       draft.items && draft.items.length > 0
-        ? draft.items.map((it) => ({ ...it, image: null }))
-        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }],
+        ? draft.items.map((it) => ({ ...it, vatPercent: it.vatPercent ?? '15', image: null }))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }],
     );
     setDraftDismissed(true);
   }
@@ -238,9 +246,10 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
               unit: it.unit,
               description: it.description,
               unitPrice: String(it.unitPrice),
+              vatPercent: String(it.vatPercent ?? initial.ivaPercent ?? 15),
               image: null,
             }))
-          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }],
+          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }],
       );
       setImages([]);
       // Cargar las imágenes existentes (binario) para no perderlas al guardar.
@@ -262,7 +271,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
-    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
+    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }]);
     setImages([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -366,7 +375,10 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     }
   }
   function addItem() {
-    setItems((c) => [...c, { quantity: '1', unit: 'GBL', description: '', unitPrice: '', image: null }]);
+    setItems((c) => [
+      ...c,
+      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: ivaPercent, image: null },
+    ]);
   }
   function removeItem(idx: number) {
     setItems((c) => (c.length === 1 ? c : c.filter((_, i) => i !== idx)));
@@ -409,11 +421,20 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     });
   }
 
-  const subtotal = items.reduce(
-    (s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
-    0,
-  );
-  const iva = subtotal * (Number(ivaPercent) / 100);
+  // Totales con IVA POR RUBRO: agrupamos por tarifa (15%, 0%, …).
+  const vatBreakdown = useMemo(() => {
+    const byRate = new Map<number, number>();
+    for (const it of items) {
+      const rate = it.vatPercent === '' ? Number(ivaPercent) || 0 : Number(it.vatPercent) || 0;
+      const base = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
+      byRate.set(rate, (byRate.get(rate) ?? 0) + base);
+    }
+    return Array.from(byRate.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([rate, base]) => ({ rate, base, iva: (base * rate) / 100 }));
+  }, [items, ivaPercent]);
+  const subtotal = vatBreakdown.reduce((s, b) => s + b.base, 0);
+  const iva = vatBreakdown.reduce((s, b) => s + b.iva, 0);
   const total = subtotal + iva;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -450,6 +471,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
           unit: it.unit,
           description: it.description,
           unitPrice: Number(it.unitPrice),
+          vatPercent: Number(it.vatPercent) || 0,
         })),
         images: [
           // Imágenes ligadas a un rubro (van al lado de su descripción).
@@ -686,6 +708,22 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                   </button>
                 </div>
 
+                {/* IVA de este rubro */}
+                <div className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
+                  <span>IVA de este rubro:</span>
+                  <select
+                    value={it.vatPercent}
+                    onChange={(e) => updateItem(idx, { vatPercent: e.target.value })}
+                    className="input w-28 py-1 text-xs"
+                  >
+                    <option value="15">IVA 15%</option>
+                    <option value="0">IVA 0%</option>
+                    {!['15', '0'].includes(it.vatPercent) && (
+                      <option value={it.vatPercent}>IVA {it.vatPercent}%</option>
+                    )}
+                  </select>
+                </div>
+
                 {/* Imagen del rubro — sale al lado de la descripción en el PDF */}
                 <div className="mt-2 flex items-center gap-2">
                   {it.image ? (
@@ -740,20 +778,30 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
           </div>
 
           <div className="mt-3 flex flex-col items-end gap-1 text-sm">
-            <div>
-              Subtotal: <span className="font-semibold">{formatCurrency(subtotal, true)}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              IVA{' '}
+            <div className="mb-1 flex items-center gap-2 text-xs text-ink-secondary">
+              IVA por defecto de nuevos rubros:
               <input
                 type="number"
-                step="0.1"
+                step="1"
+                min="0"
+                max="100"
                 value={ivaPercent}
                 onChange={(e) => setIvaPercent(e.target.value)}
                 className="input w-16"
               />
-              %: <span className="font-semibold">{formatCurrency(iva, true)}</span>
+              %
             </div>
+            {vatBreakdown.map((b) => (
+              <div key={`sub-${b.rate}`}>
+                SUBTOTAL {b.rate}%:{' '}
+                <span className="font-semibold">{formatCurrency(b.base, true)}</span>
+              </div>
+            ))}
+            {vatBreakdown.map((b) => (
+              <div key={`iva-${b.rate}`}>
+                IVA {b.rate}%: <span className="font-semibold">{formatCurrency(b.iva, true)}</span>
+              </div>
+            ))}
             <div className="text-base">
               TOTAL:{' '}
               <span className="font-bold text-brand">{formatCurrency(total, true)}</span>

@@ -645,6 +645,8 @@ model ProformaItem {
   unit        String
   description String
   unitPrice   Float    @map("unit_price")
+  // % de IVA de ESTE rubro (null = usa el IVA general de la proforma).
+  vatPercent  Float?   @map("vat_percent")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

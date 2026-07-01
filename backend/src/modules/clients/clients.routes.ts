@@ -10,6 +10,7 @@ import { success } from '../../utils/apiResponse';
 import { NotFoundError, UnauthorizedError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { computeProformaTotals } from '../proformas/proforma-totals';
 
 const createSchema = z.object({
   name: z.string().min(1).max(300),
@@ -44,8 +45,7 @@ clientsRouter.get(
         include: { items: true },
       });
       for (const p of proformas) {
-        const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-        const total = subtotal * (1 + p.ivaPercent / 100);
+        const total = computeProformaTotals(p.items, p.ivaPercent).total;
         if (p.clientId) {
           countMap.set(p.clientId, (countMap.get(p.clientId) ?? 0) + 1);
           totalMap.set(p.clientId, (totalMap.get(p.clientId) ?? 0) + total);
@@ -81,9 +81,8 @@ clientsRouter.get(
     });
 
     const withTotals = proformas.map((p) => {
-      const subtotal = p.items.reduce((s, it) => s + it.quantity * it.unitPrice, 0);
-      const iva = subtotal * (p.ivaPercent / 100);
-      return { ...p, subtotal, iva, total: subtotal + iva };
+      const t = computeProformaTotals(p.items, p.ivaPercent);
+      return { ...p, subtotal: t.subtotal, iva: t.iva, total: t.total };
     });
 
     return success(res, { client, proformas: withTotals });

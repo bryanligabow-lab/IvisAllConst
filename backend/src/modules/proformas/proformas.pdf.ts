@@ -7,6 +7,7 @@ import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { toRenderableImage } from '../../shared/utils/image.util';
 import { buildAttachment } from './proforma-filename';
+import { computeProformaTotals } from './proforma-totals';
 
 const RED = '#C73E2C';
 const DARK = '#1A1A1A';
@@ -296,8 +297,13 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     footerTop = iy + 8;
   }
 
+  // Totales con IVA por rubro (desglose por tarifa).
+  const totals = computeProformaTotals(p.items, p.ivaPercent);
+  // Filas de totales: un subtotal + un IVA por cada tarifa, más el TOTAL.
+  const totalsRowsH = (totals.breakdown.length * 2 + 1) * 24 + 8;
+
   // Si no queda espacio para notas/totales, pásalos a una página nueva.
-  if (footerTop > PAGE_H - 210) {
+  if (footerTop > PAGE_H - Math.max(210, totalsRowsH + 70)) {
     doc.addPage();
     footerTop = M;
   }
@@ -349,8 +355,6 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   }
 
   // Totales (derecha)
-  const iva = subtotal * (p.ivaPercent / 100);
-  const total = subtotal + iva;
   const totalsX = M + W / 2 + 12;
   const totalsW = W / 2 - 12;
   const labelW = totalsW / 2;
@@ -374,21 +378,25 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     ty += 24;
   }
 
-  totalsRow('SUBTOTAL:', formatMoney(subtotal), true);
-  doc
-    .moveTo(totalsX, ty - 2)
-    .lineTo(totalsX + totalsW, ty - 2)
-    .lineWidth(0.5)
-    .strokeColor(LIGHT_GRAY)
-    .stroke();
-  totalsRow(`IVA ${p.ivaPercent}%`, formatMoney(iva), true);
-  doc
-    .moveTo(totalsX, ty - 2)
-    .lineTo(totalsX + totalsW, ty - 2)
-    .lineWidth(0.5)
-    .strokeColor(LIGHT_GRAY)
-    .stroke();
-  totalsRow('TOTAL:', formatMoney(total), true, true);
+  const sep = () =>
+    doc
+      .moveTo(totalsX, ty - 2)
+      .lineTo(totalsX + totalsW, ty - 2)
+      .lineWidth(0.5)
+      .strokeColor(LIGHT_GRAY)
+      .stroke();
+
+  // Un subtotal por cada tarifa (SUBTOTAL 15%, SUBTOTAL 0%, …).
+  for (const b of totals.breakdown) {
+    totalsRow(`SUBTOTAL ${b.rate}%:`, formatMoney(b.base), true);
+    sep();
+  }
+  // Un IVA por cada tarifa (IVA 15%, IVA 0%, …).
+  for (const b of totals.breakdown) {
+    totalsRow(`IVA ${b.rate}%`, formatMoney(b.iva), true);
+    sep();
+  }
+  totalsRow('TOTAL:', formatMoney(totals.total), true, true);
 
   // Firma
   const signY = Math.max(footerTop + notesH, ty) + 30;
