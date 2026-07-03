@@ -129,6 +129,9 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     sheet.getRow(row).eachCell((c) => {
       c.border = { bottom: { style: 'thin', color: { argb: 'FFE5E1DC' } } };
     });
+    // Crecer la fila si la descripción tiene varias líneas (Enter dentro del rubro).
+    const lineCount = String(it.description).split('\n').length;
+    if (lineCount > 1) sheet.getRow(row).height = Math.min(lineCount * 15 + 4, 240);
     row += 1;
   }
 
@@ -175,8 +178,8 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     sheet.getCell(tRow, 7).font = accent ? { bold: true, color: { argb: RED } } : { bold: true };
     tRow += 1;
   };
-  for (const b of totals.breakdown) putTotal(`SUB TOTAL ${b.rate}%`, b.base);
-  for (const b of totals.breakdown) putTotal(`IVA ${b.rate}%`, b.iva);
+  for (const b of totals.breakdown) putTotal(`SUB TOTAL ${b.label}`, b.base);
+  for (const b of totals.breakdown) if (b.ivaLine) putTotal(`IVA ${b.label}`, b.iva);
   putTotal('TOTAL:', totals.total, true);
 
   // Signature

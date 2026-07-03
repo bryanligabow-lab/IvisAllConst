@@ -12,6 +12,38 @@ import type { Product, Project } from '@/types';
 
 const DRAFT_KEY = 'draft:proforma:new';
 
+// Opciones de IVA por rubro. Además de 15% y 0%, se puede marcar un rubro como
+// "No objeto de IVA" o "Sin IVA (exento)": no suman IVA y no muestran fila de IVA.
+const VAT_OPTIONS = [
+  { value: '15', label: 'IVA 15%' },
+  { value: '0', label: 'IVA 0%' },
+  { value: 'NO_OBJETO', label: 'No objeto de IVA' },
+  { value: 'EXENTO', label: 'Sin IVA (exento)' },
+];
+function vatRate(mode: string): number {
+  if (mode === '0' || mode === 'NO_OBJETO' || mode === 'EXENTO') return 0;
+  const n = Number(mode);
+  return Number.isFinite(n) ? n : 0;
+}
+function vatLabel(mode: string): string {
+  if (mode === 'NO_OBJETO') return 'No objeto de IVA';
+  if (mode === 'EXENTO') return 'Exento de IVA';
+  return `${vatRate(mode)}%`;
+}
+function vatHasIvaLine(mode: string): boolean {
+  return mode !== 'NO_OBJETO' && mode !== 'EXENTO';
+}
+// Reconstruye el modo a partir de los campos guardados (edición/borrador).
+function vatModeFrom(
+  vatPercent: number | string | null | undefined,
+  vatType: string | null | undefined,
+  fallback: string,
+): string {
+  if (vatType === 'NO_OBJETO' || vatType === 'EXENTO') return vatType;
+  if (vatPercent == null || vatPercent === '') return fallback;
+  return String(vatPercent);
+}
+
 interface ImageItem {
   preview: string; // base64 data URL
   dataBase64: string; // sin prefix
@@ -25,7 +57,7 @@ interface Item {
   unit: string;
   description: string;
   unitPrice: string;
-  vatPercent: string; // % de IVA de este rubro (15, 0, …)
+  vatMode: string; // IVA de este rubro: '15' | '0' | 'NO_OBJETO' | 'EXENTO'
   image?: ImageItem | null; // imagen del rubro (sale al lado de la descripción)
 }
 
@@ -53,6 +85,7 @@ export interface ProformaEditData {
     description: string;
     unitPrice: number;
     vatPercent?: number | null;
+    vatType?: string | null;
   }>;
   images: Array<{
     id: string;
@@ -119,7 +152,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
   const [items, setItems] = useState<Item[]>([
-    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null },
+    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null },
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -162,7 +195,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         unit: it.unit,
         description: it.description,
         unitPrice: it.unitPrice,
-        vatPercent: it.vatPercent,
+        vatMode: it.vatMode,
       })),
     }),
     [
@@ -211,8 +244,8 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setSignerTitle(draft.signerTitle ?? '');
     setItems(
       draft.items && draft.items.length > 0
-        ? draft.items.map((it) => ({ ...it, vatPercent: it.vatPercent ?? '15', image: null }))
-        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }],
+        ? draft.items.map((it) => ({ ...it, vatMode: it.vatMode ?? '15', image: null }))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }],
     );
     setDraftDismissed(true);
   }
@@ -246,10 +279,10 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
               unit: it.unit,
               description: it.description,
               unitPrice: String(it.unitPrice),
-              vatPercent: String(it.vatPercent ?? initial.ivaPercent ?? 15),
+              vatMode: vatModeFrom(it.vatPercent, it.vatType, String(initial.ivaPercent ?? 15)),
               image: null,
             }))
-          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }],
+          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }],
       );
       setImages([]);
       // Cargar las imágenes existentes (binario) para no perderlas al guardar.
@@ -271,7 +304,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
-    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: '15', image: null }]);
+    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }]);
     setImages([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -377,7 +410,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   function addItem() {
     setItems((c) => [
       ...c,
-      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatPercent: ivaPercent, image: null },
+      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, image: null },
     ]);
   }
   function removeItem(idx: number) {
@@ -421,17 +454,29 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     });
   }
 
-  // Totales con IVA POR RUBRO: agrupamos por tarifa (15%, 0%, …).
+  // Totales con IVA POR RUBRO: agrupamos por categoría (15%, 0%, No objeto, Exento).
   const vatBreakdown = useMemo(() => {
-    const byRate = new Map<number, number>();
+    const map = new Map<
+      string,
+      { mode: string; label: string; rate: number; ivaLine: boolean; base: number; iva: number }
+    >();
     for (const it of items) {
-      const rate = it.vatPercent === '' ? Number(ivaPercent) || 0 : Number(it.vatPercent) || 0;
+      const mode = it.vatMode || ivaPercent || '0';
+      const rate = vatRate(mode);
+      const ivaLine = vatHasIvaLine(mode);
+      const key = mode === 'NO_OBJETO' || mode === 'EXENTO' ? mode : `R${rate}`;
       const base = (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0);
-      byRate.set(rate, (byRate.get(rate) ?? 0) + base);
+      const ex = map.get(key);
+      if (ex) {
+        ex.base += base;
+        ex.iva += (base * rate) / 100;
+      } else {
+        map.set(key, { mode, label: vatLabel(mode), rate, ivaLine, base, iva: (base * rate) / 100 });
+      }
     }
-    return Array.from(byRate.entries())
-      .sort((a, b) => b[0] - a[0])
-      .map(([rate, base]) => ({ rate, base, iva: (base * rate) / 100 }));
+    const ord = (r: { rate: number; ivaLine: boolean; mode: string }) =>
+      r.ivaLine ? 100 - r.rate : r.mode === 'NO_OBJETO' ? 200 : 300;
+    return Array.from(map.values()).sort((a, b) => ord(a) - ord(b));
   }, [items, ivaPercent]);
   const subtotal = vatBreakdown.reduce((s, b) => s + b.base, 0);
   const iva = vatBreakdown.reduce((s, b) => s + b.iva, 0);
@@ -471,7 +516,9 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
           unit: it.unit,
           description: it.description,
           unitPrice: Number(it.unitPrice),
-          vatPercent: Number(it.vatPercent) || 0,
+          vatPercent: vatRate(it.vatMode),
+          vatType:
+            it.vatMode === 'NO_OBJETO' || it.vatMode === 'EXENTO' ? it.vatMode : null,
         })),
         images: [
           // Imágenes ligadas a un rubro (van al lado de su descripción).
@@ -669,7 +716,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                   <input
                     value={it.quantity}
                     onChange={(e) => updateItem(idx, { quantity: e.target.value })}
-                    className="input col-span-2"
+                    className="input col-span-3"
                     placeholder="Cant"
                     type="number"
                     step="0.01"
@@ -678,20 +725,13 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                   <input
                     value={it.unit}
                     onChange={(e) => updateItem(idx, { unit: e.target.value })}
-                    className="input col-span-2"
+                    className="input col-span-3"
                     placeholder="UNI"
-                  />
-                  <input
-                    value={it.description}
-                    onChange={(e) => updateItem(idx, { description: e.target.value })}
-                    className="input col-span-5"
-                    placeholder="Descripción"
-                    required
                   />
                   <input
                     value={it.unitPrice}
                     onChange={(e) => updateItem(idx, { unitPrice: e.target.value })}
-                    className="input col-span-2"
+                    className="input col-span-5"
                     placeholder="V. Unit"
                     type="number"
                     step="0.01"
@@ -707,19 +747,32 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                     🗑️
                   </button>
                 </div>
+                {/* Descripción: textarea → se puede dar Enter para varias líneas
+                    dentro del MISMO rubro (sale con saltos de línea en el PDF/Excel). */}
+                <textarea
+                  value={it.description}
+                  onChange={(e) => updateItem(idx, { description: e.target.value })}
+                  className="input mt-2 w-full"
+                  placeholder="Descripción del rubro — puedes dar Enter para poner varias líneas"
+                  rows={2}
+                  required
+                />
 
                 {/* IVA de este rubro */}
                 <div className="mt-2 flex items-center gap-2 text-xs text-ink-secondary">
                   <span>IVA de este rubro:</span>
                   <select
-                    value={it.vatPercent}
-                    onChange={(e) => updateItem(idx, { vatPercent: e.target.value })}
-                    className="input w-28 py-1 text-xs"
+                    value={it.vatMode}
+                    onChange={(e) => updateItem(idx, { vatMode: e.target.value })}
+                    className="input w-44 py-1 text-xs"
                   >
-                    <option value="15">IVA 15%</option>
-                    <option value="0">IVA 0%</option>
-                    {!['15', '0'].includes(it.vatPercent) && (
-                      <option value={it.vatPercent}>IVA {it.vatPercent}%</option>
+                    {VAT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                    {!VAT_OPTIONS.some((o) => o.value === it.vatMode) && (
+                      <option value={it.vatMode}>IVA {vatRate(it.vatMode)}%</option>
                     )}
                   </select>
                 </div>
@@ -792,16 +845,19 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
               %
             </div>
             {vatBreakdown.map((b) => (
-              <div key={`sub-${b.rate}`}>
-                SUBTOTAL {b.rate}%:{' '}
+              <div key={`sub-${b.mode}`}>
+                SUBTOTAL {b.label}:{' '}
                 <span className="font-semibold">{formatCurrency(b.base, true)}</span>
               </div>
             ))}
-            {vatBreakdown.map((b) => (
-              <div key={`iva-${b.rate}`}>
-                IVA {b.rate}%: <span className="font-semibold">{formatCurrency(b.iva, true)}</span>
-              </div>
-            ))}
+            {vatBreakdown
+              .filter((b) => b.ivaLine)
+              .map((b) => (
+                <div key={`iva-${b.mode}`}>
+                  IVA {b.label}:{' '}
+                  <span className="font-semibold">{formatCurrency(b.iva, true)}</span>
+                </div>
+              ))}
             <div className="text-base">
               TOTAL:{' '}
               <span className="font-bold text-brand">{formatCurrency(total, true)}</span>

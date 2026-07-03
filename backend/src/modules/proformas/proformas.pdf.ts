@@ -58,7 +58,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   const headerY = M;
   if (fs.existsSync(LOGO_PATH)) {
     try {
-      doc.image(LOGO_PATH, M, headerY - 6, { fit: [250, 116] });
+      doc.image(LOGO_PATH, M, headerY - 4, { fit: [300, 96] });
     } catch {
       /* ignore */
     }
@@ -84,10 +84,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
       lineBreak: false,
     });
 
-  // Línea separadora
+  // Línea separadora (subida para aprovechar mejor el espacio)
   doc
-    .moveTo(M, headerY + 118)
-    .lineTo(M + W, headerY + 118)
+    .moveTo(M, headerY + 96)
+    .lineTo(M + W, headerY + 96)
     .lineWidth(1.5)
     .strokeColor(RED)
     .stroke();
@@ -97,10 +97,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     .fillColor(DARK)
     .font('Helvetica')
     .fontSize(9)
-    .text(formatDateLong(p.date), M, headerY + 126, { width: W, align: 'right' });
+    .text(formatDateLong(p.date), M, headerY + 102, { width: W, align: 'right' });
 
   // ===== Emisor (izq) + Cliente (der) =====
-  const blockY = headerY + 148;
+  const blockY = headerY + 120;
   doc.fillColor(DARK).font('Helvetica-Bold').fontSize(10).text('CREA INNOVACION PROYECTOS Y SERVICIOS', M, blockY);
   doc.font('Helvetica-Bold').text('CREACOM S.A.', M, blockY + 12);
   doc.font('Helvetica').fontSize(9).fillColor(DARK);
@@ -299,8 +299,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
 
   // Totales con IVA por rubro (desglose por tarifa).
   const totals = computeProformaTotals(p.items, p.ivaPercent);
-  // Filas de totales: un subtotal + un IVA por cada tarifa, más el TOTAL.
-  const totalsRowsH = (totals.breakdown.length * 2 + 1) * 24 + 8;
+  // Filas de totales: un subtotal por categoría + un IVA por cada categoría
+  // que lleve IVA (los "No objeto"/"Exento" no llevan fila de IVA) + el TOTAL.
+  const ivaRowsCount = totals.breakdown.filter((b) => b.ivaLine).length;
+  const totalsRowsH = (totals.breakdown.length + ivaRowsCount + 1) * 24 + 8;
 
   // Si no queda espacio para notas/totales, pásalos a una página nueva.
   if (footerTop > PAGE_H - Math.max(210, totalsRowsH + 70)) {
@@ -386,14 +388,15 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
       .strokeColor(LIGHT_GRAY)
       .stroke();
 
-  // Un subtotal por cada tarifa (SUBTOTAL 15%, SUBTOTAL 0%, …).
+  // Un subtotal por cada categoría (SUBTOTAL 15%, SUBTOTAL 0%, SUBTOTAL No objeto de IVA, …).
   for (const b of totals.breakdown) {
-    totalsRow(`SUBTOTAL ${b.rate}%:`, formatMoney(b.base), true);
+    totalsRow(`SUBTOTAL ${b.label}:`, formatMoney(b.base), true);
     sep();
   }
-  // Un IVA por cada tarifa (IVA 15%, IVA 0%, …).
+  // Un IVA por cada categoría que lleve IVA (los especiales no suman IVA).
   for (const b of totals.breakdown) {
-    totalsRow(`IVA ${b.rate}%`, formatMoney(b.iva), true);
+    if (!b.ivaLine) continue;
+    totalsRow(`IVA ${b.label}`, formatMoney(b.iva), true);
     sep();
   }
   totalsRow('TOTAL:', formatMoney(totals.total), true, true);

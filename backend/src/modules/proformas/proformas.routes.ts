@@ -22,6 +22,8 @@ const itemSchema = z.object({
   unitPrice: z.coerce.number().nonnegative(),
   // % de IVA de este rubro (null/ausente = usa el IVA general).
   vatPercent: z.coerce.number().min(0).max(100).nullable().optional(),
+  // Tipo especial de IVA por rubro: NO_OBJETO | EXENTO (null = IVA normal).
+  vatType: z.enum(['NO_OBJETO', 'EXENTO']).nullable().optional(),
 });
 
 const imageSchema = z.object({
@@ -239,6 +241,7 @@ proformasRouter.post(
             description: it.description,
             unitPrice: it.unitPrice,
             vatPercent: it.vatPercent ?? null,
+            vatType: it.vatType ?? null,
           })),
         },
         images: {
@@ -296,6 +299,7 @@ proformasRouter.patch(
             description: it.description,
             unitPrice: it.unitPrice,
             vatPercent: it.vatPercent ?? null,
+            vatType: it.vatType ?? null,
           })),
         });
       }

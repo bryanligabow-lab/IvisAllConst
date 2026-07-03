@@ -31,7 +31,13 @@ interface ProformaDetail {
   subtotal: number;
   iva: number;
   total: number;
-  vatBreakdown?: Array<{ rate: number; base: number; iva: number }>;
+  vatBreakdown?: Array<{
+    rate: number;
+    base: number;
+    iva: number;
+    label?: string;
+    ivaLine?: boolean;
+  }>;
   project?: { id: string; name: string; code: string } | null;
   items: Array<{
     id: string;
@@ -40,6 +46,7 @@ interface ProformaDetail {
     description: string;
     unitPrice: number;
     vatPercent?: number | null;
+    vatType?: string | null;
   }>;
 }
 
@@ -203,7 +210,7 @@ export default function ProformaDetailPage() {
                 <tr key={it.id} className="border-t border-surface-border">
                   <td className="px-3 py-2 text-center">{it.quantity}</td>
                   <td className="px-3 py-2 text-center">{it.unit}</td>
-                  <td className="px-3 py-2 text-center">{it.description}</td>
+                  <td className="whitespace-pre-line px-3 py-2 text-center">{it.description}</td>
                   <td className="px-3 py-2 text-right">${formatCurrency(it.unitPrice).replace('$','').trim()}</td>
                   <td className="px-3 py-2 text-right font-medium">${formatCurrency(it.quantity * it.unitPrice).replace('$','').trim()}</td>
                 </tr>
@@ -233,28 +240,30 @@ export default function ProformaDetailPage() {
           <div>
             {(data.vatBreakdown && data.vatBreakdown.length > 0
               ? data.vatBreakdown
-              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva }]
-            ).map((b) => (
+              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva, label: `${data.ivaPercent}%`, ivaLine: true }]
+            ).map((b, i) => (
               <div
-                key={`sub-${b.rate}`}
+                key={`sub-${b.label ?? b.rate}-${i}`}
                 className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold"
               >
-                <span>SUBTOTAL {b.rate}%</span>
+                <span>SUBTOTAL {b.label ?? `${b.rate}%`}</span>
                 <span>{formatCurrency(b.base, true)}</span>
               </div>
             ))}
             {(data.vatBreakdown && data.vatBreakdown.length > 0
               ? data.vatBreakdown
-              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva }]
-            ).map((b) => (
-              <div
-                key={`iva-${b.rate}`}
-                className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold"
-              >
-                <span>IVA {b.rate}%</span>
-                <span>{formatCurrency(b.iva, true)}</span>
-              </div>
-            ))}
+              : [{ rate: data.ivaPercent, base: data.subtotal, iva: data.iva, label: `${data.ivaPercent}%`, ivaLine: true }]
+            )
+              .filter((b) => b.ivaLine !== false)
+              .map((b, i) => (
+                <div
+                  key={`iva-${b.label ?? b.rate}-${i}`}
+                  className="flex justify-between border-b border-surface-border py-2 text-sm font-semibold"
+                >
+                  <span>IVA {b.label ?? `${b.rate}%`}</span>
+                  <span>{formatCurrency(b.iva, true)}</span>
+                </div>
+              ))}
             <div className="flex justify-between bg-brand-light px-2 py-2 text-lg font-bold text-brand">
               <span>TOTAL:</span>
               <span>{formatCurrency(data.total, true)}</span>
