@@ -24,6 +24,10 @@ const createIngresoSchema = z.object({
   invoiceNumber: z.string().max(80).optional(),
   reference: z.string().max(300).optional(),
   notes: z.string().max(1000).optional(),
+  // Documento adjunto (PDF/foto de la planilla o comprobante). base64 sin prefijo.
+  documentBase64: z.string().optional().nullable(),
+  documentMime: z.string().max(120).optional().nullable(),
+  documentName: z.string().max(200).optional().nullable(),
 });
 
 const updateIngresoSchema = createIngresoSchema.partial().omit({ projectId: true });
@@ -55,6 +59,25 @@ ingresosRouter.get(
   asyncHandler(async (req, res) => {
     const summary = await IngresosService.summary(req.query.projectId as string);
     return success(res, summary);
+  }),
+);
+
+// Sirve el documento adjunto (PDF/foto) de un ingreso.
+ingresosRouter.get(
+  '/:id/document',
+  requirePermission(PERMISSIONS.INGRESOS_READ),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    const doc = await IngresosService.getDocument(req.params.id);
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(doc.projectId)) {
+      throw new UnauthorizedError('No tienes acceso a este proyecto');
+    }
+    res.setHeader('Content-Type', doc.documentMime || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    if (doc.documentName) {
+      res.setHeader('Content-Disposition', `inline; filename="${doc.documentName.replace(/"/g, '')}"`);
+    }
+    res.send(Buffer.from(doc.documentData as Buffer));
   }),
 );
 

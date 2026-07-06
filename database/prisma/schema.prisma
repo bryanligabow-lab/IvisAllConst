@@ -452,6 +452,10 @@ model Ingreso {
   invoiceNumber String?   @map("invoice_number")
   reference     String?
   notes         String?
+  // Documento adjunto (PDF/foto de la planilla o comprobante del cobro), binario en BD.
+  documentData  Bytes?    @map("document_data")
+  documentMime  String?   @map("document_mime")
+  documentName  String?   @map("document_name")
   createdBy     String    @map("created_by")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")

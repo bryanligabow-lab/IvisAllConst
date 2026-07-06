@@ -15,6 +15,10 @@ interface CreateIngresoInput {
   invoiceNumber?: string;
   reference?: string;
   notes?: string;
+  // Documento adjunto (PDF/foto de la planilla). base64 sin prefijo.
+  documentBase64?: string | null;
+  documentMime?: string | null;
+  documentName?: string | null;
 }
 
 type UpdateIngresoInput = Partial<Omit<CreateIngresoInput, 'projectId'>>;
@@ -25,15 +29,27 @@ const PRESENTED_STATUSES = ['SUBMITTED', 'FISCALIZACION', 'CONTRALORIA', 'APPROV
 const RECEIVABLE_STATUSES = ['SUBMITTED', 'FISCALIZACION', 'CONTRALORIA', 'APPROVED'];
 
 export class IngresosService {
-  static list(projectId: string) {
-    return prisma.ingreso.findMany({
+  static async list(projectId: string) {
+    // Excluimos el binario del documento de la lista (puede ser pesado).
+    const items = await prisma.ingreso.findMany({
       where: { projectId, deletedAt: null },
       orderBy: { ingresoDate: 'desc' },
+      omit: { documentData: true },
       include: {
         planilla: { select: { id: true, number: true, title: true } },
         creator: { select: { firstName: true, lastName: true } },
       },
     });
+    return items.map((it) => ({ ...it, hasDocument: !!it.documentMime }));
+  }
+
+  static async getDocument(id: string) {
+    const ingreso = await prisma.ingreso.findFirst({
+      where: { id, deletedAt: null },
+      select: { documentData: true, documentMime: true, documentName: true, projectId: true },
+    });
+    if (!ingreso || !ingreso.documentData) throw new NotFoundError(ERRORS.INGRESO_NOT_FOUND);
+    return ingreso;
   }
 
   static async getById(id: string) {
@@ -73,8 +89,14 @@ export class IngresosService {
         invoiceNumber: input.invoiceNumber?.trim() || null,
         reference: input.reference?.trim() || null,
         notes: input.notes?.trim() || null,
+        documentData: input.documentBase64
+          ? Buffer.from(input.documentBase64, 'base64')
+          : null,
+        documentMime: input.documentBase64 ? input.documentMime || null : null,
+        documentName: input.documentBase64 ? input.documentName || null : null,
         createdBy,
       },
+      omit: { documentData: true },
     });
   }
 
@@ -96,7 +118,18 @@ export class IngresosService {
           : {}),
         ...(input.reference !== undefined ? { reference: input.reference?.trim() || null } : {}),
         ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+        // Documento: si viene documentBase64 se reemplaza; si viene null explícito se quita.
+        ...(input.documentBase64 !== undefined
+          ? {
+              documentData: input.documentBase64
+                ? Buffer.from(input.documentBase64, 'base64')
+                : null,
+              documentMime: input.documentBase64 ? input.documentMime || null : null,
+              documentName: input.documentBase64 ? input.documentName || null : null,
+            }
+          : {}),
       },
+      omit: { documentData: true },
     });
   }
 

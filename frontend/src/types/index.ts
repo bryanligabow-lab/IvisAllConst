@@ -248,6 +248,9 @@ export interface Ingreso {
   invoiceNumber: string | null;
   reference: string | null;
   notes: string | null;
+  documentMime?: string | null;
+  documentName?: string | null;
+  hasDocument?: boolean;
   planilla?: { id: string; number: number; title: string } | null;
   creator?: { firstName: string; lastName: string };
 }

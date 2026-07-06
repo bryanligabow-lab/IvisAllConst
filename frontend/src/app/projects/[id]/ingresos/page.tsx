@@ -7,10 +7,21 @@ import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateIngresoModal } from '@/components/forms/CreateIngresoModal';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { apiDelete, apiGet } from '@/lib/api';
+import { apiDelete, apiFetchBlob, apiGet } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import type { Ingreso, IngresoKind, IngresosSummary, Planilla } from '@/types';
+
+async function openIngresoDoc(id: string) {
+  try {
+    const blob = await apiFetchBlob(`/ingresos/${id}/document`);
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch {
+    window.alert('No se pudo abrir el documento.');
+  }
+}
 
 const KIND_LABEL: Record<IngresoKind, string> = {
   ANTICIPO: 'Anticipo',
@@ -160,6 +171,15 @@ export default function IngresosPage() {
                 )}
                 {ing.invoiceNumber && <span className="ml-2">🧾 {ing.invoiceNumber}</span>}
                 {ing.reference && <span className="ml-2">Ref: {ing.reference}</span>}
+                {(ing.hasDocument || ing.documentMime) && (
+                  <button
+                    type="button"
+                    onClick={() => openIngresoDoc(ing.id)}
+                    className="ml-2 text-brand hover:underline"
+                  >
+                    📎 Ver documento
+                  </button>
+                )}
               </div>
               {ing.notes && (
                 <div className="mt-0.5 text-[11px] italic text-ink-tertiary">{ing.notes}</div>
