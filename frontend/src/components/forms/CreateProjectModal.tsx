@@ -31,6 +31,8 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [addingClient, setAddingClient] = useState(false);
   const [addingSub, setAddingSub] = useState(false);
   const [contractAmount, setContractAmount] = useState('');
+  // ¿El cliente da anticipo? (AMBIENSA sí; la iglesia, por ejemplo, no)
+  const [managesAdvance, setManagesAdvance] = useState(true);
   const [advancePercent, setAdvancePercent] = useState('40');
   const [guaranteePercent, setGuaranteePercent] = useState('5');
   // IVA
@@ -71,6 +73,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setWorkProgressPercent(String(initial.workProgressPercent ?? 0));
       setCity(initial.city ?? '');
       setContractAmount(String(initial.contractAmount));
+      setManagesAdvance(initial.managesAdvance ?? true);
       setAdvancePercent(String(initial.advancePercent));
       setGuaranteePercent(String(initial.guaranteePercent));
       setVatPercent(String(initial.vatPercent ?? 15));
@@ -90,6 +93,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setCreacomProfitPercent('0');
       setCity('');
       setContractAmount('');
+      setManagesAdvance(true);
       setAdvancePercent('40');
       setGuaranteePercent('5');
       setVatPercent('15');
@@ -159,7 +163,8 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
         latitude: cityData?.lat,
         longitude: cityData?.lng,
         contractAmount: Number(contractAmount),
-        advancePercent: Number(advancePercent),
+        managesAdvance,
+        advancePercent: managesAdvance ? Number(advancePercent) : 0,
         guaranteePercent: Number(guaranteePercent),
         vatPercent: Number(vatPercent),
         vatIncluded,
@@ -365,7 +370,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
           </select>
         </Field>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className={`grid gap-3 ${managesAdvance ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <Field label="Monto contrato" required>
             <input
               type="number"
@@ -377,16 +382,18 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
               className="input"
             />
           </Field>
-          <Field label="Anticipo %">
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={advancePercent}
-              onChange={(e) => setAdvancePercent(e.target.value)}
-              className="input"
-            />
-          </Field>
+          {managesAdvance && (
+            <Field label="Anticipo %">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={advancePercent}
+                onChange={(e) => setAdvancePercent(e.target.value)}
+                className="input"
+              />
+            </Field>
+          )}
           <Field label="Garantía %">
             <input
               type="number"
@@ -398,6 +405,18 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
             />
           </Field>
         </div>
+
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={managesAdvance}
+            onChange={(e) => setManagesAdvance(e.target.checked)}
+          />
+          El proyecto se maneja <strong>con anticipo</strong> del cliente
+          <span className="text-ink-tertiary">
+            (si no, las planillas no amortizan anticipo)
+          </span>
+        </label>
 
         {/* IVA */}
         <fieldset className="rounded-md border border-border bg-surface-muted px-3 py-2">

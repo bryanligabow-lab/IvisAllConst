@@ -19,6 +19,7 @@ export function ProjectTabs({ projectId }: ProjectTabsProps) {
     { href: ROUTES.PROJECT_ORDERS(projectId), label: 'Órdenes de pago', perm: 'payment_orders.read' },
     { href: ROUTES.PROJECT_PROVIDERS(projectId), label: 'Proveedores', perm: 'providers.read' },
     { href: ROUTES.PROJECT_PLANILLAS(projectId), label: 'Planillas', perm: 'planillas.read' },
+    { href: ROUTES.PROJECT_INGRESOS(projectId), label: 'Ingresos', perm: 'ingresos.read' },
     { href: ROUTES.PROJECT_BITACORA(projectId), label: 'Bitácora', perm: 'bitacora.read' },
     { href: ROUTES.PROJECT_DOCUMENTS(projectId), label: 'Documentación', perm: 'projects.read' },
   ].filter((t) => can(t.perm));

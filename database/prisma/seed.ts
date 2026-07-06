@@ -24,6 +24,10 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   { name: 'planillas.read', resource: 'planillas', action: 'read', description: 'Ver planillas' },
   { name: 'planillas.write', resource: 'planillas', action: 'write', description: 'Crear/editar planillas' },
   { name: 'planillas.export', resource: 'planillas', action: 'export', description: 'Exportar planillas a Excel' },
+  { name: 'planillas.status', resource: 'planillas', action: 'status', description: 'Cambiar el estado de una planilla (seguimiento del cobro)' },
+  // ingresos (anticipos y cobros de planillas)
+  { name: 'ingresos.read', resource: 'ingresos', action: 'read', description: 'Ver ingresos de dinero del proyecto' },
+  { name: 'ingresos.write', resource: 'ingresos', action: 'write', description: 'Registrar/editar ingresos de dinero' },
   // payment orders
   { name: 'payment_orders.read', resource: 'payment_orders', action: 'read', description: 'Ver órdenes de pago' },
   { name: 'payment_orders.write', resource: 'payment_orders', action: 'write', description: 'Crear órdenes de pago' },
@@ -121,6 +125,9 @@ async function main() {
     'gastos.read',
     'gastos.write',
     'planillas.read',
+    'planillas.status',
+    'ingresos.read',
+    'ingresos.write',
     'payment_orders.read',
     'payment_orders.write',
     'payment_orders.approve',
@@ -164,6 +171,9 @@ async function main() {
     'projects.read',
     'rubros.read',
     'planillas.read',
+    // El residente actualiza desde obra en qué paso va el cobro de la planilla
+    // (presentada / fiscalización / contraloría / aprobada / pagada) con nota.
+    'planillas.status',
     'payment_orders.read',
     'payment_orders.write',
     'providers.read',
@@ -203,6 +213,7 @@ async function main() {
     'gastos.read',
     'planillas.read',
     'planillas.export',
+    'ingresos.read',
     'payment_orders.read',
     'providers.read',
     'employees.read',

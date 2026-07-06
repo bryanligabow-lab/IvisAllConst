@@ -28,6 +28,22 @@ interface ComputedTotals {
 
 const PERCENT_DIVISOR = 100;
 
+/**
+ * Flujo real de cobro de una planilla (en orden):
+ * DRAFT (elaborándose) → SUBMITTED (presentada) → FISCALIZACION →
+ * CONTRALORIA → APPROVED (aprobada) → PAID (pagada). CANCELLED anula.
+ */
+export const PLANILLA_STATUSES = [
+  'DRAFT',
+  'SUBMITTED',
+  'FISCALIZACION',
+  'CONTRALORIA',
+  'APPROVED',
+  'PAID',
+  'CANCELLED',
+] as const;
+export type PlanillaStatus = (typeof PLANILLA_STATUSES)[number];
+
 export class PlanillasService {
   /** Calcula amortización de anticipo y fondo de garantía sobre el valor de la planilla. */
   private static computeTotals(
@@ -91,7 +107,8 @@ export class PlanillasService {
     });
     if (!project) return;
 
-    const advancePct = Number(project.advancePercent);
+    // Proyectos sin anticipo (managesAdvance = false) no amortizan nada.
+    const advancePct = project.managesAdvance ? Number(project.advancePercent) : 0;
     const guaranteePct = Number(project.guaranteePercent);
 
     const planillas = await prisma.planilla.findMany({
@@ -135,6 +152,14 @@ export class PlanillasService {
     return prisma.planilla.findMany({
       where: { projectId, deletedAt: null },
       orderBy: { number: 'asc' },
+      include: {
+        // Últimos movimientos para mostrar el seguimiento sin otra petición.
+        statusEvents: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: { creator: { select: { firstName: true, lastName: true } } },
+        },
+      },
     });
   }
 
@@ -144,6 +169,10 @@ export class PlanillasService {
       include: {
         items: { include: { rubro: true } },
         project: true,
+        statusEvents: {
+          orderBy: { createdAt: 'desc' },
+          include: { creator: { select: { firstName: true, lastName: true } } },
+        },
       },
     });
     if (!planilla) throw new NotFoundError(ERRORS.PLANILLA_NOT_FOUND);
@@ -185,7 +214,7 @@ export class PlanillasService {
     const totals = this.computeTotals(
       totalCurrent,
       totalPrevious,
-      Number(project.advancePercent),
+      project.managesAdvance ? Number(project.advancePercent) : 0,
       Number(project.guaranteePercent),
     );
 
@@ -199,6 +228,9 @@ export class PlanillasService {
         createdBy,
         ...totals,
         items: { createMany: { data: itemsToCreate } },
+        statusEvents: {
+          create: { status: 'DRAFT', note: 'Planilla creada', createdBy },
+        },
       },
       include: { items: true },
     });
@@ -209,9 +241,15 @@ export class PlanillasService {
     return created;
   }
 
-  static async updateStatus(id: string, status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'CANCELLED') {
+  static async updateStatus(id: string, status: PlanillaStatus, changedBy: string, note?: string) {
     const existing = await this.getById(id);
-    const updated = await prisma.planilla.update({ where: { id }, data: { status } });
+    const [updated] = await prisma.$transaction([
+      prisma.planilla.update({ where: { id }, data: { status } }),
+      // Queda en el historial quién movió la planilla, a qué estado y con qué nota.
+      prisma.planillaStatusEvent.create({
+        data: { planillaId: id, status, note: note?.trim() || null, createdBy: changedBy },
+      }),
+    ]);
     // Status changes can affect downstream "planilla anterior" totals.
     await this.recomputeProjectTotals(existing.projectId);
     return updated;

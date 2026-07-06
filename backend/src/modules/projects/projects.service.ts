@@ -102,7 +102,9 @@ export class ProjectsService {
     });
 
     const contractAmount = Number(project.contractAmount);
-    const advanceAmount = contractAmount * (Number(project.advancePercent) / 100);
+    const advanceAmount = project.managesAdvance
+      ? contractAmount * (Number(project.advancePercent) / 100)
+      : 0;
 
     // ----- Cálculos de IVA y retenciones -----
     const vatPercent = Number(project.vatPercent ?? 15);
@@ -135,6 +137,7 @@ export class ProjectsService {
         name: project.name,
         contractor: project.contractor,
         contractAmount,
+        managesAdvance: Boolean(project.managesAdvance),
         advancePercent: Number(project.advancePercent),
         advanceAmount,
         guaranteePercent: Number(project.guaranteePercent),
@@ -183,6 +186,7 @@ export class ProjectsService {
         latitude: dto.latitude ?? null,
         longitude: dto.longitude ?? null,
         contractAmount: dto.contractAmount,
+        managesAdvance: dto.managesAdvance ?? true,
         advancePercent: dto.advancePercent ?? 40,
         guaranteePercent: dto.guaranteePercent ?? 5,
         vatPercent: dto.vatPercent ?? 15,
@@ -226,6 +230,9 @@ export class ProjectsService {
           pendingOrders: 0,
           planillado: 0,
           porCobrar: 0,
+          ingresado: 0,
+          anticipoRecibido: 0,
+          saldoPorDevengar: 0,
           activeCount: 0,
         },
       };
@@ -233,7 +240,7 @@ export class ProjectsService {
 
     const projectIds = projects.map((p) => p.id);
 
-    const [budgetedAgg, spentAgg, ordersAgg, planillasAll] = await Promise.all([
+    const [budgetedAgg, spentAgg, ordersAgg, planillasAll, ingresosAll] = await Promise.all([
       prisma.rubro.groupBy({
         by: ['projectId'],
         where: { projectId: { in: projectIds }, deletedAt: null },
@@ -252,10 +259,17 @@ export class ProjectsService {
         where: { projectId: { in: projectIds }, deletedAt: null },
         select: {
           projectId: true,
+          number: true,
           status: true,
           totalCurrent: true,
           netPayable: true,
+          advanceAmortization: true,
         },
+      }),
+      prisma.ingreso.groupBy({
+        by: ['projectId', 'kind'],
+        where: { projectId: { in: projectIds }, deletedAt: null },
+        _sum: { amount: true },
       }),
     ]);
 
@@ -272,9 +286,15 @@ export class ProjectsService {
     }
 
     // Planillado: suma de totalCurrent de planillas APPROVED o PAID
-    // Por cobrar: suma de netPayable de planillas SUBMITTED o APPROVED (no PAID)
+    // Por cobrar: netPayable de planillas presentadas pero aún no pagadas
+    // (SUBMITTED / FISCALIZACION / CONTRALORIA / APPROVED)
+    const RECEIVABLE_STATUSES = ['SUBMITTED', 'FISCALIZACION', 'CONTRALORIA', 'APPROVED'];
     const planilladoByProject = new Map<string, number>();
     const porCobrarByProject = new Map<string, number>();
+    const devengadoByProject = new Map<string, number>();
+    // Última planilla (mayor número, no cancelada) por proyecto: es el estado
+    // que gerencia quiere ver en la página principal sin llamar a nadie.
+    const lastPlanillaByProject = new Map<string, { number: number; status: string }>();
     let globalPlanillado = 0;
     let globalPorCobrar = 0;
     for (const pl of planillasAll) {
@@ -283,10 +303,35 @@ export class ProjectsService {
       if (pl.status === 'APPROVED' || pl.status === 'PAID') {
         planilladoByProject.set(pl.projectId, (planilladoByProject.get(pl.projectId) ?? 0) + current);
         globalPlanillado += current;
+        devengadoByProject.set(
+          pl.projectId,
+          (devengadoByProject.get(pl.projectId) ?? 0) + Number(pl.advanceAmortization),
+        );
       }
-      if (pl.status === 'SUBMITTED' || pl.status === 'APPROVED') {
+      if (RECEIVABLE_STATUSES.includes(pl.status)) {
         porCobrarByProject.set(pl.projectId, (porCobrarByProject.get(pl.projectId) ?? 0) + net);
         globalPorCobrar += net;
+      }
+      if (pl.status !== 'CANCELLED') {
+        const last = lastPlanillaByProject.get(pl.projectId);
+        if (!last || pl.number > last.number) {
+          lastPlanillaByProject.set(pl.projectId, { number: pl.number, status: pl.status });
+        }
+      }
+    }
+
+    // Ingresos por proyecto: total ingresado y anticipos recibidos.
+    const ingresadoByProject = new Map<string, number>();
+    const anticipoByProject = new Map<string, number>();
+    let globalIngresado = 0;
+    let globalAnticipo = 0;
+    for (const ing of ingresosAll) {
+      const amount = Number(ing._sum.amount ?? 0);
+      ingresadoByProject.set(ing.projectId, (ingresadoByProject.get(ing.projectId) ?? 0) + amount);
+      globalIngresado += amount;
+      if (ing.kind === 'ANTICIPO') {
+        anticipoByProject.set(ing.projectId, (anticipoByProject.get(ing.projectId) ?? 0) + amount);
+        globalAnticipo += amount;
       }
     }
 
@@ -302,6 +347,10 @@ export class ProjectsService {
       const pending = pendingByProject.get(p.id) ?? 0;
       const planillado = planilladoByProject.get(p.id) ?? 0;
       const porCobrar = porCobrarByProject.get(p.id) ?? 0;
+      const ingresado = ingresadoByProject.get(p.id) ?? 0;
+      const anticipoRecibido = anticipoByProject.get(p.id) ?? 0;
+      const devengado = devengadoByProject.get(p.id) ?? 0;
+      const lastPlanilla = lastPlanillaByProject.get(p.id) ?? null;
       const progressContract = contractAmount > 0 ? spent / contractAmount : 0;
       const progressBudget = budgeted > 0 ? spent / budgeted : 0;
       totalContract += contractAmount;
@@ -328,6 +377,13 @@ export class ProjectsService {
         pending,
         planillado,
         porCobrar,
+        ingresado,
+        managesAdvance: Boolean(p.managesAdvance),
+        anticipoRecibido,
+        saldoPorDevengar: anticipoRecibido - devengado,
+        // Seguimiento de cobro en la página principal: "Planilla #N — estado".
+        lastPlanillaNumber: lastPlanilla?.number ?? null,
+        lastPlanillaStatus: lastPlanilla?.status ?? null,
         balance: budgeted - spent,
         progressContract: Math.min(1, progressContract),
         progressBudget: Math.min(1, progressBudget),
@@ -350,6 +406,11 @@ export class ProjectsService {
         pendingOrders: globalPending,
         planillado: globalPlanillado,
         porCobrar: globalPorCobrar,
+        ingresado: globalIngresado,
+        anticipoRecibido: globalAnticipo,
+        saldoPorDevengar:
+          globalAnticipo -
+          Array.from(devengadoByProject.values()).reduce((s, v) => s + v, 0),
         activeCount,
       },
     };

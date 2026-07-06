@@ -39,6 +39,8 @@ model User {
   createdProjects      Project[]                @relation("CreatedBy")
   createdGastos        Gasto[]                  @relation("GastoCreatedBy")
   createdPlanillas     Planilla[]               @relation("PlanillaCreatedBy")
+  planillaStatusEvents PlanillaStatusEvent[]    @relation("PlanillaStatusEventBy")
+  createdIngresos      Ingreso[]                @relation("IngresoCreatedBy")
   createdPaymentOrders PaymentOrder[]           @relation("PaymentOrderCreatedBy")
   createdProviders     Provider[]               @relation("ProviderCreatedBy")
   createdEmployees     Employee[]               @relation("EmployeeCreatedBy")
@@ -205,6 +207,9 @@ model Project {
   latitude         Float?
   longitude        Float?
   contractAmount   Float     @default(0) @map("contract_amount")
+  // Si el proyecto se maneja con anticipo del cliente (p. ej. AMBIENSA da 40%).
+  // Cuando es false (p. ej. la iglesia) las planillas no amortizan anticipo.
+  managesAdvance   Boolean   @default(true) @map("manages_advance")
   advancePercent   Float     @default(40) @map("advance_percent")
   guaranteePercent Float     @default(5) @map("guarantee_percent")
   // IVA — los presupuestos se ingresan como base o ya incluido.
@@ -232,6 +237,7 @@ model Project {
   rubros        Rubro[]
   gastos        Gasto[]
   planillas     Planilla[]
+  ingresos      Ingreso[]
   paymentOrders PaymentOrder[]
   employees     Employee[]
   proformas     Proforma[]
@@ -387,7 +393,10 @@ model Planilla {
   title               String
   periodStart         DateTime  @map("period_start")
   periodEnd           DateTime  @map("period_end")
-  status              String    @default("DRAFT") // DRAFT | SUBMITTED | APPROVED | PAID | CANCELLED
+  // Flujo real de cobro: DRAFT (elaborándose) | SUBMITTED (presentada) |
+  // FISCALIZACION (en fiscalización) | CONTRALORIA (en contraloría) |
+  // APPROVED (aprobada) | PAID (pagada) | CANCELLED
+  status              String    @default("DRAFT")
   totalCurrent        Float     @default(0) @map("total_current")
   totalPrevious       Float     @default(0) @map("total_previous")
   totalAccumulated    Float     @default(0) @map("total_accumulated")
@@ -399,13 +408,63 @@ model Planilla {
   updatedAt           DateTime  @updatedAt @map("updated_at")
   deletedAt           DateTime? @map("deleted_at")
 
-  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator User           @relation("PlanillaCreatedBy", fields: [createdBy], references: [id])
-  items   PlanillaItem[]
+  project      Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator      User                  @relation("PlanillaCreatedBy", fields: [createdBy], references: [id])
+  items        PlanillaItem[]
+  statusEvents PlanillaStatusEvent[]
+  ingresos     Ingreso[]
 
   @@unique([projectId, number])
   @@index([projectId])
   @@map("planillas")
+}
+
+// Historial de estados de una planilla: quién la movió, cuándo y con qué nota
+// ("devuelta por observaciones", "ingresó a contraloría el lunes", etc.).
+// Lo alimenta el residente desde obra para que gerencia dé seguimiento sin llamar.
+model PlanillaStatusEvent {
+  id         String   @id @default(uuid())
+  planillaId String   @map("planilla_id")
+  status     String
+  note       String?
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  planilla Planilla @relation(fields: [planillaId], references: [id], onDelete: Cascade)
+  creator  User     @relation("PlanillaStatusEventBy", fields: [createdBy], references: [id])
+
+  @@index([planillaId])
+  @@map("planilla_status_events")
+}
+
+// Ingresos de dinero del proyecto: anticipos del cliente, pagos de planillas
+// y otros cobros. Es la contraparte de Gasto — lo que el cliente nos paga.
+model Ingreso {
+  id            String    @id @default(uuid())
+  projectId     String    @map("project_id")
+  // Pago asociado a una planilla específica (opcional; anticipos no la tienen).
+  planillaId    String?   @map("planilla_id")
+  kind          String    @default("PLANILLA") // ANTICIPO | PLANILLA | OTRO
+  amount        Float
+  ingresoDate   DateTime  @map("ingreso_date")
+  // Quién paga (AMBIENSA, Construoccidente…); por defecto el cliente del proyecto.
+  entity        String?
+  invoiceNumber String?   @map("invoice_number")
+  reference     String?
+  notes         String?
+  createdBy     String    @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  planilla Planilla? @relation(fields: [planillaId], references: [id])
+  creator  User      @relation("IngresoCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([projectId, ingresoDate])
+  @@index([planillaId])
+  @@index([deletedAt])
+  @@map("ingresos")
 }
 
 model PlanillaItem {

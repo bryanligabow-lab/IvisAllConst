@@ -6,28 +6,18 @@ import { useParams } from 'next/navigation';
 import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreatePlanillaModal } from '@/components/forms/CreatePlanillaModal';
+import { ChangePlanillaStatusModal } from '@/components/forms/ChangePlanillaStatusModal';
 import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { API_BASE_URL, STORAGE_KEYS } from '@/lib/constants';
+import {
+  PLANILLA_STATUS_FLOW,
+  PLANILLA_STATUS_LABEL,
+  PLANILLA_STATUS_CLASS,
+} from '@/lib/planillaStatus';
 import { useAuthStore } from '@/stores/authStore';
-import type { Planilla, PlanillaStatus, ProjectSummary } from '@/types';
-
-const STATUS_LABEL: Record<PlanillaStatus, string> = {
-  DRAFT: 'Borrador',
-  SUBMITTED: 'Enviada',
-  APPROVED: 'Aprobada',
-  PAID: 'Pagada',
-  CANCELLED: 'Cancelada',
-};
-
-const STATUS_CLASS: Record<PlanillaStatus, string> = {
-  DRAFT: 'badge-muted',
-  SUBMITTED: 'badge-warn',
-  APPROVED: 'badge-ok',
-  PAID: 'badge-ok',
-  CANCELLED: 'badge-danger',
-};
+import type { Planilla, ProjectSummary } from '@/types';
 
 async function downloadExcel(planillaId: string): Promise<void> {
   const token =
@@ -64,8 +54,10 @@ export default function PlanillasPage() {
   const percentOnly = isRestricted();
   const canWrite = can('planillas.write');
   const canExport = can('planillas.export');
+  const canStatus = can('planillas.status');
   const contractAmount = Number(summary?.project.contractAmount ?? 0);
   const [showCreate, setShowCreate] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<Planilla | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
 
   return (
@@ -120,7 +112,20 @@ export default function PlanillasPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={STATUS_CLASS[p.status]}>{STATUS_LABEL[p.status]}</span>
+                {canStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => setStatusTarget(p)}
+                    className={`${PLANILLA_STATUS_CLASS[p.status]} cursor-pointer transition-opacity hover:opacity-75`}
+                    title="Actualizar en qué paso va el cobro"
+                  >
+                    {PLANILLA_STATUS_LABEL[p.status]} ✎
+                  </button>
+                ) : (
+                  <span className={PLANILLA_STATUS_CLASS[p.status]}>
+                    {PLANILLA_STATUS_LABEL[p.status]}
+                  </span>
+                )}
                 {canExport && (
                   <button onClick={() => downloadExcel(p.id)} className="btn-success">
                     Exportar Excel
@@ -180,9 +185,69 @@ export default function PlanillasPage() {
                 />
               </dl>
             )}
+
+            {/* Seguimiento del cobro: en qué paso del proceso está la planilla */}
+            {p.status !== 'CANCELLED' && (
+              <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1">
+                {PLANILLA_STATUS_FLOW.map((s, idx) => {
+                  const currentIdx = PLANILLA_STATUS_FLOW.indexOf(p.status);
+                  const reached = idx <= currentIdx;
+                  return (
+                    <div key={s} className="flex shrink-0 items-center gap-1">
+                      {idx > 0 && (
+                        <div
+                          className={`h-px w-3 ${reached ? 'bg-brand' : 'bg-surface-border'}`}
+                        />
+                      )}
+                      <span
+                        className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] ${
+                          idx === currentIdx
+                            ? 'bg-brand font-semibold text-white'
+                            : reached
+                              ? 'bg-brand/15 text-brand'
+                              : 'bg-surface-muted text-ink-tertiary'
+                        }`}
+                      >
+                        {PLANILLA_STATUS_LABEL[s]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Historial: quién movió la planilla, cuándo y con qué nota */}
+            {p.statusEvents && p.statusEvents.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[11px] text-ink-tertiary hover:text-ink-secondary">
+                  Historial de seguimiento ({p.statusEvents.length})
+                </summary>
+                <ul className="mt-1.5 space-y-1 border-l border-surface-border pl-3">
+                  {p.statusEvents.map((ev) => (
+                    <li key={ev.id} className="text-[11px] text-ink-secondary">
+                      <span className="font-medium text-ink-primary">
+                        {PLANILLA_STATUS_LABEL[ev.status]}
+                      </span>{' '}
+                      · {formatCalendarDate(ev.createdAt)}
+                      {ev.creator
+                        ? ` · ${ev.creator.firstName} ${ev.creator.lastName}`
+                        : ''}
+                      {ev.note && <div className="italic text-ink-tertiary">“{ev.note}”</div>}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </article>
         ))}
       </div>
+
+      <ChangePlanillaStatusModal
+        open={!!statusTarget}
+        onClose={() => setStatusTarget(null)}
+        planilla={statusTarget}
+        onSaved={() => mutatePlanillas()}
+      />
 
       <DeleteConfirmDialog
         open={!!pendingDelete}

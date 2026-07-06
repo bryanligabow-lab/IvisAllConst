@@ -32,6 +32,9 @@ export const createProjectSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   contractAmount: z.coerce.number().nonnegative(),
+  // Si el proyecto se maneja con anticipo del cliente (false = sin anticipo,
+  // p. ej. la iglesia: contrato → planilla → cobro directo).
+  managesAdvance: z.coerce.boolean().default(true).optional(),
   advancePercent: z.coerce.number().min(0).max(100).default(40),
   guaranteePercent: z.coerce.number().min(0).max(100).default(5),
   // IVA

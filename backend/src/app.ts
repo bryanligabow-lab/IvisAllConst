@@ -12,6 +12,7 @@ import { projectsRouter } from './modules/projects/projects.routes';
 import { rubrosRouter } from './modules/rubros/rubros.routes';
 import { gastosRouter } from './modules/gastos/gastos.routes';
 import { planillasRouter } from './modules/planillas/planillas.routes';
+import { ingresosRouter } from './modules/ingresos/ingresos.routes';
 import { paymentOrdersRouter } from './modules/payment-orders/payment-orders.routes';
 import { providersRouter } from './modules/providers/providers.routes';
 import { employeesRouter } from './modules/employees/employees.routes';
@@ -63,6 +64,7 @@ export function buildApp() {
   app.use('/api/rubros', rubrosRouter);
   app.use('/api/gastos', gastosRouter);
   app.use('/api/planillas', planillasRouter);
+  app.use('/api/ingresos', ingresosRouter);
   app.use('/api/payment-orders', paymentOrdersRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/employees', employeesRouter);

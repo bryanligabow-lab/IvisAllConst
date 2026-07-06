@@ -1,0 +1,211 @@
+import { prisma } from '../../config/database';
+import { NotFoundError } from '../../utils/errors';
+import { ERRORS } from '../../shared/constants/error-messages';
+
+export const INGRESO_KINDS = ['ANTICIPO', 'PLANILLA', 'OTRO'] as const;
+export type IngresoKind = (typeof INGRESO_KINDS)[number];
+
+interface CreateIngresoInput {
+  projectId: string;
+  planillaId?: string | null;
+  kind: IngresoKind;
+  amount: number;
+  ingresoDate: Date;
+  entity?: string;
+  invoiceNumber?: string;
+  reference?: string;
+  notes?: string;
+}
+
+type UpdateIngresoInput = Partial<Omit<CreateIngresoInput, 'projectId'>>;
+
+// Estados de planilla que cuentan como "presentada" (ya salió de borrador).
+const PRESENTED_STATUSES = ['SUBMITTED', 'FISCALIZACION', 'CONTRALORIA', 'APPROVED', 'PAID'];
+// Presentadas pero aún no pagadas: es lo que está por cobrar.
+const RECEIVABLE_STATUSES = ['SUBMITTED', 'FISCALIZACION', 'CONTRALORIA', 'APPROVED'];
+
+export class IngresosService {
+  static list(projectId: string) {
+    return prisma.ingreso.findMany({
+      where: { projectId, deletedAt: null },
+      orderBy: { ingresoDate: 'desc' },
+      include: {
+        planilla: { select: { id: true, number: true, title: true } },
+        creator: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  static async getById(id: string) {
+    const ingreso = await prisma.ingreso.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!ingreso) throw new NotFoundError(ERRORS.INGRESO_NOT_FOUND);
+    return ingreso;
+  }
+
+  private static async assertPlanillaInProject(planillaId: string, projectId: string) {
+    const planilla = await prisma.planilla.findFirst({
+      where: { id: planillaId, projectId, deletedAt: null },
+    });
+    if (!planilla) throw new NotFoundError(ERRORS.PLANILLA_NOT_FOUND);
+  }
+
+  static async create(input: CreateIngresoInput, createdBy: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: input.projectId, deletedAt: null },
+      include: { client: { select: { name: true } } },
+    });
+    if (!project) throw new NotFoundError(ERRORS.PROJECT_NOT_FOUND);
+    if (input.planillaId) {
+      await this.assertPlanillaInProject(input.planillaId, input.projectId);
+    }
+
+    return prisma.ingreso.create({
+      data: {
+        projectId: input.projectId,
+        planillaId: input.planillaId || null,
+        kind: input.kind,
+        amount: input.amount,
+        ingresoDate: input.ingresoDate,
+        // Si no indican quién paga, usamos el cliente del proyecto.
+        entity: input.entity?.trim() || project.client?.name || project.contractor || null,
+        invoiceNumber: input.invoiceNumber?.trim() || null,
+        reference: input.reference?.trim() || null,
+        notes: input.notes?.trim() || null,
+        createdBy,
+      },
+    });
+  }
+
+  static async update(id: string, input: UpdateIngresoInput) {
+    const existing = await this.getById(id);
+    if (input.planillaId) {
+      await this.assertPlanillaInProject(input.planillaId, existing.projectId);
+    }
+    return prisma.ingreso.update({
+      where: { id },
+      data: {
+        ...(input.kind !== undefined ? { kind: input.kind } : {}),
+        ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.ingresoDate !== undefined ? { ingresoDate: input.ingresoDate } : {}),
+        ...(input.planillaId !== undefined ? { planillaId: input.planillaId || null } : {}),
+        ...(input.entity !== undefined ? { entity: input.entity?.trim() || null } : {}),
+        ...(input.invoiceNumber !== undefined
+          ? { invoiceNumber: input.invoiceNumber?.trim() || null }
+          : {}),
+        ...(input.reference !== undefined ? { reference: input.reference?.trim() || null } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+      },
+    });
+  }
+
+  static async softDelete(id: string) {
+    await this.getById(id);
+    await prisma.ingreso.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  /**
+   * Resumen financiero del cobro de un proyecto: contrato, anticipo recibido
+   * vs devengado (amortizado en planillas), planillas presentadas/aprobadas/
+   * pagadas, facturado, ingresado y por cobrar. Es el cuadro que la empresa
+   * llevaba en Excel ("PROYECTOS AMBIESA"), ahora calculado del sistema.
+   */
+  static async summary(projectId: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, deletedAt: null },
+      include: { client: { select: { name: true } } },
+    });
+    if (!project) throw new NotFoundError(ERRORS.PROJECT_NOT_FOUND);
+
+    const [ingresos, planillas] = await Promise.all([
+      prisma.ingreso.findMany({
+        where: { projectId, deletedAt: null },
+        select: { kind: true, amount: true },
+      }),
+      prisma.planilla.findMany({
+        where: { projectId, deletedAt: null, status: { not: 'CANCELLED' } },
+        select: {
+          status: true,
+          totalCurrent: true,
+          netPayable: true,
+          advanceAmortization: true,
+        },
+      }),
+    ]);
+
+    let anticipoRecibido = 0;
+    let ingresoPlanillas = 0;
+    let otrosIngresos = 0;
+    for (const i of ingresos) {
+      const amount = Number(i.amount);
+      if (i.kind === 'ANTICIPO') anticipoRecibido += amount;
+      else if (i.kind === 'PLANILLA') ingresoPlanillas += amount;
+      else otrosIngresos += amount;
+    }
+    const totalIngresado = anticipoRecibido + ingresoPlanillas + otrosIngresos;
+
+    let presentadasCount = 0;
+    let aprobadasCount = 0;
+    let pagadasCount = 0;
+    let totalPlanillado = 0;
+    let facturado = 0;
+    let porCobrar = 0;
+    let devengado = 0;
+    for (const p of planillas) {
+      const current = Number(p.totalCurrent);
+      if (PRESENTED_STATUSES.includes(p.status)) {
+        presentadasCount += 1;
+        totalPlanillado += current;
+      }
+      if (p.status === 'APPROVED' || p.status === 'PAID') {
+        aprobadasCount += 1;
+        facturado += current;
+        // El anticipo se devenga (amortiza) cuando la planilla se aprueba.
+        devengado += Number(p.advanceAmortization);
+      }
+      if (p.status === 'PAID') pagadasCount += 1;
+      if (RECEIVABLE_STATUSES.includes(p.status)) porCobrar += Number(p.netPayable);
+    }
+
+    const contractAmount = Number(project.contractAmount);
+    const managesAdvance = Boolean(project.managesAdvance);
+    const advanceExpected = managesAdvance
+      ? contractAmount * (Number(project.advancePercent) / 100)
+      : 0;
+
+    return {
+      project: {
+        id: project.id,
+        code: project.code,
+        name: project.name,
+        clientName: project.client?.name ?? project.contractor ?? null,
+        contractAmount,
+        managesAdvance,
+        advancePercent: Number(project.advancePercent),
+        advanceExpected,
+      },
+      anticipo: {
+        recibido: anticipoRecibido,
+        devengado,
+        // Lo que aún debemos "trabajar" del anticipo que nos dieron.
+        saldoPorDevengar: anticipoRecibido - devengado,
+      },
+      planillas: {
+        total: planillas.length,
+        presentadas: presentadasCount,
+        aprobadas: aprobadasCount,
+        pagadas: pagadasCount,
+        totalPlanillado,
+        facturado,
+        porCobrar,
+      },
+      ingresos: {
+        anticipos: anticipoRecibido,
+        planillas: ingresoPlanillas,
+        otros: otrosIngresos,
+        total: totalIngresado,
+      },
+    };
+  }
+}

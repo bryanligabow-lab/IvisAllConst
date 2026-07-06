@@ -28,6 +28,7 @@ export const ERRORS = {
   RUBRO_NOT_IN_PROJECT: 'Rubro no encontrado para este proyecto',
   GASTO_NOT_FOUND: 'Gasto no encontrado',
   PLANILLA_NOT_FOUND: 'Planilla no encontrada',
+  INGRESO_NOT_FOUND: 'Ingreso no encontrado',
 } as const;
 
 export const SUCCESS = {
@@ -39,4 +40,5 @@ export const SUCCESS = {
   RUBRO_DELETED: 'Rubro eliminado',
   GASTO_DELETED: 'Gasto eliminado',
   PLANILLA_DELETED: 'Planilla eliminada',
+  INGRESO_DELETED: 'Ingreso eliminado',
 } as const;

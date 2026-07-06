@@ -10,8 +10,9 @@ import { apiDelete, apiGet } from '@/lib/api';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
+import { PLANILLA_STATUS_LABEL, PLANILLA_STATUS_CLASS } from '@/lib/planillaStatus';
 import { useAuthStore } from '@/stores/authStore';
-import type { Project } from '@/types';
+import type { PlanillaStatus, Project } from '@/types';
 
 interface DashboardProjectStat {
   id: string;
@@ -35,6 +36,13 @@ interface DashboardProjectStat {
   progressContract: number;
   progressBudget: number;
   workProgressPercent?: number;
+  porCobrar?: number;
+  ingresado?: number;
+  managesAdvance?: boolean;
+  anticipoRecibido?: number;
+  saldoPorDevengar?: number;
+  lastPlanillaNumber?: number | null;
+  lastPlanillaStatus?: PlanillaStatus | null;
 }
 
 interface DashboardStats {
@@ -45,6 +53,9 @@ interface DashboardStats {
     spent: number;
     balance: number;
     pendingOrders: number;
+    porCobrar?: number;
+    ingresado?: number;
+    saldoPorDevengar?: number;
     activeCount: number;
   };
 }
@@ -160,6 +171,24 @@ export default function DashboardPage() {
               hint="Órdenes pendientes"
               icon="⏳"
               tone={stats.totals.pendingOrders > 0 ? 'danger' : 'default'}
+            />
+            <Kpi
+              label="Por cobrar"
+              value={formatCurrency(stats.totals.porCobrar ?? 0)}
+              hint="Planillas presentadas sin pagar"
+              icon="📋"
+              tone={(stats.totals.porCobrar ?? 0) > 0 ? 'brand' : 'default'}
+            />
+            <Kpi
+              label="Ingresado"
+              value={formatCurrency(stats.totals.ingresado ?? 0)}
+              hint={
+                (stats.totals.saldoPorDevengar ?? 0) > 0
+                  ? `Anticipos por devengar: ${formatCurrency(stats.totals.saldoPorDevengar ?? 0)}`
+                  : 'Anticipos y cobros de planillas'
+              }
+              icon="💰"
+              tone="success"
             />
           </div>
 
@@ -346,6 +375,15 @@ function ProjectMiniCard({
                 )}
               </div>
             )}
+            {/* Seguimiento de cobro: en qué paso va la última planilla */}
+            {project.lastPlanillaStatus && (
+              <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                <span className={PLANILLA_STATUS_CLASS[project.lastPlanillaStatus]}>
+                  📋 Planilla #{project.lastPlanillaNumber} —{' '}
+                  {PLANILLA_STATUS_LABEL[project.lastPlanillaStatus]}
+                </span>
+              </div>
+            )}
           </div>
           <span className={`${STATUS_CLASS[project.status]} shrink-0`}>
             {STATUS_LABEL[project.status]}
@@ -368,6 +406,22 @@ function ProjectMiniCard({
                 {formatCurrency(utilidad)}
               </span>
             </div>
+            {(project.porCobrar ?? 0) > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-ink-tertiary">Por cobrar</span>
+                <span className="font-medium text-warning">
+                  {formatCurrency(project.porCobrar ?? 0)}
+                </span>
+              </div>
+            )}
+            {project.managesAdvance && (project.saldoPorDevengar ?? 0) > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-ink-tertiary">Anticipo por devengar</span>
+                <span className="font-medium text-warning">
+                  {formatCurrency(project.saldoPorDevengar ?? 0)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

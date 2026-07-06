@@ -13,6 +13,7 @@ export const ROUTES = {
   PROJECT_BUDGET: (id: string) => `/projects/${id}/presupuesto`,
   PROJECT_EXPENSES: (id: string) => `/projects/${id}/gastos`,
   PROJECT_PLANILLAS: (id: string) => `/projects/${id}/planillas`,
+  PROJECT_INGRESOS: (id: string) => `/projects/${id}/ingresos`,
   PROJECT_ORDERS: (id: string) => `/projects/${id}/ordenes`,
   PROJECT_PROVIDERS: (id: string) => `/projects/${id}/proveedores`,
   PROJECT_DOCUMENTS: (id: string) => `/projects/${id}/documentos`,

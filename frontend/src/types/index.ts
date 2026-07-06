@@ -1,5 +1,12 @@
 export type ProjectStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED';
-export type PlanillaStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'CANCELLED';
+export type PlanillaStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'FISCALIZACION'
+  | 'CONTRALORIA'
+  | 'APPROVED'
+  | 'PAID'
+  | 'CANCELLED';
 export type RubroStatus = 'ok' | 'warn' | 'danger' | 'exhausted';
 
 export type ExecutionType = 'OWN' | 'SUBCONTRACTED';
@@ -19,6 +26,7 @@ export interface Project {
   latitude: number | null;
   longitude: number | null;
   contractAmount: string | number;
+  managesAdvance?: boolean;
   advancePercent: string | number;
   guaranteePercent: string | number;
   vatPercent?: string | number;
@@ -60,6 +68,7 @@ export interface ProjectSummary {
     name: string;
     contractor: string | null;
     contractAmount: number;
+    managesAdvance?: boolean;
     advancePercent: number;
     advanceAmount: number;
     guaranteePercent: number;
@@ -200,6 +209,14 @@ export interface PaymentOrder {
   gastos?: Array<{ id: string; amount: number; gastoDate: string; description: string }>;
 }
 
+export interface PlanillaStatusEvent {
+  id: string;
+  status: PlanillaStatus;
+  note: string | null;
+  createdAt: string;
+  creator?: { firstName: string; lastName: string };
+}
+
 export interface Planilla {
   id: string;
   projectId: string;
@@ -214,6 +231,58 @@ export interface Planilla {
   advanceAmortization: string | number;
   guaranteeRetention: string | number;
   netPayable: string | number;
+  // Últimos movimientos de estado (los devuelve el listado).
+  statusEvents?: PlanillaStatusEvent[];
+}
+
+export type IngresoKind = 'ANTICIPO' | 'PLANILLA' | 'OTRO';
+
+export interface Ingreso {
+  id: string;
+  projectId: string;
+  planillaId: string | null;
+  kind: IngresoKind;
+  amount: string | number;
+  ingresoDate: string;
+  entity: string | null;
+  invoiceNumber: string | null;
+  reference: string | null;
+  notes: string | null;
+  planilla?: { id: string; number: number; title: string } | null;
+  creator?: { firstName: string; lastName: string };
+}
+
+export interface IngresosSummary {
+  project: {
+    id: string;
+    code: string;
+    name: string;
+    clientName: string | null;
+    contractAmount: number;
+    managesAdvance: boolean;
+    advancePercent: number;
+    advanceExpected: number;
+  };
+  anticipo: {
+    recibido: number;
+    devengado: number;
+    saldoPorDevengar: number;
+  };
+  planillas: {
+    total: number;
+    presentadas: number;
+    aprobadas: number;
+    pagadas: number;
+    totalPlanillado: number;
+    facturado: number;
+    porCobrar: number;
+  };
+  ingresos: {
+    anticipos: number;
+    planillas: number;
+    otros: number;
+    total: number;
+  };
 }
 
 export interface AuthUser {

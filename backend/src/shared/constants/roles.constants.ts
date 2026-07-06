@@ -34,6 +34,15 @@ export const PERMISSIONS = {
   PLANILLAS_READ: 'planillas.read',
   PLANILLAS_WRITE: 'planillas.write',
   PLANILLAS_EXPORT: 'planillas.export',
+  // Cambiar el estado de una planilla (presentada/fiscalización/contraloría…).
+  // Separado de write: el operador (residente) SÍ lo tiene para dar seguimiento
+  // desde obra, aunque no pueda crear ni eliminar planillas.
+  PLANILLAS_STATUS: 'planillas.status',
+
+  // Ingresos de dinero (anticipos y cobros de planillas). Información
+  // financiera: el operador NO la ve.
+  INGRESOS_READ: 'ingresos.read',
+  INGRESOS_WRITE: 'ingresos.write',
 
   PAYMENT_ORDERS_READ: 'payment_orders.read',
   PAYMENT_ORDERS_WRITE: 'payment_orders.write',

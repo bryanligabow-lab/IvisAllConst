@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { PlanillasService } from './planillas.service';
+import { PlanillasService, PLANILLA_STATUSES } from './planillas.service';
 import { exportPlanillaExcel } from './planillas.excel';
 import { authenticate } from '../../middleware/authenticate';
 import { requirePermission } from '../../middleware/authorize';
@@ -31,7 +31,9 @@ const createPlanillaSchema = z.object({
 });
 
 const statusSchema = z.object({
-  status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'PAID', 'CANCELLED']),
+  status: z.enum(PLANILLA_STATUSES),
+  // Nota opcional del residente ("ingresó a contraloría", "devuelta por observaciones"…).
+  note: z.string().max(500).optional(),
 });
 
 const listQuerySchema = z.object({ projectId: z.string().uuid() });
@@ -77,11 +79,22 @@ planillasRouter.post(
 
 planillasRouter.patch(
   '/:id/status',
-  requirePermission(PERMISSIONS.PLANILLAS_WRITE),
+  // El operador (residente) también puede mover el estado desde obra.
+  requirePermission(PERMISSIONS.PLANILLAS_STATUS),
   validate(idParamSchema, 'params'),
   validate(statusSchema),
   asyncHandler(async (req, res) => {
-    const planilla = await PlanillasService.updateStatus(req.params.id, req.body.status);
+    if (!req.user) throw new UnauthorizedError();
+    const existing = await PlanillasService.getById(req.params.id);
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(existing.projectId)) {
+      throw new UnauthorizedError('No tienes acceso a este proyecto');
+    }
+    const planilla = await PlanillasService.updateStatus(
+      req.params.id,
+      req.body.status,
+      req.user.id,
+      req.body.note,
+    );
     return success(res, planilla);
   }),
 );
