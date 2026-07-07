@@ -10,7 +10,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   initial?: Product | null; // si viene → edición
-  onSaved: () => void;
+  // Al crear, devuelve el producto creado (para poder usarlo de inmediato).
+  onSaved: (created?: Product) => void;
 }
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4 MB
@@ -97,9 +98,13 @@ export function CreateProductModal({ open, onClose, initial, onSaved }: Props) {
             ? { imageBase64: null }
             : {};
       const payload = { ...base, ...imagePayload };
-      if (isEdit && initial) await apiPatch(`/products/${initial.id}`, payload);
-      else await apiPost('/products', payload);
-      onSaved();
+      if (isEdit && initial) {
+        await apiPatch(`/products/${initial.id}`, payload);
+        onSaved();
+      } else {
+        const created = (await apiPost('/products', payload)) as Product;
+        onSaved(created);
+      }
       onClose();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Error al guardar el producto');

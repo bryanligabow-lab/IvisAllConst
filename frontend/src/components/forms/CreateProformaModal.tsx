@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
+import { CreateProductModal } from '@/components/forms/CreateProductModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { apiFetchBlob, apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
@@ -137,6 +138,8 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientId, setClientId] = useState('');
   const [showCreateClient, setShowCreateClient] = useState(false);
+  // Índice del ítem para el que se está creando un producto nuevo (o null).
+  const [productModalFor, setProductModalFor] = useState<number | null>(null);
   // snapshots editables del cliente (precargados al elegir uno)
   const [clientName, setClientName] = useState('');
   const [clientRuc, setClientRuc] = useState('');
@@ -357,11 +360,9 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setItems((curr) => curr.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
-  // Elegir un producto guardado → llena unidad, descripción y precio del ítem,
+  // Aplica un producto (objeto) al ítem: llena unidad, descripción y precio,
   // y copia su imagen (si tiene) para que salga al lado del rubro.
-  async function applyProduct(idx: number, productId: string) {
-    const prod = products?.find((p) => p.id === productId);
-    if (!prod) return;
+  async function applyProductObj(idx: number, prod: Product) {
     updateItem(idx, {
       unit: prod.unit,
       description: prod.description,
@@ -384,6 +385,12 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         /* si falla la imagen, igual queda el ítem con sus datos */
       }
     }
+  }
+
+  // Elegir un producto guardado del selector.
+  async function applyProduct(idx: number, productId: string) {
+    const prod = products?.find((p) => p.id === productId);
+    if (prod) await applyProductObj(idx, prod);
   }
 
   // Guardar el ítem actual como producto reutilizable (solo cuando el usuario lo pide).
@@ -699,19 +706,29 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                 key={idx}
                 className="rounded-md border border-surface-border bg-surface-muted/30 p-2"
               >
-                {products && products.length > 0 && (
-                  <div className="mb-2">
-                    <SearchableSelect
-                      value=""
-                      onChange={(v) => applyProduct(idx, v)}
-                      placeholder="📦 Usar un producto guardado…"
-                      options={products.map((p) => ({
-                        value: p.id,
-                        label: `${p.description.slice(0, 70)} · ${formatCurrency(p.unitPrice)}`,
-                      }))}
-                    />
-                  </div>
-                )}
+                <div className="mb-2 flex items-center gap-2">
+                  {products && products.length > 0 && (
+                    <div className="min-w-0 flex-1">
+                      <SearchableSelect
+                        value=""
+                        onChange={(v) => applyProduct(idx, v)}
+                        placeholder="📦 Usar un producto guardado…"
+                        options={products.map((p) => ({
+                          value: p.id,
+                          label: `${p.description.slice(0, 70)} · ${formatCurrency(p.unitPrice)}`,
+                        }))}
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setProductModalFor(idx)}
+                    className="btn-secondary shrink-0 whitespace-nowrap text-xs"
+                    title="Crear un producto nuevo y usarlo en este rubro"
+                  >
+                    ➕ Nuevo producto
+                  </button>
+                </div>
                 <div className="grid grid-cols-12 gap-2">
                   <input
                     value={it.quantity}
@@ -1001,6 +1018,19 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         onSaved={(c) => {
           mutateClients();
           selectClient(c.id);
+        }}
+      />
+
+      {/* Crear un producto nuevo desde un rubro y usarlo de inmediato. */}
+      <CreateProductModal
+        open={productModalFor !== null}
+        onClose={() => setProductModalFor(null)}
+        onSaved={(created) => {
+          void mutateProducts();
+          if (created && productModalFor !== null) {
+            void applyProductObj(productModalFor, created);
+          }
+          setProductModalFor(null);
         }}
       />
     </Modal>
