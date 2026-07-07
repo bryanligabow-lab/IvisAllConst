@@ -81,6 +81,17 @@ ingresosRouter.get(
   }),
 );
 
+// Vista consolidada de todos los proyectos (apartado "Planillas"): KPIs
+// globales + por proyecto sus planillas con estado y su resumen de cobro.
+ingresosRouter.get(
+  '/overview',
+  requirePermission(PERMISSIONS.INGRESOS_READ),
+  asyncHandler(async (req, res) => {
+    const data = await IngresosService.overview(req.allowedProjectIds ?? undefined);
+    return success(res, data);
+  }),
+);
+
 ingresosRouter.post(
   '/',
   requirePermission(PERMISSIONS.INGRESOS_WRITE),

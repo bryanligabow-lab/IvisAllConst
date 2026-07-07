@@ -24,6 +24,7 @@ const NAV_LINKS: NavLink[] = [
   { href: ROUTES.PROYECTOS_REPORT, label: 'Proyectos', perm: 'projects.read', unrestrictedOnly: true },
   { href: ROUTES.PROVIDERS, label: 'Proveedores', perm: 'providers.read' },
   { href: ROUTES.SUBCONTRATISTAS, label: 'Subcontratistas', perm: 'providers.read', unrestrictedOnly: true },
+  { href: ROUTES.PLANILLAS, label: 'Planillas', perm: 'ingresos.read', unrestrictedOnly: true },
   { href: ROUTES.CLIENTES, label: 'Clientes', perm: 'clients.read' },
   { href: ROUTES.NOMINA, label: 'Nómina', perm: 'employees.read' },
   { href: ROUTES.PROFORMAS, label: 'Proformas', perm: 'proformas.read' },

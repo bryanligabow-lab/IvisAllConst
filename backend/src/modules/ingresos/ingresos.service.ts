@@ -139,6 +139,126 @@ export class IngresosService {
   }
 
   /**
+   * Vista consolidada de TODOS los proyectos (apartado "Planillas"): por cada
+   * proyecto su lista de planillas con estado + un resumen de cobro, más los
+   * KPIs globales. Scopeado a los proyectos permitidos si viene la lista.
+   */
+  static async overview(allowedProjectIds?: string[]) {
+    const projects = await prisma.project.findMany({
+      where: {
+        deletedAt: null,
+        ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
+      },
+      orderBy: { name: 'asc' },
+      include: {
+        client: { select: { name: true } },
+        planillas: {
+          where: { deletedAt: null, status: { not: 'CANCELLED' } },
+          orderBy: { number: 'asc' },
+          select: {
+            id: true,
+            number: true,
+            title: true,
+            status: true,
+            totalCurrent: true,
+            netPayable: true,
+            advanceAmortization: true,
+          },
+        },
+        ingresos: {
+          where: { deletedAt: null },
+          select: { kind: true, amount: true },
+        },
+      },
+    });
+
+    const totals = {
+      projects: projects.length,
+      planillado: 0,
+      facturado: 0,
+      porCobrar: 0,
+      ingresado: 0,
+      anticipos: 0,
+      planillasIngreso: 0,
+      totalPlanillas: 0,
+      presentadas: 0,
+      aprobadas: 0,
+      pagadas: 0,
+    };
+
+    const rows = projects.map((p) => {
+      let anticipos = 0;
+      let planillasIngreso = 0;
+      let otros = 0;
+      for (const i of p.ingresos) {
+        const amt = Number(i.amount);
+        if (i.kind === 'ANTICIPO') anticipos += amt;
+        else if (i.kind === 'PLANILLA') planillasIngreso += amt;
+        else otros += amt;
+      }
+      const ingresado = anticipos + planillasIngreso + otros;
+
+      let planillado = 0;
+      let facturado = 0;
+      let porCobrar = 0;
+      let presentadas = 0;
+      let aprobadas = 0;
+      let pagadas = 0;
+      for (const pl of p.planillas) {
+        const current = Number(pl.totalCurrent);
+        if (PRESENTED_STATUSES.includes(pl.status)) {
+          presentadas += 1;
+          planillado += current;
+        }
+        if (pl.status === 'APPROVED' || pl.status === 'PAID') {
+          aprobadas += 1;
+          facturado += current;
+        }
+        if (pl.status === 'PAID') pagadas += 1;
+        if (RECEIVABLE_STATUSES.includes(pl.status)) porCobrar += Number(pl.netPayable);
+      }
+
+      totals.planillado += planillado;
+      totals.facturado += facturado;
+      totals.porCobrar += porCobrar;
+      totals.ingresado += ingresado;
+      totals.anticipos += anticipos;
+      totals.planillasIngreso += planillasIngreso;
+      totals.totalPlanillas += p.planillas.length;
+      totals.presentadas += presentadas;
+      totals.aprobadas += aprobadas;
+      totals.pagadas += pagadas;
+
+      return {
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        clientName: p.client?.name ?? p.contractor ?? null,
+        contractAmount: Number(p.contractAmount),
+        planillas: p.planillas.map((pl) => ({
+          id: pl.id,
+          number: pl.number,
+          title: pl.title,
+          status: pl.status,
+          totalCurrent: Number(pl.totalCurrent),
+        })),
+        summary: {
+          planillado,
+          facturado,
+          porCobrar,
+          ingresado,
+          anticipos,
+          presentadas,
+          aprobadas,
+          pagadas,
+        },
+      };
+    });
+
+    return { totals, projects: rows };
+  }
+
+  /**
    * Resumen financiero del cobro de un proyecto: contrato, anticipo recibido
    * vs devengado (amortizado en planillas), planillas presentadas/aprobadas/
    * pagadas, facturado, ingresado y por cobrar. Es el cuadro que la empresa

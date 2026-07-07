@@ -20,6 +20,7 @@ export const ROUTES = {
   PROJECT_BITACORA: (id: string) => `/projects/${id}/bitacora`,
   PROVIDERS: '/proveedores',
   SUBCONTRATISTAS: '/subcontratistas',
+  PLANILLAS: '/planillas',
   NOMINA: '/nomina',
   PROFORMAS: '/proformas',
   PRODUCTOS: '/productos',
