@@ -59,7 +59,7 @@ interface Item {
   description: string;
   unitPrice: string;
   vatMode: string; // IVA de este rubro: '15' | '0' | 'NO_OBJETO' | 'EXENTO'
-  image?: ImageItem | null; // imagen del rubro (sale al lado de la descripción)
+  itemImages: ImageItem[]; // imágenes del rubro (salen al lado de la descripción, hasta 3)
 }
 
 // Datos completos de una proforma para editarla (GET /proformas/:id).
@@ -111,6 +111,7 @@ Ministerio de Educación, coordinacion zonal`;
 
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4 MB por imagen
 const MAX_IMAGES = 6;
+const MAX_ITEM_IMAGES = 3; // imágenes por rubro (el PDF las dibuja al lado, hasta 3)
 
 function fileToBase64(file: File): Promise<{ dataUrl: string; dataBase64: string }> {
   return new Promise((resolve, reject) => {
@@ -157,7 +158,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
   const [items, setItems] = useState<Item[]>([
-    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null },
+    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] },
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -252,8 +253,8 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setSignerTitle(draft.signerTitle ?? '');
     setItems(
       draft.items && draft.items.length > 0
-        ? draft.items.map((it) => ({ ...it, vatMode: it.vatMode ?? '15', image: null }))
-        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }],
+        ? draft.items.map((it) => ({ ...it, vatMode: it.vatMode ?? '15', itemImages: [] }))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
     );
     setDraftDismissed(true);
   }
@@ -289,9 +290,9 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
               description: it.description,
               unitPrice: String(it.unitPrice),
               vatMode: vatModeFrom(it.vatPercent, it.vatType, String(initial.ivaPercent ?? 15)),
-              image: null,
+              itemImages: [],
             }))
-          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }],
+          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
       );
       setImages([]);
       // Cargar las imágenes existentes (binario) para no perderlas al guardar.
@@ -314,7 +315,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
-    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', image: null }]);
+    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }]);
     setImages([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -338,7 +339,11 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         };
         if (img.itemIndex != null) {
           const ti = img.itemIndex;
-          setItems((curr) => curr.map((it, i) => (i === ti ? { ...it, image: imageItem } : it)));
+          setItems((curr) =>
+            curr.map((it, i) =>
+              i === ti ? { ...it, itemImages: [...it.itemImages, imageItem] } : it,
+            ),
+          );
         } else {
           setImages((curr) => [...curr, imageItem]);
         }
@@ -379,15 +384,17 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       try {
         const blob = await apiFetchBlob(`/products/${prod.id}/image`);
         const dataUrl = await blobToDataUrl(blob);
-        updateItem(idx, {
-          image: {
-            preview: dataUrl,
-            dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, ''),
-            mimeType: blob.type || prod.imageMime || 'image/png',
-            filename: prod.name,
-            caption: '',
-          },
-        });
+        const img: ImageItem = {
+          preview: dataUrl,
+          dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: blob.type || prod.imageMime || 'image/png',
+          filename: prod.name,
+          caption: '',
+        };
+        // La imagen del producto se agrega a las del rubro.
+        setItems((curr) =>
+          curr.map((it, i) => (i === idx ? { ...it, itemImages: [...it.itemImages, img] } : it)),
+        );
       } catch {
         /* si falla la imagen, igual queda el ítem con sus datos */
       }
@@ -424,7 +431,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   function addItem() {
     setItems((c) => [
       ...c,
-      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, image: null },
+      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, itemImages: [] },
     ]);
   }
   function removeItem(idx: number) {
@@ -454,18 +461,51 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setImages((c) => c.filter((_, i) => i !== idx));
   }
 
-  // Imagen ligada a un rubro (sale al lado de su descripción en el PDF).
-  async function attachItemImage(idx: number, file: File | undefined | null) {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > MAX_IMAGE_SIZE) {
-      setError(`"${file.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
+  // Imágenes ligadas a un rubro (salen al lado de su descripción en el PDF).
+  // Se pueden agregar varias (hasta MAX_ITEM_IMAGES).
+  async function attachItemImages(idx: number, files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const current = items[idx]?.itemImages.length ?? 0;
+    const room = MAX_ITEM_IMAGES - current;
+    if (room <= 0) {
+      setError(`Cada rubro admite hasta ${MAX_ITEM_IMAGES} imágenes.`);
       return;
     }
-    const { dataUrl, dataBase64 } = await fileToBase64(file);
-    updateItem(idx, {
-      image: { preview: dataUrl, dataBase64, mimeType: file.type, filename: file.name, caption: '' },
-    });
+    const added: ImageItem[] = [];
+    for (const file of Array.from(files).slice(0, room)) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > MAX_IMAGE_SIZE) {
+        setError(`"${file.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
+        continue;
+      }
+      const { dataUrl, dataBase64 } = await fileToBase64(file);
+      added.push({ preview: dataUrl, dataBase64, mimeType: file.type, filename: file.name, caption: '' });
+    }
+    if (added.length === 0) return;
+    setItems((curr) =>
+      curr.map((it, i) => (i === idx ? { ...it, itemImages: [...it.itemImages, ...added] } : it)),
+    );
+  }
+
+  function removeItemImage(itemIdx: number, imgIdx: number) {
+    setItems((curr) =>
+      curr.map((it, i) =>
+        i === itemIdx ? { ...it, itemImages: it.itemImages.filter((_, k) => k !== imgIdx) } : it,
+      ),
+    );
+  }
+
+  function updateItemImageCaption(itemIdx: number, imgIdx: number, caption: string) {
+    setItems((curr) =>
+      curr.map((it, i) =>
+        i === itemIdx
+          ? {
+              ...it,
+              itemImages: it.itemImages.map((im, k) => (k === imgIdx ? { ...im, caption } : im)),
+            }
+          : it,
+      ),
+    );
   }
 
   // Totales con IVA POR RUBRO: agrupamos por categoría (15%, 0%, No objeto, Exento).
@@ -536,19 +576,15 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
             it.vatMode === 'NO_OBJETO' || it.vatMode === 'EXENTO' ? it.vatMode : null,
         })),
         images: [
-          // Imágenes ligadas a un rubro (van al lado de su descripción).
+          // Imágenes ligadas a un rubro (van al lado de su descripción). Varias por rubro.
           ...items.flatMap((it, idx) =>
-            it.image
-              ? [
-                  {
-                    mimeType: it.image.mimeType,
-                    dataBase64: it.image.dataBase64,
-                    filename: it.image.filename,
-                    caption: it.image.caption || undefined,
-                    itemIndex: idx,
-                  },
-                ]
-              : [],
+            it.itemImages.map((img) => ({
+              mimeType: img.mimeType,
+              dataBase64: img.dataBase64,
+              filename: img.filename,
+              caption: img.caption || undefined,
+              itemIndex: idx,
+            })),
           ),
           // Imágenes generales (sin rubro) → al final del PDF.
           ...images.map((img) => ({
@@ -802,53 +838,57 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                   </select>
                 </div>
 
-                {/* Imagen del rubro — sale al lado de la descripción en el PDF */}
-                <div className="mt-2 flex items-center gap-2">
-                  {it.image ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={it.image.preview}
-                        alt={it.image.filename}
-                        className="h-12 w-12 shrink-0 rounded border border-surface-border object-cover"
-                      />
-                      <input
-                        value={it.image.caption}
-                        onChange={(e) =>
-                          updateItem(idx, {
-                            image: it.image ? { ...it.image, caption: e.target.value } : null,
-                          })
-                        }
-                        placeholder="Pie de foto del rubro (opcional)"
-                        className="input flex-1 text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => updateItem(idx, { image: null })}
-                        className="shrink-0 text-xs text-ink-secondary hover:text-danger"
-                      >
-                        Quitar
-                      </button>
-                    </>
-                  ) : (
-                    <label className="btn-secondary cursor-pointer text-xs">
-                      📷 Imagen del rubro
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => attachItemImage(idx, e.target.files?.[0])}
-                      />
-                    </label>
+                {/* Imágenes del rubro — salen al lado de la descripción en el PDF (varias) */}
+                <div className="mt-2">
+                  {it.itemImages.length > 0 && (
+                    <div className="mb-2 space-y-1.5">
+                      {it.itemImages.map((img, imgIdx) => (
+                        <div key={imgIdx} className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.preview}
+                            alt={img.filename}
+                            className="h-12 w-12 shrink-0 rounded border border-surface-border object-cover"
+                          />
+                          <input
+                            value={img.caption}
+                            onChange={(e) => updateItemImageCaption(idx, imgIdx, e.target.value)}
+                            placeholder="Pie de foto (opcional)"
+                            className="input flex-1 text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeItemImage(idx, imgIdx)}
+                            className="shrink-0 text-xs text-ink-secondary hover:text-danger"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => saveItemAsProduct(idx)}
-                    className="ml-auto shrink-0 text-xs text-ink-secondary hover:text-brand"
-                    title="Guardar este ítem en el catálogo para reutilizarlo"
-                  >
-                    💾 Guardar como producto
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {it.itemImages.length < MAX_ITEM_IMAGES && (
+                      <label className="btn-secondary cursor-pointer text-xs">
+                        📷 {it.itemImages.length === 0 ? 'Imagen del rubro' : 'Añadir otra imagen'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => attachItemImages(idx, e.target.files)}
+                        />
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => saveItemAsProduct(idx)}
+                      className="ml-auto shrink-0 text-xs text-ink-secondary hover:text-brand"
+                      title="Guardar este ítem en el catálogo para reutilizarlo"
+                    >
+                      💾 Guardar como producto
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
