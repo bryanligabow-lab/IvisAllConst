@@ -77,6 +77,7 @@ export interface ProformaEditData {
   creditTerm: string | null;
   paymentTerms: string | null;
   validity: string | null;
+  deliveryTime: string | null;
   topClients: string | null;
   signerName: string | null;
   signerTitle: string | null;
@@ -151,6 +152,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [creditTerm, setCreditTerm] = useState('30 días');
   const [paymentTerms, setPaymentTerms] = useState('100% contraentrega');
   const [validity, setValidity] = useState('10 días');
+  const [deliveryTime, setDeliveryTime] = useState('');
   const [topClients, setTopClients] = useState(DEFAULT_TOP_CLIENTS);
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
@@ -190,6 +192,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       creditTerm,
       paymentTerms,
       validity,
+      deliveryTime,
       topClients,
       signerName,
       signerTitle,
@@ -214,6 +217,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       creditTerm,
       paymentTerms,
       validity,
+      deliveryTime,
       topClients,
       signerName,
       signerTitle,
@@ -242,6 +246,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setCreditTerm(draft.creditTerm ?? '');
     setPaymentTerms(draft.paymentTerms ?? '');
     setValidity(draft.validity ?? '');
+    setDeliveryTime(draft.deliveryTime ?? '');
     setTopClients(draft.topClients ?? DEFAULT_TOP_CLIENTS);
     setSignerName(draft.signerName ?? '');
     setSignerTitle(draft.signerTitle ?? '');
@@ -272,6 +277,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       setCreditTerm(initial.creditTerm ?? '');
       setPaymentTerms(initial.paymentTerms ?? '');
       setValidity(initial.validity ?? '');
+      setDeliveryTime(initial.deliveryTime ?? '');
       setTopClients(initial.topClients ?? '');
       setSignerName(initial.signerName ?? '');
       setSignerTitle(initial.signerTitle ?? '');
@@ -304,6 +310,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setCreditTerm('30 días');
     setPaymentTerms('100% contraentrega');
     setValidity('10 días');
+    setDeliveryTime('');
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
@@ -515,6 +522,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
         creditTerm,
         paymentTerms,
         validity,
+        deliveryTime,
         topClients,
         signerName,
         signerTitle,
@@ -946,7 +954,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
           <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-secondary">
             Condiciones comerciales
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <Field label="Plazo de crédito">
               <input value={creditTerm} onChange={(e) => setCreditTerm(e.target.value)} className="input" />
             </Field>
@@ -959,6 +967,14 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
             </Field>
             <Field label="Vigencia">
               <input value={validity} onChange={(e) => setValidity(e.target.value)} className="input" />
+            </Field>
+            <Field label="Tiempo de entrega">
+              <input
+                value={deliveryTime}
+                onChange={(e) => setDeliveryTime(e.target.value)}
+                className="input"
+                placeholder="Ej. 15 días laborables"
+              />
             </Field>
           </div>
           <Field label="Principales clientes (uno por línea)">

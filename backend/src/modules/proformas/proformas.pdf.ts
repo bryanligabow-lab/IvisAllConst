@@ -58,7 +58,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   const headerY = M;
   if (fs.existsSync(LOGO_PATH)) {
     try {
-      doc.image(LOGO_PATH, M, headerY - 4, { fit: [300, 96] });
+      doc.image(LOGO_PATH, M, headerY - 6, { fit: [360, 120] });
     } catch {
       /* ignore */
     }
@@ -84,10 +84,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
       lineBreak: false,
     });
 
-  // Línea separadora (subida para aprovechar mejor el espacio)
+  // Línea separadora (debajo del logo, que ahora es más grande)
   doc
-    .moveTo(M, headerY + 96)
-    .lineTo(M + W, headerY + 96)
+    .moveTo(M, headerY + 120)
+    .lineTo(M + W, headerY + 120)
     .lineWidth(1.5)
     .strokeColor(RED)
     .stroke();
@@ -97,10 +97,10 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     .fillColor(DARK)
     .font('Helvetica')
     .fontSize(9)
-    .text(formatDateLong(p.date), M, headerY + 102, { width: W, align: 'right' });
+    .text(formatDateLong(p.date), M, headerY + 126, { width: W, align: 'right' });
 
   // ===== Emisor (izq) + Cliente (der) =====
-  const blockY = headerY + 120;
+  const blockY = headerY + 144;
   doc.fillColor(DARK).font('Helvetica-Bold').fontSize(10).text('CREA INNOVACION PROYECTOS Y SERVICIOS', M, blockY);
   doc.font('Helvetica-Bold').text('CREACOM S.A.', M, blockY + 12);
   doc.font('Helvetica').fontSize(9).fillColor(DARK);
@@ -139,7 +139,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   const headerTextY = tableTop + 10;
   doc.text('CANT', colX[0], headerTextY, { width: colWidths[0], align: 'center' });
   doc.text('UNI', colX[1], headerTextY, { width: colWidths[1], align: 'center' });
-  doc.text('DETALLE', colX[2], headerTextY, { width: colWidths[2], align: 'center' });
+  doc.text('DETALLE', colX[2] + 4, headerTextY, { width: colWidths[2] - 8, align: 'left' });
   doc.text('V. UNITARIO', colX[3], headerTextY, { width: colWidths[3], align: 'center' });
   doc.text('V. TOTAL', colX[4], headerTextY, { width: colWidths[4], align: 'center' });
 
@@ -206,7 +206,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     doc.text(it.unit, colX[1], cellY, { width: colWidths[1], align: 'center' });
     doc.text(it.description, colX[2] + 4, rowY + 8, {
       width: textW - 8,
-      align: hasImg ? 'left' : 'center',
+      align: 'left',
     });
 
     // Imagen(es) del rubro, al lado de la descripción.
@@ -321,6 +321,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   if (p.creditTerm) notesLines.push({ text: `• Plazo de credito: ${p.creditTerm}` });
   if (p.paymentTerms) notesLines.push({ text: `• Forma de pago: ${p.paymentTerms}` });
   if (p.validity) notesLines.push({ text: `• Vigencia de la oferta: ${p.validity}` });
+  if (p.deliveryTime) notesLines.push({ text: `• Tiempo de entrega: ${p.deliveryTime}` });
   if (p.topClients) {
     notesLines.push({ text: '' });
     notesLines.push({ text: 'PRINCIPALES CLIENTES:', bold: true });

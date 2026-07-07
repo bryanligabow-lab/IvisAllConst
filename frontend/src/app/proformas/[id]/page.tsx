@@ -24,6 +24,7 @@ interface ProformaDetail {
   creditTerm: string | null;
   paymentTerms: string | null;
   validity: string | null;
+  deliveryTime: string | null;
   topClients: string | null;
   signerName: string | null;
   signerTitle: string | null;
@@ -210,7 +211,7 @@ export default function ProformaDetailPage() {
                 <tr key={it.id} className="border-t border-surface-border">
                   <td className="px-3 py-2 text-center">{it.quantity}</td>
                   <td className="px-3 py-2 text-center">{it.unit}</td>
-                  <td className="whitespace-pre-line px-3 py-2 text-center">{it.description}</td>
+                  <td className="whitespace-pre-line px-3 py-2 text-left">{it.description}</td>
                   <td className="px-3 py-2 text-right">${formatCurrency(it.unitPrice).replace('$','').trim()}</td>
                   <td className="px-3 py-2 text-right font-medium">${formatCurrency(it.quantity * it.unitPrice).replace('$','').trim()}</td>
                 </tr>
@@ -225,6 +226,7 @@ export default function ProformaDetailPage() {
             {data.creditTerm && <div>• Plazo de credito: {data.creditTerm}</div>}
             {data.paymentTerms && <div>• Forma de pago: {data.paymentTerms}</div>}
             {data.validity && <div>• Vigencia de la oferta: {data.validity}</div>}
+            {data.deliveryTime && <div>• Tiempo de entrega: {data.deliveryTime}</div>}
             {data.topClients && (
               <>
                 <div className="mt-2 font-bold">PRINCIPALES CLIENTES:</div>

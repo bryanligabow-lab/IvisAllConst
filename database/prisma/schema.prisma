@@ -676,6 +676,7 @@ model Proforma {
   creditTerm        String?   @map("credit_term")
   paymentTerms      String?   @map("payment_terms")
   validity          String?
+  deliveryTime      String?   @map("delivery_time") // tiempo de entrega
   topClients        String?   @map("top_clients") // newline-separated
   signerName        String?   @map("signer_name")
   signerTitle       String?   @map("signer_title")

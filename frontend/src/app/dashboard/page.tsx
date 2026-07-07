@@ -89,6 +89,8 @@ export default function DashboardPage() {
   );
 
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  // Buscador de proyectos (por nombre, código o cliente).
+  const [projectQuery, setProjectQuery] = useState('');
   const { isRestricted, can } = useAuthStore();
   // El operador ve solo sus proyectos asignados y sin valores monetarios.
   const restricted = isRestricted();
@@ -212,17 +214,46 @@ export default function DashboardPage() {
                   Click para abrir
                 </div>
               </div>
+              {stats.projects.length > 0 && (
+                <div className="border-b border-surface-border px-3 py-2">
+                  <input
+                    value={projectQuery}
+                    onChange={(e) => setProjectQuery(e.target.value)}
+                    className="input w-full text-sm"
+                    placeholder="🔍 Buscar proyecto…"
+                  />
+                </div>
+              )}
               <div
                 className="flex-1 space-y-2 overflow-y-auto p-3"
                 style={{ maxHeight: '560px' }}
               >
-                {stats.projects.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/40 p-6 text-center text-sm text-ink-secondary">
-                    Aún no hay proyectos. Crea el primero con{' '}
-                    <strong>+ Nuevo proyecto</strong>.
-                  </div>
-                ) : (
-                  stats.projects.map((p) => (
+                {(() => {
+                  const pq = projectQuery.trim().toLowerCase();
+                  const shown = pq
+                    ? stats.projects.filter(
+                        (p) =>
+                          p.name.toLowerCase().includes(pq) ||
+                          (p.code ?? '').toLowerCase().includes(pq) ||
+                          (p.clientName ?? '').toLowerCase().includes(pq),
+                      )
+                    : stats.projects;
+                  if (stats.projects.length === 0) {
+                    return (
+                      <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/40 p-6 text-center text-sm text-ink-secondary">
+                        Aún no hay proyectos. Crea el primero con{' '}
+                        <strong>+ Nuevo proyecto</strong>.
+                      </div>
+                    );
+                  }
+                  if (shown.length === 0) {
+                    return (
+                      <div className="p-4 text-center text-sm text-ink-secondary">
+                        No hay proyectos que coincidan con “{projectQuery}”.
+                      </div>
+                    );
+                  }
+                  return shown.map((p) => (
                     <ProjectMiniCard
                       key={p.id}
                       project={p}
@@ -231,8 +262,8 @@ export default function DashboardPage() {
                       onEdit={() => setEditingId(p.id)}
                       onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
                     />
-                  ))
-                )}
+                  ));
+                })()}
               </div>
             </div>
           </div>

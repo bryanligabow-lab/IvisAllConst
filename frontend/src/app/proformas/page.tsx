@@ -22,7 +22,7 @@ interface ProformaListItem {
   subtotal: number;
   iva: number;
   total: number;
-  items: Array<{ id: string }>;
+  items: Array<{ id: string; description?: string }>;
 }
 
 const STATUS_LABEL = {
@@ -47,6 +47,19 @@ export default function ProformasPage() {
   const [editing, setEditing] = useState<ProformaEditData | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; number: string; clientName: string } | null>(null);
+  // Buscador: por número, cliente, proyecto o producto/ítem.
+  const [query, setQuery] = useState('');
+
+  const q = query.trim().toLowerCase();
+  const filtered = (data ?? []).filter((p) => {
+    if (!q) return true;
+    return (
+      p.number.toLowerCase().includes(q) ||
+      (p.clientName ?? '').toLowerCase().includes(q) ||
+      (p.projectLabel ?? '').toLowerCase().includes(q) ||
+      p.items.some((it) => (it.description ?? '').toLowerCase().includes(q))
+    );
+  });
 
   async function openEdit(id: string) {
     setLoadingEditId(id);
@@ -110,14 +123,35 @@ export default function ProformasPage() {
         }}
       />
 
+      {data && data.length > 0 && (
+        <div className="mb-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="input w-full sm:max-w-md"
+            placeholder="🔍 Buscar por número, cliente, proyecto o producto…"
+          />
+          {q && (
+            <div className="mt-1 text-xs text-ink-tertiary">
+              {filtered.length} resultado{filtered.length === 1 ? '' : 's'} de {data.length}
+            </div>
+          )}
+        </div>
+      )}
+
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
       {data && data.length === 0 && (
         <div className="card text-sm text-ink-secondary">
           Aún no hay proformas. Crea la primera con <strong>+ Nueva proforma</strong>.
         </div>
       )}
+      {data && data.length > 0 && filtered.length === 0 && (
+        <div className="card text-sm text-ink-secondary">
+          No hay proformas que coincidan con “{query}”.
+        </div>
+      )}
 
-      {data && data.length > 0 && (
+      {filtered.length > 0 && (
         <div className="card overflow-x-auto">
           <table className="table-default table-cards">
             <thead>
@@ -133,7 +167,7 @@ export default function ProformasPage() {
               </tr>
             </thead>
             <tbody>
-              {data.map((p) => (
+              {filtered.map((p) => (
                 <tr key={p.id}>
                   <td data-label="N°" className="font-medium">{p.number}</td>
                   <td data-label="Fecha" className="text-xs">{formatCalendarDate(p.date)}</td>
