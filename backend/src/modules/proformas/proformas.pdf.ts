@@ -360,19 +360,23 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   // Totales (derecha)
   const totalsX = M + W / 2 + 12;
   const totalsW = W / 2 - 12;
-  const labelW = totalsW / 2;
-  const valueW = totalsW / 2;
+  // Más ancho para la etiqueta (los textos largos como "SUBTOTAL No objeto de
+  // IVA:" se partían en dos líneas). El valor va a la derecha en su franja.
+  const labelW = totalsW * 0.66;
+  const valueW = totalsW * 0.34;
   let ty = footerTop;
 
   function totalsRow(label: string, value: string, bold = false, accent = false) {
     if (accent) {
       doc.rect(totalsX, ty - 2, totalsW, 24).fill(SOFT_BG);
     }
+    // Fuente un poco menor en las etiquetas normales para que quepan en una línea.
+    const labelSize = accent ? 12 : label.length > 20 ? 8.5 : 10;
     doc
       .fillColor(accent ? RED : DARK)
       .font(bold ? 'Helvetica-Bold' : 'Helvetica')
-      .fontSize(accent ? 12 : 10)
-      .text(label, totalsX, ty + 4, { width: labelW, align: 'left' });
+      .fontSize(labelSize)
+      .text(label, totalsX, ty + 5, { width: labelW, align: 'left', lineBreak: false });
     doc
       .fillColor(accent ? RED : DARK)
       .font(bold ? 'Helvetica-Bold' : 'Helvetica')
