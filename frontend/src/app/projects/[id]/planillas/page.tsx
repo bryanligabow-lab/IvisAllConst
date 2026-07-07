@@ -15,6 +15,7 @@ import {
   PLANILLA_STATUS_FLOW,
   PLANILLA_STATUS_LABEL,
   PLANILLA_STATUS_CLASS,
+  planillaProgress,
 } from '@/lib/planillaStatus';
 import { useAuthStore } from '@/stores/authStore';
 import type { Planilla, ProjectSummary } from '@/types';
@@ -143,6 +144,33 @@ export default function PlanillasPage() {
                 )}
               </div>
             </header>
+
+            {/* Barra de progreso del cobro de la planilla */}
+            {(() => {
+              const prog = planillaProgress(p.status);
+              const barColor =
+                prog.tone === 'success'
+                  ? 'bg-success'
+                  : prog.tone === 'danger'
+                    ? 'bg-danger'
+                    : 'bg-brand';
+              return (
+                <div className="mb-3">
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-ink-secondary">Progreso del cobro</span>
+                    <span className="font-semibold text-ink-primary">
+                      {prog.label} · {prog.pct}%
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-muted">
+                    <div
+                      className={`h-full rounded-full ${barColor} transition-all`}
+                      style={{ width: `${prog.pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {percentOnly ? (
               (() => {
