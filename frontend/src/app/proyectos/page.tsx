@@ -81,10 +81,23 @@ export default function ProyectosReportPage() {
   const { can } = useAuthStore();
   const canDelete = can('projects.delete');
   const [filter, setFilter] = useState<'ALL' | Project['status']>('ALL');
+  const [query, setQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
+  const q = query.trim().toLowerCase();
   const filteredProjects =
-    data?.projects.filter((p) => filter === 'ALL' || p.status === filter) ?? [];
+    data?.projects.filter((p) => {
+      if (filter !== 'ALL' && p.status !== filter) return false;
+      if (q) {
+        const hay =
+          p.name.toLowerCase().includes(q) ||
+          (p.code ?? '').toLowerCase().includes(q) ||
+          (p.contractor ?? '').toLowerCase().includes(q) ||
+          (p.city ?? '').toLowerCase().includes(q);
+        if (!hay) return false;
+      }
+      return true;
+    }) ?? [];
 
   return (
     <AppShell>
@@ -98,7 +111,13 @@ export default function ProyectosReportPage() {
             Reporte consolidado de todos los proyectos · listo para gerencia
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="input w-full sm:w-56"
+            placeholder="🔍 Buscar proyecto…"
+          />
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as 'ALL' | Project['status'])}
