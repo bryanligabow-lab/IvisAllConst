@@ -4,11 +4,14 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
+import { NotificationRecipientsModal } from '@/components/forms/NotificationRecipientsModal';
 import { apiGet } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
 import {
   planillaProgress,
+  PLANILLA_STATUS_FLOW,
   PLANILLA_STATUS_LABEL,
   PLANILLA_STATUS_CLASS,
 } from '@/lib/planillaStatus';
@@ -20,6 +23,10 @@ interface OverviewPlanilla {
   title: string;
   status: PlanillaStatus;
   totalCurrent: number;
+  facturado: number;
+  porCobrar: number;
+  periodStart: string;
+  periodEnd: string;
 }
 interface OverviewProject {
   id: string;
@@ -28,16 +35,6 @@ interface OverviewProject {
   clientName: string | null;
   contractAmount: number;
   planillas: OverviewPlanilla[];
-  summary: {
-    planillado: number;
-    facturado: number;
-    porCobrar: number;
-    ingresado: number;
-    anticipos: number;
-    presentadas: number;
-    aprobadas: number;
-    pagadas: number;
-  };
 }
 interface Overview {
   totals: {
@@ -47,7 +44,6 @@ interface Overview {
     porCobrar: number;
     ingresado: number;
     anticipos: number;
-    planillasIngreso: number;
     totalPlanillas: number;
     presentadas: number;
     aprobadas: number;
@@ -56,190 +52,354 @@ interface Overview {
   projects: OverviewProject[];
 }
 
+// Fila plana: una planilla con el contexto de su proyecto.
+interface Row extends OverviewPlanilla {
+  projectId: string;
+  projectName: string;
+  clientName: string | null;
+  contractAmount: number;
+}
+
+const PER_PAGE = 10;
+const ALL_STATUSES: PlanillaStatus[] = [...PLANILLA_STATUS_FLOW, 'CANCELLED'];
+
+function monthLabel(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('es-EC', { month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
 export default function PlanillasOverviewPage() {
   const { data, isLoading } = useSWR<Overview>('/ingresos/overview', apiGet);
+  const { can } = useAuthStore();
+  const canManage = can('ingresos.write');
+
   const [query, setQuery] = useState('');
-  const [showEmpty, setShowEmpty] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | PlanillaStatus>('ALL');
+  const [projectFilter, setProjectFilter] = useState('ALL');
+  const [page, setPage] = useState(0);
+  const [showCorreos, setShowCorreos] = useState(false);
+
+  // Aplana todas las planillas con su proyecto.
+  const rows: Row[] = useMemo(() => {
+    const list: Row[] = [];
+    for (const p of data?.projects ?? []) {
+      for (const pl of p.planillas) {
+        list.push({
+          ...pl,
+          projectId: p.id,
+          projectName: p.name,
+          clientName: p.clientName,
+          contractAmount: p.contractAmount,
+        });
+      }
+    }
+    // Más recientes primero.
+    return list.sort((a, b) => (a.periodEnd < b.periodEnd ? 1 : -1));
+  }, [data]);
+
+  const statusCounts = useMemo(() => {
+    const m = new Map<PlanillaStatus, number>();
+    for (const r of rows) m.set(r.status, (m.get(r.status) ?? 0) + 1);
+    return m;
+  }, [rows]);
 
   const q = query.trim().toLowerCase();
-  const projects = useMemo(() => {
-    let list = data?.projects ?? [];
-    if (!showEmpty) list = list.filter((p) => p.planillas.length > 0);
-    if (q)
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.clientName ?? '').toLowerCase().includes(q) ||
-          (p.code ?? '').toLowerCase().includes(q),
-      );
-    return list;
-  }, [data, showEmpty, q]);
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+      if (projectFilter !== 'ALL' && r.projectId !== projectFilter) return false;
+      if (q) {
+        const hay =
+          r.projectName.toLowerCase().includes(q) ||
+          (r.clientName ?? '').toLowerCase().includes(q) ||
+          `planilla ${r.number}`.includes(q) ||
+          String(r.number).includes(q);
+        if (!hay) return false;
+      }
+      return true;
+    });
+  }, [rows, statusFilter, projectFilter, q]);
 
-  const emptyCount = (data?.projects ?? []).filter((p) => p.planillas.length === 0).length;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const clampedPage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(clampedPage * PER_PAGE, clampedPage * PER_PAGE + PER_PAGE);
+
   const t = data?.totals;
+  const projectOptions = (data?.projects ?? []).filter((p) => p.planillas.length > 0);
+
+  function exportCsv() {
+    const head = ['Planilla', 'Periodo', 'Proyecto', 'Cliente', 'Contrato', 'Estado', 'Avance %', 'Monto planillado', 'Facturado', 'Por cobrar'];
+    const lines = filtered.map((r) => [
+      `Planilla ${r.number}`,
+      monthLabel(r.periodEnd),
+      r.projectName,
+      r.clientName ?? '',
+      r.contractAmount,
+      PLANILLA_STATUS_LABEL[r.status],
+      planillaProgress(r.status).pct,
+      r.totalCurrent,
+      r.facturado,
+      r.porCobrar,
+    ]);
+    const csv = [head, ...lines]
+      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Planillas - estado de cobro.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <AppShell>
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Planillas</h1>
-        <p className="text-xs text-ink-secondary">
-          Estado de cobro de todas las obras: cuánto se ha planillado, facturado, cobrado y qué
-          falta — con el avance de cada planilla.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Planillas</h1>
+          <p className="text-xs text-ink-secondary">
+            Gestión y seguimiento del estado de cobro de todas las obras.
+          </p>
+        </div>
+        <button onClick={() => setShowCorreos(true)} className="btn-secondary">
+          ✉️ Correos
+        </button>
       </div>
 
-      {/* KPIs globales */}
+      {/* KPIs */}
       {t && (
-        <>
-          <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Kpi label="Total planillado" value={formatCurrency(t.planillado, true)} />
-            <Kpi label="Facturado" value={formatCurrency(t.facturado, true)} tone="success" />
-            <Kpi
-              label="Por cobrar"
-              value={formatCurrency(t.porCobrar, true)}
-              tone={t.porCobrar > 0 ? 'warn' : 'default'}
-            />
-            <Kpi label="Ingresado" value={formatCurrency(t.ingresado, true)} tone="success" />
-          </div>
-          <div className="mb-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-5">
-            <Stat label="Planillas" value={String(t.totalPlanillas)} />
-            <Stat label="Presentadas" value={String(t.presentadas)} />
-            <Stat label="Aprobadas" value={String(t.aprobadas)} />
-            <Stat label="Pagadas" value={String(t.pagadas)} />
-            <Stat label="Anticipos" value={formatCurrency(t.anticipos, true)} />
-          </div>
-        </>
-      )}
-
-      {/* Buscador + toggle */}
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="input w-full sm:max-w-xs"
-          placeholder="🔍 Buscar proyecto…"
-        />
-        {emptyCount > 0 && (
-          <label className="flex items-center gap-2 text-xs text-ink-secondary">
-            <input
-              type="checkbox"
-              checked={showEmpty}
-              onChange={(e) => setShowEmpty(e.target.checked)}
-            />
-            Ver {emptyCount} proyecto{emptyCount === 1 ? '' : 's'} sin planillas
-          </label>
-        )}
-      </div>
-
-      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
-      {data && projects.length === 0 && (
-        <div className="card text-sm text-ink-secondary">
-          {q ? `No hay proyectos que coincidan con “${query}”.` : 'No hay planillas registradas aún.'}
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Kpi icon="📄" tone="brand" label="Total planillado" value={formatCurrency(t.planillado, true)} hint={`de ${formatCurrency(t.planillado + t.porCobrar, true)} en proceso`} />
+          <Kpi icon="🧾" tone="info" label="Facturado" value={formatCurrency(t.facturado, true)} hint={t.planillado > 0 ? `${Math.round((t.facturado / t.planillado) * 100)}% del planillado` : ''} />
+          <Kpi icon="💰" tone="warn" label="Por cobrar" value={formatCurrency(t.porCobrar, true)} hint={t.planillado > 0 ? `${Math.round((t.porCobrar / t.planillado) * 100)}% del planillado` : ''} />
+          <Kpi icon="🌱" tone="success" label="Ingresado (con anticipo)" value={formatCurrency(t.ingresado, true)} hint={`Anticipos ${formatCurrency(t.anticipos, true)}`} />
         </div>
       )}
 
-      {/* Por proyecto */}
-      <div className="space-y-3">
-        {projects.map((p) => (
-          <div key={p.id} className="card">
-            <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <Link
-                  href={ROUTES.PROJECT_PLANILLAS(p.id)}
-                  className="font-semibold text-brand hover:underline"
+      {/* Resumen de estado */}
+      <div className="mb-4 card">
+        <div className="mb-1 text-sm font-semibold">Resumen de estado</div>
+        <div className="mb-3 text-xs text-ink-secondary">Todas las planillas del sistema</div>
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {ALL_STATUSES.map((s, i) => {
+            const count = statusCounts.get(s) ?? 0;
+            const pct = s === 'CANCELLED' ? null : planillaProgress(s).pct;
+            return (
+              <div key={s} className="flex shrink-0 items-center gap-1">
+                {i > 0 && <div className="h-px w-4 bg-surface-border sm:w-8" />}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter((cur) => (cur === s ? 'ALL' : s));
+                    setPage(0);
+                  }}
+                  className={`flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition-colors ${
+                    statusFilter === s ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-surface-muted'
+                  }`}
+                  title="Filtrar por este estado"
                 >
-                  {p.name}
-                </Link>
-                <div className="text-xs text-ink-secondary">
-                  {p.clientName ?? '—'} · Contrato {formatCurrency(p.contractAmount, true)}
-                </div>
+                  <span className={`${PLANILLA_STATUS_CLASS[s]} min-w-[24px]`}>{count}</span>
+                  <span className="whitespace-nowrap text-[10px] text-ink-secondary">
+                    {PLANILLA_STATUS_LABEL[s]}
+                  </span>
+                  <span className="text-[10px] font-semibold text-ink-tertiary">
+                    {pct === null ? '—' : `${pct}%`}
+                  </span>
+                </button>
               </div>
-              <div className="text-right text-xs">
-                <div className="text-ink-secondary">
-                  Por cobrar:{' '}
-                  <span className="font-semibold text-warning">
-                    {formatCurrency(p.summary.porCobrar, true)}
-                  </span>
-                </div>
-                <div className="text-ink-secondary">
-                  Ingresado:{' '}
-                  <span className="font-semibold text-success">
-                    {formatCurrency(p.summary.ingresado, true)}
-                  </span>
-                </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
+          className="input w-full sm:max-w-xs"
+          placeholder="🔍 Buscar planilla, proyecto o cliente…"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as 'ALL' | PlanillaStatus);
+            setPage(0);
+          }}
+          className="input w-auto"
+        >
+          <option value="ALL">Todos los estados</option>
+          {ALL_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {PLANILLA_STATUS_LABEL[s]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={projectFilter}
+          onChange={(e) => {
+            setProjectFilter(e.target.value);
+            setPage(0);
+          }}
+          className="input w-auto"
+        >
+          <option value="ALL">Todos los proyectos</option>
+          {projectOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <button onClick={exportCsv} className="btn-secondary ml-auto text-xs">
+          ⬇️ Exportar
+        </button>
+      </div>
+
+      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
+
+      {/* Tabla */}
+      {data && (
+        <div className="card overflow-x-auto">
+          <table className="table-default table-cards">
+            <thead>
+              <tr>
+                <th>Planilla</th>
+                <th>Proyecto</th>
+                <th className="text-right">Contrato</th>
+                <th>Estado</th>
+                <th>Avance</th>
+                <th className="text-right">Planillado</th>
+                <th className="text-right">Facturado</th>
+                <th className="text-right">Por cobrar</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => {
+                const prog = planillaProgress(r.status);
+                const bar =
+                  prog.tone === 'success' ? 'bg-success' : prog.tone === 'danger' ? 'bg-danger' : 'bg-brand';
+                return (
+                  <tr key={r.id}>
+                    <td data-label="Planilla">
+                      <div className="font-medium">Planilla #{r.number}</div>
+                      <div className="text-[11px] capitalize text-ink-tertiary">{monthLabel(r.periodEnd)}</div>
+                    </td>
+                    <td data-label="Proyecto">
+                      <Link href={ROUTES.PROJECT_PLANILLAS(r.projectId)} className="font-medium text-brand hover:underline">
+                        {r.projectName}
+                      </Link>
+                      <div className="text-[11px] text-ink-tertiary">{r.clientName ?? '—'}</div>
+                    </td>
+                    <td data-label="Contrato" className="text-right text-xs">{formatCurrency(r.contractAmount, true)}</td>
+                    <td data-label="Estado">
+                      <span className={PLANILLA_STATUS_CLASS[r.status]}>{PLANILLA_STATUS_LABEL[r.status]}</span>
+                    </td>
+                    <td data-label="Avance" className="min-w-[110px]">
+                      <div className="mb-0.5 text-[11px] font-semibold text-ink-primary">{prog.pct}%</div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
+                        <div className={`h-full rounded-full ${bar}`} style={{ width: `${prog.pct}%` }} />
+                      </div>
+                    </td>
+                    <td data-label="Planillado" className="text-right font-medium">{formatCurrency(r.totalCurrent, true)}</td>
+                    <td data-label="Facturado" className="text-right text-info">{formatCurrency(r.facturado, true)}</td>
+                    <td data-label="Por cobrar" className="text-right font-medium text-warning">{formatCurrency(r.porCobrar, true)}</td>
+                    <td data-label="" className="cell-actions">
+                      <Link href={ROUTES.PROJECT_PLANILLAS(r.projectId)} className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted" title="Ver / actualizar">
+                        👁️
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="py-6 text-center text-sm text-ink-secondary">
+                    No hay planillas que coincidan con el filtro.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Paginación */}
+          {filtered.length > PER_PAGE && (
+            <div className="mt-3 flex items-center justify-between text-xs text-ink-secondary">
+              <span>
+                Mostrando {clampedPage * PER_PAGE + 1} a{' '}
+                {Math.min((clampedPage + 1) * PER_PAGE, filtered.length)} de {filtered.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={clampedPage === 0}
+                  className="rounded-md px-2 py-1 hover:bg-surface-muted disabled:opacity-40"
+                >
+                  ‹
+                </button>
+                <span className="px-2">
+                  {clampedPage + 1} / {pageCount}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                  disabled={clampedPage >= pageCount - 1}
+                  className="rounded-md px-2 py-1 hover:bg-surface-muted disabled:opacity-40"
+                >
+                  ›
+                </button>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {p.planillas.length === 0 ? (
-              <div className="text-xs text-ink-tertiary">— Sin planillas aún —</div>
-            ) : (
-              <div className="space-y-2">
-                {p.planillas.map((pl) => {
-                  const prog = planillaProgress(pl.status);
-                  const barColor =
-                    prog.tone === 'success'
-                      ? 'bg-success'
-                      : prog.tone === 'danger'
-                        ? 'bg-danger'
-                        : 'bg-brand';
-                  return (
-                    <div key={pl.id} className="rounded-md bg-surface-muted/40 p-2">
-                      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
-                        <span className="font-medium text-ink-primary">
-                          Planilla #{pl.number}
-                          <span className="ml-2 text-ink-secondary">
-                            {formatCurrency(pl.totalCurrent, true)}
-                          </span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className={PLANILLA_STATUS_CLASS[pl.status]}>
-                            {PLANILLA_STATUS_LABEL[pl.status]}
-                          </span>
-                          <span className="font-semibold text-ink-primary">{prog.pct}%</span>
-                        </span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-muted">
-                        <div
-                          className={`h-full rounded-full ${barColor} transition-all`}
-                          style={{ width: `${prog.pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      <NotificationRecipientsModal
+        open={showCorreos}
+        onClose={() => setShowCorreos(false)}
+        canManage={canManage}
+      />
     </AppShell>
   );
 }
 
 function Kpi({
+  icon,
   label,
   value,
-  tone = 'default',
+  hint,
+  tone,
 }: {
+  icon: string;
   label: string;
   value: string;
-  tone?: 'default' | 'success' | 'warn';
+  hint?: string;
+  tone: 'brand' | 'info' | 'warn' | 'success';
 }) {
-  const color =
-    tone === 'success' ? 'text-success' : tone === 'warn' ? 'text-warning' : 'text-ink-primary';
+  const tile =
+    tone === 'brand'
+      ? 'bg-brand/15'
+      : tone === 'info'
+        ? 'bg-info/15'
+        : tone === 'warn'
+          ? 'bg-warning/15'
+          : 'bg-success/15';
   return (
-    <div className="metric-card">
-      <div className="text-xs text-ink-secondary">{label}</div>
-      <div className={`mt-1 text-lg font-semibold tracking-tight ${color}`}>{value}</div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-surface-muted/50 px-2 py-1.5 text-center">
-      <div className="text-[10px] text-ink-tertiary">{label}</div>
-      <div className="text-sm font-semibold text-ink-primary">{value}</div>
+    <div className="metric-card flex items-start gap-3">
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg ${tile}`}>
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs text-ink-secondary">{label}</div>
+        <div className="mt-0.5 text-lg font-semibold tracking-tight">{value}</div>
+        {hint && <div className="text-[10px] text-ink-tertiary">{hint}</div>}
+      </div>
     </div>
   );
 }

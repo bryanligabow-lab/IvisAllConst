@@ -163,6 +163,8 @@ export class IngresosService {
             totalCurrent: true,
             netPayable: true,
             advanceAmortization: true,
+            periodStart: true,
+            periodEnd: true,
           },
         },
         ingresos: {
@@ -235,13 +237,22 @@ export class IngresosService {
         name: p.name,
         clientName: p.client?.name ?? p.contractor ?? null,
         contractAmount: Number(p.contractAmount),
-        planillas: p.planillas.map((pl) => ({
-          id: pl.id,
-          number: pl.number,
-          title: pl.title,
-          status: pl.status,
-          totalCurrent: Number(pl.totalCurrent),
-        })),
+        planillas: p.planillas.map((pl) => {
+          const cur = Number(pl.totalCurrent);
+          const facturadoPl = pl.status === 'APPROVED' || pl.status === 'PAID' ? cur : 0;
+          const porCobrarPl = RECEIVABLE_STATUSES.includes(pl.status) ? Number(pl.netPayable) : 0;
+          return {
+            id: pl.id,
+            number: pl.number,
+            title: pl.title,
+            status: pl.status,
+            totalCurrent: cur,
+            facturado: facturadoPl,
+            porCobrar: porCobrarPl,
+            periodStart: pl.periodStart,
+            periodEnd: pl.periodEnd,
+          };
+        }),
         summary: {
           planillado,
           facturado,

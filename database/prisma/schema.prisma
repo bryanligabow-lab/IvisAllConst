@@ -787,3 +787,21 @@ model ProformaImage {
   @@index([proformaId])
   @@map("proforma_images")
 }
+
+// Correos que reciben los informes de estado de las planillas (informe diario,
+// recordatorios). El envío se activa cuando se configure el correo emisor.
+model NotificationRecipient {
+  id        String    @id @default(uuid())
+  email     String
+  name      String?
+  active    Boolean   @default(true)
+  // Qué informes recibe (por ahora solo planillas). Reservado para el futuro.
+  scope     String    @default("PLANILLAS")
+  createdBy String    @map("created_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([deletedAt])
+  @@map("notification_recipients")
+}

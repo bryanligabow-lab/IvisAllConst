@@ -27,6 +27,7 @@ const config: Config = {
         success: { DEFAULT: '#1B7A52', soft: '#E1F4ED' },
         warning: { DEFAULT: '#C77800', soft: '#FBEFD8' },
         danger: { DEFAULT: '#7E1F1F', soft: '#F4DAD6' },
+        info: { DEFAULT: '#2563EB', soft: '#DBEAFE' },
       },
       fontFamily: {
         sans: ['"Inter"', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
