@@ -63,6 +63,17 @@ interface Row extends OverviewPlanilla {
 const PER_PAGE = 10;
 const ALL_STATUSES: PlanillaStatus[] = [...PLANILLA_STATUS_FLOW, 'CANCELLED'];
 
+// Color por estado para los círculos del "Resumen de estado".
+const STATE_COLOR: Record<PlanillaStatus, string> = {
+  DRAFT: '#2563EB',
+  SUBMITTED: '#C77800',
+  FISCALIZACION: '#7C3AED',
+  CONTRALORIA: '#EA580C',
+  APPROVED: '#1B7A52',
+  PAID: '#1B7A52',
+  CANCELLED: '#7E1F1F',
+};
+
 function monthLabel(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString('es-EC', { month: 'short', year: 'numeric' });
@@ -184,26 +195,33 @@ export default function PlanillasOverviewPage() {
       <div className="mb-4 card">
         <div className="mb-1 text-sm font-semibold">Resumen de estado</div>
         <div className="mb-3 text-xs text-ink-secondary">Todas las planillas del sistema</div>
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+        <div className="flex items-start gap-1 overflow-x-auto pb-1 sm:gap-2">
           {ALL_STATUSES.map((s, i) => {
             const count = statusCounts.get(s) ?? 0;
             const pct = s === 'CANCELLED' ? null : planillaProgress(s).pct;
+            const color = STATE_COLOR[s];
+            const active = statusFilter === s;
             return (
-              <div key={s} className="flex shrink-0 items-center gap-1">
-                {i > 0 && <div className="h-px w-4 bg-surface-border sm:w-8" />}
+              <div key={s} className="flex shrink-0 items-center gap-1 sm:gap-2">
+                {i > 0 && <div className="mt-7 h-0.5 w-5 bg-surface-border sm:w-9" />}
                 <button
                   type="button"
                   onClick={() => {
                     setStatusFilter((cur) => (cur === s ? 'ALL' : s));
                     setPage(0);
                   }}
-                  className={`flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 transition-colors ${
-                    statusFilter === s ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-surface-muted'
+                  className={`flex w-[76px] flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-colors ${
+                    active ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-surface-muted'
                   }`}
                   title="Filtrar por este estado"
                 >
-                  <span className={`${PLANILLA_STATUS_CLASS[s]} min-w-[24px]`}>{count}</span>
-                  <span className="whitespace-nowrap text-[10px] text-ink-secondary">
+                  <span
+                    className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-xl font-bold"
+                    style={{ borderColor: color, color, backgroundColor: `${color}14` }}
+                  >
+                    {count}
+                  </span>
+                  <span className="text-center text-[11px] font-medium leading-tight text-ink-primary">
                     {PLANILLA_STATUS_LABEL[s]}
                   </span>
                   <span className="text-[10px] font-semibold text-ink-tertiary">
