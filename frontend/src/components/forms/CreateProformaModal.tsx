@@ -53,6 +53,11 @@ interface ImageItem {
   caption: string;
 }
 
+// Una imagen es válida para enviar si tiene base64 y un tipo image/*.
+function isValidImage(img: ImageItem): boolean {
+  return Boolean(img.dataBase64 && img.dataBase64.length > 10 && /^image\//.test(img.mimeType));
+}
+
 interface Item {
   quantity: string;
   unit: string;
@@ -109,7 +114,6 @@ const DEFAULT_TOP_CLIENTS = `GAD Canton El Empalme.
 Ambiesa S.A.
 Ministerio de Educación, coordinacion zonal`;
 
-const MAX_IMAGE_SIZE = 4 * 1024 * 1024; // 4 MB por imagen
 const MAX_IMAGES = 6;
 const MAX_ITEM_IMAGES = 3; // imágenes por rubro (el PDF las dibuja al lado, hasta 3)
 
@@ -123,6 +127,63 @@ function fileToBase64(file: File): Promise<{ dataUrl: string; dataBase64: string
     };
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
+  });
+}
+
+// Comprime/normaliza una imagen a JPEG en el navegador: la redimensiona (máx.
+// `maxDim` px) y la re-codifica. Garantiza un base64 válido y liviano, y evita
+// fallos por formatos raros o fotos enormes del celular. Si algo falla, cae al
+// archivo original.
+function compressImageToBase64(
+  file: File,
+  maxDim = 1400,
+  quality = 0.82,
+): Promise<{ dataUrl: string; dataBase64: string; mimeType: string }> {
+  return new Promise((resolve) => {
+    const fallback = async () => {
+      try {
+        const { dataUrl, dataBase64 } = await fileToBase64(file);
+        resolve({ dataUrl, dataBase64, mimeType: file.type || 'image/png' });
+      } catch {
+        resolve({ dataUrl: '', dataBase64: '', mimeType: file.type || 'image/png' });
+      }
+    };
+    try {
+      const url = URL.createObjectURL(file);
+      const img = new window.Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (!width || !height) return void fallback();
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return void fallback();
+        ctx.fillStyle = '#ffffff'; // fondo blanco para PNG transparentes
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (!dataUrl || dataUrl.length < 30) return void fallback();
+        resolve({
+          dataUrl,
+          dataBase64: dataUrl.replace(/^data:[^;]+;base64,/, ''),
+          mimeType: 'image/jpeg',
+        });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        void fallback();
+      };
+      img.src = url;
+    } catch {
+      void fallback();
+    }
   });
 }
 
@@ -447,12 +508,9 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     const added: ImageItem[] = [];
     for (const f of Array.from(files)) {
       if (!f.type.startsWith('image/')) continue;
-      if (f.size > MAX_IMAGE_SIZE) {
-        setError(`"${f.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
-        continue;
-      }
-      const { dataUrl, dataBase64 } = await fileToBase64(f);
-      added.push({ preview: dataUrl, dataBase64, mimeType: f.type, filename: f.name, caption: '' });
+      const { dataUrl, dataBase64, mimeType } = await compressImageToBase64(f);
+      if (!dataBase64) continue; // imagen que no se pudo leer → se salta
+      added.push({ preview: dataUrl, dataBase64, mimeType, filename: f.name, caption: '' });
     }
     setImages((c) => [...c, ...added]);
   }
@@ -473,13 +531,9 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     }
     const added: ImageItem[] = [];
     for (const file of Array.from(files).slice(0, room)) {
-      if (!file.type.startsWith('image/')) continue;
-      if (file.size > MAX_IMAGE_SIZE) {
-        setError(`"${file.name}" pesa más de 4 MB. Reduce el tamaño y vuelve a intentar.`);
-        continue;
-      }
-      const { dataUrl, dataBase64 } = await fileToBase64(file);
-      added.push({ preview: dataUrl, dataBase64, mimeType: file.type, filename: file.name, caption: '' });
+      const { dataUrl, dataBase64, mimeType } = await compressImageToBase64(file);
+      if (!dataBase64) continue; // imagen que no se pudo leer → se salta
+      added.push({ preview: dataUrl, dataBase64, mimeType, filename: file.name, caption: '' });
     }
     if (added.length === 0) return;
     setItems((curr) =>
@@ -575,24 +629,30 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
           vatType:
             it.vatMode === 'NO_OBJETO' || it.vatMode === 'EXENTO' ? it.vatMode : null,
         })),
+        // Solo enviamos imágenes válidas: una imagen dañada (base64 vacío o
+        // tipo raro) no debe bloquear toda la proforma.
         images: [
           // Imágenes ligadas a un rubro (van al lado de su descripción). Varias por rubro.
           ...items.flatMap((it, idx) =>
-            it.itemImages.map((img) => ({
+            it.itemImages
+              .filter((img) => isValidImage(img))
+              .map((img) => ({
+                mimeType: img.mimeType,
+                dataBase64: img.dataBase64,
+                filename: img.filename,
+                caption: img.caption || undefined,
+                itemIndex: idx,
+              })),
+          ),
+          // Imágenes generales (sin rubro) → al final del PDF.
+          ...images
+            .filter((img) => isValidImage(img))
+            .map((img) => ({
               mimeType: img.mimeType,
               dataBase64: img.dataBase64,
               filename: img.filename,
               caption: img.caption || undefined,
-              itemIndex: idx,
             })),
-          ),
-          // Imágenes generales (sin rubro) → al final del PDF.
-          ...images.map((img) => ({
-            mimeType: img.mimeType,
-            dataBase64: img.dataBase64,
-            filename: img.filename,
-            caption: img.caption || undefined,
-          })),
         ],
       };
       if (isEdit && initial) {
