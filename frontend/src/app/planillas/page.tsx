@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
@@ -195,28 +195,28 @@ export default function PlanillasOverviewPage() {
       <div className="mb-4 card">
         <div className="mb-1 text-sm font-semibold">Resumen de estado</div>
         <div className="mb-3 text-xs text-ink-secondary">Todas las planillas del sistema</div>
-        <div className="flex items-start gap-1 overflow-x-auto pb-1 sm:gap-2">
+        <div className="flex items-start overflow-x-auto pb-1">
           {ALL_STATUSES.map((s, i) => {
             const count = statusCounts.get(s) ?? 0;
             const pct = s === 'CANCELLED' ? null : planillaProgress(s).pct;
             const color = STATE_COLOR[s];
             const active = statusFilter === s;
             return (
-              <div key={s} className="flex shrink-0 items-center gap-1 sm:gap-2">
-                {i > 0 && <div className="mt-7 h-0.5 w-5 bg-surface-border sm:w-9" />}
+              <Fragment key={s}>
+                {i > 0 && <div className="mt-8 h-0.5 min-w-[10px] flex-1 bg-surface-border" />}
                 <button
                   type="button"
                   onClick={() => {
                     setStatusFilter((cur) => (cur === s ? 'ALL' : s));
                     setPage(0);
                   }}
-                  className={`flex w-[76px] flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-colors ${
+                  className={`flex w-[84px] shrink-0 flex-col items-center gap-1.5 rounded-xl px-1 py-2 transition-colors ${
                     active ? 'bg-brand/10 ring-1 ring-brand' : 'hover:bg-surface-muted'
                   }`}
                   title="Filtrar por este estado"
                 >
                   <span
-                    className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-xl font-bold"
+                    className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] text-2xl font-bold"
                     style={{ borderColor: color, color, backgroundColor: `${color}14` }}
                   >
                     {count}
@@ -228,7 +228,7 @@ export default function PlanillasOverviewPage() {
                     {pct === null ? '—' : `${pct}%`}
                   </span>
                 </button>
-              </div>
+              </Fragment>
             );
           })}
         </div>
