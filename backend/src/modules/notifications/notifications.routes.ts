@@ -9,6 +9,8 @@ import { success } from '../../utils/apiResponse';
 import { NotFoundError, UnauthorizedError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
+import { NotificationsService } from './notifications.service';
+import { isMailConfigured, verifyMail, sendMail } from '../../shared/email/mailer';
 
 // Correos que reciben los informes de estado de las planillas.
 const createSchema = z.object({
@@ -73,6 +75,48 @@ notificationsRouter.patch(
       },
     });
     return success(res, updated);
+  }),
+);
+
+// Estado de la configuración de correo (¿ya está el SMTP puesto?).
+notificationsRouter.get(
+  '/mail-status',
+  requirePermission(PERMISSIONS.INGRESOS_READ),
+  asyncHandler(async (_req, res) => {
+    return success(res, { configured: isMailConfigured() });
+  }),
+);
+
+// Verifica credenciales SMTP (para saber si el correo emisor quedó bien puesto).
+notificationsRouter.post(
+  '/verify',
+  requirePermission(PERMISSIONS.INGRESOS_WRITE),
+  asyncHandler(async (_req, res) => {
+    const r = await verifyMail();
+    return success(res, r);
+  }),
+);
+
+// Envía el informe de planillas AHORA. Si viene { email }, lo manda solo a ese
+// correo (prueba); si no, a todos los correos activos.
+const testSchema = z.object({ email: z.string().email().optional() });
+notificationsRouter.post(
+  '/send-report',
+  requirePermission(PERMISSIONS.INGRESOS_WRITE),
+  validate(testSchema),
+  asyncHandler(async (req, res) => {
+    if (req.body.email) {
+      const dateLabel = new Date().toLocaleDateString('es-EC', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+      const { html, subject } = await NotificationsService.buildDailyReportHtml(dateLabel);
+      const r = await sendMail({ to: req.body.email, subject, html });
+      return success(res, { ...r, to: req.body.email });
+    }
+    const r = await NotificationsService.sendDailyReport();
+    return success(res, r);
   }),
 );
 

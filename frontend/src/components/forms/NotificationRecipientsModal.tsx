@@ -21,10 +21,36 @@ interface Props {
 // Administra los correos que reciben los informes de estado de las planillas.
 export function NotificationRecipientsModal({ open, onClose, canManage }: Props) {
   const { data, mutate } = useSWR<Recipient[]>(open ? '/notifications/recipients' : null, apiGet);
+  const { data: mailStatus } = useSWR<{ configured: boolean }>(
+    open ? '/notifications/mail-status' : null,
+    apiGet,
+  );
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function sendNow() {
+    setSending(true);
+    setSendMsg(null);
+    try {
+      const r = (await apiPost('/notifications/send-report', {})) as {
+        sent?: boolean;
+        recipients?: number;
+        skipped?: boolean;
+        error?: string;
+      };
+      if (r.skipped) setSendMsg('El envío aún no está activo (falta la contraseña del correo).');
+      else if (r.sent) setSendMsg(`✓ Informe enviado a ${r.recipients} correo(s).`);
+      else setSendMsg(r.error ? `No se pudo enviar: ${r.error}` : 'No hay correos activos.');
+    } catch (err) {
+      setSendMsg(err instanceof ApiClientError ? err.message : 'No se pudo enviar');
+    } finally {
+      setSending(false);
+    }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -135,6 +161,36 @@ export function NotificationRecipientsModal({ open, onClose, canManage }: Props)
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Estado del envío + prueba */}
+        <div className="rounded-lg border border-surface-border p-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-ink-secondary">Envío de correos:</span>
+            {mailStatus?.configured ? (
+              <span className="badge-ok">Activo</span>
+            ) : (
+              <span className="badge-warn">Pendiente de configurar</span>
+            )}
+          </div>
+          {!mailStatus?.configured && (
+            <p className="mt-1 text-ink-tertiary">
+              Falta poner la cuenta emisora (correo + contraseña). Una vez configurada, el informe
+              se enviará solo cada día.
+            </p>
+          )}
+          {canManage && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                onClick={sendNow}
+                disabled={sending}
+                className="btn-secondary text-xs disabled:opacity-50"
+              >
+                {sending ? 'Enviando…' : 'Enviar informe ahora'}
+              </button>
+              {sendMsg && <span className="text-ink-secondary">{sendMsg}</span>}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end">

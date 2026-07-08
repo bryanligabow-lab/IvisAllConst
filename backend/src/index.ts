@@ -3,6 +3,7 @@ import { env } from './config/env';
 import { connectDatabase, disconnectDatabase } from './config/database';
 import { connectRedis, disconnectRedis } from './config/redis';
 import { logger } from './utils/logger';
+import { startNotificationsCron } from './modules/notifications/notifications.cron';
 
 async function start(): Promise<void> {
   await connectDatabase();
@@ -13,6 +14,9 @@ async function start(): Promise<void> {
   const server = app.listen(env.BACKEND_PORT, () => {
     logger.info(`API escuchando en :${env.BACKEND_PORT}`);
   });
+
+  // Informe diario de planillas + recordatorios (se salta solo si no hay SMTP).
+  startNotificationsCron();
 
   // Graceful shutdown
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
