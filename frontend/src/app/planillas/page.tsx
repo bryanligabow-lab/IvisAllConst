@@ -196,9 +196,9 @@ export default function PlanillasOverviewPage() {
         <div className="mb-1 text-sm font-semibold">Resumen de estado</div>
         <div className="mb-3 text-xs text-ink-secondary">Todas las planillas del sistema</div>
         <div className="flex items-start overflow-x-auto pb-1">
-          {ALL_STATUSES.map((s, i) => {
+          {PLANILLA_STATUS_FLOW.map((s, i) => {
             const count = statusCounts.get(s) ?? 0;
-            const pct = s === 'CANCELLED' ? null : planillaProgress(s).pct;
+            const pct = planillaProgress(s).pct;
             const color = STATE_COLOR[s];
             const active = statusFilter === s;
             return (
@@ -224,9 +224,7 @@ export default function PlanillasOverviewPage() {
                   <span className="text-center text-[11px] font-medium leading-tight text-ink-primary">
                     {PLANILLA_STATUS_LABEL[s]}
                   </span>
-                  <span className="text-[10px] font-semibold text-ink-tertiary">
-                    {pct === null ? '—' : `${pct}%`}
-                  </span>
+                  <span className="text-[10px] font-semibold text-ink-tertiary">{pct}%</span>
                 </button>
               </Fragment>
             );
