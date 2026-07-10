@@ -17,8 +17,8 @@ import { computeProformaTotals } from './proforma-totals';
 
 const itemSchema = z.object({
   quantity: z.coerce.number().nonnegative(),
-  unit: z.string().min(1).max(40),
-  description: z.string().min(1).max(500),
+  unit: z.string().min(1).max(60),
+  description: z.string().min(1).max(5000),
   unitPrice: z.coerce.number().nonnegative(),
   // % de IVA de este rubro (null/ausente = usa el IVA general).
   vatPercent: z.coerce.number().min(0).max(100).nullable().optional(),
