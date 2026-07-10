@@ -177,7 +177,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const hasImg = imgs.length > 0;
 
     // Si el rubro tiene imagen: texto a la izquierda, imagen a la derecha del detalle.
-    const imgBoxH = 62;
+    const imgBoxH = 80;
     const textW = hasImg ? Math.round(detalleW * 0.55) : detalleW;
     const imgAreaX = colX[2] + textW + 8;
     const imgAreaW = detalleW - textW - 8;
@@ -209,17 +209,22 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
       align: 'left',
     });
 
-    // Imagen(es) del rubro, al lado de la descripción.
+    // Imagen(es) del rubro, al lado de la descripción, CENTRADAS verticalmente
+    // en la fila (antes se pegaban arriba cuando la descripción era larga).
     if (hasImg) {
       const n = Math.min(imgs.length, 3);
       const gap = 4;
       const cw = (imgAreaW - gap * (n - 1)) / n;
+      // La caja de la imagen ocupa casi toda la fila (hasta un tope) y se
+      // centra verticalmente; `valign:center` centra la imagen dentro de ella.
+      const boxH = Math.min(Math.max(imgBoxH, rowH - 16), 220);
+      const imgY = rowY + (rowH - boxH) / 2;
       for (let k = 0; k < n; k++) {
         const buf = renderable.get(imgs[k].id);
         if (!buf) continue;
         try {
-          doc.image(buf, imgAreaX + k * (cw + gap), rowY + 7, {
-            fit: [cw, imgBoxH],
+          doc.image(buf, imgAreaX + k * (cw + gap), imgY, {
+            fit: [cw, boxH],
             align: 'center',
             valign: 'center',
           });
