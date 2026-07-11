@@ -10,9 +10,8 @@ function buildLimiter(def: RateLimitDef, opts: Partial<Options> = {}) {
   const redisClient = redis;
   const store = redisClient
     ? new RedisStore({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendCommand: ((...args: string[]) =>
-          redisClient.call(...(args as [string, ...string[]]))) as any,
+          redisClient.call(...(args as [string, ...string[]]))) as never,
         prefix: `rl:${def.prefix}:`,
       })
     : undefined;

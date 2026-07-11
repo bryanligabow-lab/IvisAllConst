@@ -59,7 +59,7 @@ async function computeProviderStats(projectId?: string) {
 
       let totalDebt = 0;
       let pendingOrdersCount = 0;
-      let projectsWithDebt = new Set<string>();
+      const projectsWithDebt = new Set<string>();
 
       for (const o of ordersAll) {
         const paid = o.gastos.reduce((s, g) => s + g.amount, 0);

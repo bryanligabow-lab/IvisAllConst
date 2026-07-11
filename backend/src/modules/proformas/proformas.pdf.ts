@@ -165,13 +165,11 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
 
   // Filas
   let rowY = tableTop + 28;
-  let subtotal = 0;
   doc.fillColor(DARK).font('Helvetica').fontSize(9);
 
   const detalleW = colWidths[2];
   for (const [idx, it] of p.items.entries()) {
     const totalLine = it.quantity * it.unitPrice;
-    subtotal += totalLine;
 
     const imgs = imagesByItem.get(idx) ?? [];
     const hasImg = imgs.length > 0;

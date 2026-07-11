@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod';
 
 type Source = 'body' | 'query' | 'params';
 

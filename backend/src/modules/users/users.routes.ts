@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcrypt';
 import { prisma } from '../../config/database';
 import { authenticate } from '../../middleware/authenticate';
@@ -71,7 +72,7 @@ usersRouter.get(
 );
 
 function generateDeleteCode(): string {
-  const buf = require('crypto').randomBytes(4).readUInt32BE(0);
+  const buf = randomBytes(4).readUInt32BE(0);
   return (buf % 1_000_000).toString().padStart(6, '0');
 }
 

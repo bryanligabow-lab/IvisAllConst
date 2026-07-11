@@ -37,8 +37,8 @@ clientsRouter.get(
     });
 
     const ids = clients.map((c) => c.id);
-    let countMap = new Map<string, number>();
-    let totalMap = new Map<string, number>();
+    const countMap = new Map<string, number>();
+    const totalMap = new Map<string, number>();
     if (ids.length > 0) {
       const proformas = await prisma.proforma.findMany({
         where: { clientId: { in: ids }, deletedAt: null },
