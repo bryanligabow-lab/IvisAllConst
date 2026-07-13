@@ -51,6 +51,38 @@ export class IngresosService {
     });
   }
 
+  static async createFactura(
+    input: {
+      projectId?: string | null;
+      invoiceNumber: string;
+      invoiceDate?: Date | null;
+      total?: number;
+      advanceAmortized?: number;
+      guaranteeRetained?: number;
+      ivaRetention?: number;
+      fuenteRetention?: number;
+      entity?: string;
+      notes?: string;
+    },
+    createdBy: string,
+  ) {
+    return prisma.factura.create({
+      data: {
+        projectId: input.projectId || null,
+        invoiceNumber: input.invoiceNumber,
+        invoiceDate: input.invoiceDate || null,
+        total: input.total ?? 0,
+        advanceAmortized: input.advanceAmortized ?? 0,
+        guaranteeRetained: input.guaranteeRetained ?? 0,
+        ivaRetention: input.ivaRetention ?? 0,
+        fuenteRetention: input.fuenteRetention ?? 0,
+        entity: input.entity?.trim() || null,
+        notes: input.notes?.trim() || null,
+        createdBy,
+      },
+    });
+  }
+
   static async getDocument(id: string) {
     const ingreso = await prisma.ingreso.findFirst({
       where: { id, deletedAt: null },

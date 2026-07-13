@@ -104,6 +104,29 @@ ingresosRouter.get(
   }),
 );
 
+const createFacturaSchema = z.object({
+  projectId: z.string().uuid().optional().nullable(),
+  invoiceNumber: z.string().min(1).max(60),
+  invoiceDate: calendarDateSchema.optional().nullable(),
+  total: z.coerce.number().optional(),
+  advanceAmortized: z.coerce.number().optional(),
+  guaranteeRetained: z.coerce.number().optional(),
+  ivaRetention: z.coerce.number().optional(),
+  fuenteRetention: z.coerce.number().optional(),
+  entity: z.string().max(200).optional(),
+  notes: z.string().max(500).optional(),
+});
+ingresosRouter.post(
+  '/facturas',
+  requirePermission(PERMISSIONS.INGRESOS_WRITE),
+  validate(createFacturaSchema),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const created = await IngresosService.createFactura(req.body, req.user.id);
+    return success(res, created, 201);
+  }),
+);
+
 ingresosRouter.post(
   '/',
   requirePermission(PERMISSIONS.INGRESOS_WRITE),
