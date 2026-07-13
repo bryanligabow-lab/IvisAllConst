@@ -286,6 +286,22 @@ export interface IngresosSummary {
     otros: number;
     total: number;
   };
+  garantia?: { retenido: number };
+  facturas?: { count: number; devengoAnticipo: number };
+}
+
+export interface Factura {
+  id: string;
+  projectId: string | null;
+  invoiceNumber: string;
+  invoiceDate: string | null;
+  total: number;
+  advanceAmortized: number;
+  guaranteeRetained: number;
+  ivaRetention: number;
+  fuenteRetention: number;
+  entity: string | null;
+  notes: string | null;
 }
 
 export interface AuthUser {

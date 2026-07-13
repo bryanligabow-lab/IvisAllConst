@@ -43,6 +43,14 @@ export class IngresosService {
     return items.map((it) => ({ ...it, hasDocument: !!it.documentMime }));
   }
 
+  // Facturas cobradas (conciliación) de un proyecto, con su devengo y fondo.
+  static facturas(projectId: string) {
+    return prisma.factura.findMany({
+      where: { projectId, deletedAt: null },
+      orderBy: { invoiceNumber: 'asc' },
+    });
+  }
+
   static async getDocument(id: string) {
     const ingreso = await prisma.ingreso.findFirst({
       where: { id, deletedAt: null },
@@ -282,10 +290,14 @@ export class IngresosService {
     });
     if (!project) throw new NotFoundError(ERRORS.PROJECT_NOT_FOUND);
 
-    const [ingresos, planillas] = await Promise.all([
+    const [ingresos, facturas, planillas] = await Promise.all([
       prisma.ingreso.findMany({
         where: { projectId, deletedAt: null },
         select: { kind: true, amount: true },
+      }),
+      prisma.factura.findMany({
+        where: { projectId, deletedAt: null },
+        select: { advanceAmortized: true, guaranteeRetained: true },
       }),
       prisma.planilla.findMany({
         where: { projectId, deletedAt: null, status: { not: 'CANCELLED' } },
@@ -332,6 +344,15 @@ export class IngresosService {
       if (RECEIVABLE_STATUSES.includes(p.status)) porCobrar += Number(p.netPayable);
     }
 
+    // Conciliación desde las facturas cargadas (estado de cuenta): devengo real
+    // del anticipo y fondo de garantía retenido (por cobrar).
+    let fondoGarantiaRetenido = 0;
+    let devengadoFacturas = 0;
+    for (const f of facturas) {
+      fondoGarantiaRetenido += Number(f.guaranteeRetained);
+      devengadoFacturas += Number(f.advanceAmortized);
+    }
+
     const contractAmount = Number(project.contractAmount);
     const managesAdvance = Boolean(project.managesAdvance);
     const advanceExpected = managesAdvance
@@ -369,6 +390,14 @@ export class IngresosService {
         planillas: ingresoPlanillas,
         otros: otrosIngresos,
         total: totalIngresado,
+      },
+      // Conciliación con el estado de cuenta (facturas cargadas).
+      garantia: {
+        retenido: fondoGarantiaRetenido, // fondo de garantía por cobrar
+      },
+      facturas: {
+        count: facturas.length,
+        devengoAnticipo: devengadoFacturas, // anticipo devengado según facturas
       },
     };
   }

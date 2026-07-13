@@ -92,6 +92,18 @@ ingresosRouter.get(
   }),
 );
 
+// Facturas cobradas (conciliación) de un proyecto.
+ingresosRouter.get(
+  '/facturas',
+  requirePermission(PERMISSIONS.INGRESOS_READ),
+  validate(listQuerySchema, 'query'),
+  requireProjectAccess((req) => req.query.projectId as string | undefined),
+  asyncHandler(async (req, res) => {
+    const items = await IngresosService.facturas(req.query.projectId as string);
+    return success(res, items);
+  }),
+);
+
 ingresosRouter.post(
   '/',
   requirePermission(PERMISSIONS.INGRESOS_WRITE),

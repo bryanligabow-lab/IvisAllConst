@@ -10,7 +10,7 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { apiDelete, apiFetchBlob, apiGet } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
-import type { Ingreso, IngresoKind, IngresosSummary, Planilla } from '@/types';
+import type { Factura, Ingreso, IngresoKind, IngresosSummary, Planilla } from '@/types';
 
 async function openIngresoDoc(id: string) {
   try {
@@ -47,6 +47,7 @@ export default function IngresosPage() {
     mutate: mutateIngresos,
   } = useSWR<Ingreso[]>(`/ingresos?projectId=${params.id}`, apiGet);
   const { data: planillas } = useSWR<Planilla[]>(`/planillas?projectId=${params.id}`, apiGet);
+  const { data: facturas } = useSWR<Factura[]>(`/ingresos/facturas?projectId=${params.id}`, apiGet);
   const { can } = useAuthStore();
   const canWrite = can('ingresos.write');
 
@@ -119,6 +120,23 @@ export default function IngresosPage() {
             )}
           </div>
 
+          {/* Conciliación con el estado de cuenta */}
+          {summary.garantia && (summary.facturas?.count ?? 0) > 0 && (
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <SummaryCard
+                label="Fondo de garantía por cobrar"
+                value={formatCurrency(summary.garantia.retenido)}
+                hint="Retenido en las facturas (se cobra al final)"
+                tone={summary.garantia.retenido > 0 ? 'warn' : 'default'}
+              />
+              <SummaryCard
+                label="Anticipo devengado (facturas)"
+                value={formatCurrency(summary.facturas?.devengoAnticipo ?? 0)}
+                hint={`${summary.facturas?.count ?? 0} factura(s) conciliada(s)`}
+              />
+            </div>
+          )}
+
           {/* Estado de las planillas del proyecto */}
           <div className="card mb-4">
             <div className="mb-2 text-xs font-semibold text-ink-secondary">
@@ -139,6 +157,39 @@ export default function IngresosPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Facturas cobradas (conciliación del estado de cuenta) */}
+      {facturas && facturas.length > 0 && (
+        <div className="card mb-4 overflow-x-auto">
+          <div className="mb-2 text-sm font-semibold">
+            Facturas cobradas ({facturas.length})
+          </div>
+          <table className="table-default table-cards">
+            <thead>
+              <tr>
+                <th>N° Factura</th>
+                <th className="text-right">Total</th>
+                <th className="text-right">Devengo anticipo</th>
+                <th className="text-right">Fondo garantía</th>
+                <th className="text-right">Ret. IVA</th>
+                <th className="text-right">Ret. Fuente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {facturas.map((f) => (
+                <tr key={f.id}>
+                  <td data-label="N° Factura" className="font-medium">{f.invoiceNumber}</td>
+                  <td data-label="Total" className="text-right">{formatCurrency(f.total, true)}</td>
+                  <td data-label="Devengo anticipo" className="text-right">{formatCurrency(f.advanceAmortized, true)}</td>
+                  <td data-label="Fondo garantía" className="text-right font-medium text-warning">{formatCurrency(f.guaranteeRetained, true)}</td>
+                  <td data-label="Ret. IVA" className="text-right text-xs">{formatCurrency(f.ivaRetention, true)}</td>
+                  <td data-label="Ret. Fuente" className="text-right text-xs">{formatCurrency(f.fuenteRetention, true)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}

@@ -238,6 +238,7 @@ model Project {
   gastos        Gasto[]
   planillas     Planilla[]
   ingresos      Ingreso[]
+  facturas      Factura[]
   paymentOrders PaymentOrder[]
   employees     Employee[]
   proformas     Proforma[]
@@ -804,4 +805,31 @@ model NotificationRecipient {
 
   @@index([deletedAt])
   @@map("notification_recipients")
+}
+
+// Facturas cobradas (conciliación del estado de cuenta): por proyecto, con su
+// número, el devengo de anticipo y el fondo de garantía retenido (por cobrar).
+model Factura {
+  id                String    @id @default(uuid())
+  projectId         String?   @map("project_id")
+  invoiceNumber     String    @map("invoice_number")
+  invoiceDate       DateTime? @map("invoice_date")
+  total             Float     @default(0)
+  // Descuentos aplicados en la factura:
+  advanceAmortized  Float     @default(0) @map("advance_amortized")   // devengo de anticipo
+  guaranteeRetained Float     @default(0) @map("guarantee_retained")  // fondo de garantía retenido
+  ivaRetention      Float     @default(0) @map("iva_retention")
+  fuenteRetention   Float     @default(0) @map("fuente_retention")
+  entity            String?   // quién paga (AMBIENSA…)
+  notes             String?
+  createdBy         String    @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([deletedAt])
+  @@map("facturas")
 }
