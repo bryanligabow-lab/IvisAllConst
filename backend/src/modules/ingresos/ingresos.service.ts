@@ -391,6 +391,13 @@ export class IngresosService {
       ? contractAmount * (Number(project.advancePercent) / 100)
       : 0;
 
+    // Si el proyecto tiene los valores del estado de cuenta, mandan sobre lo
+    // calculado (anticipo de contrato / devengado / saldo autoritativos).
+    const stmtTotal = project.advanceTotalStmt;
+    const stmtAmort = project.advanceAmortizedStmt;
+    const anticipoRecibidoFinal = stmtTotal != null ? Number(stmtTotal) : anticipoRecibido;
+    const devengadoFinal = stmtAmort != null ? Number(stmtAmort) : devengado;
+
     return {
       project: {
         id: project.id,
@@ -403,10 +410,10 @@ export class IngresosService {
         advanceExpected,
       },
       anticipo: {
-        recibido: anticipoRecibido,
-        devengado,
+        recibido: anticipoRecibidoFinal,
+        devengado: devengadoFinal,
         // Lo que aún debemos "trabajar" del anticipo que nos dieron.
-        saldoPorDevengar: anticipoRecibido - devengado,
+        saldoPorDevengar: anticipoRecibidoFinal - devengadoFinal,
       },
       planillas: {
         total: planillas.length,

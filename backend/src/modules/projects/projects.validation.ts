@@ -44,6 +44,9 @@ export const createProjectSchema = z.object({
   isWithholdingAgent: z.coerce.boolean().default(false).optional(),
   vatRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
   incomeRetentionPercent: z.coerce.number().min(0).max(100).default(0).optional(),
+  // Conciliación del estado de cuenta: anticipo de contrato y devengado.
+  advanceTotalStmt: z.coerce.number().nullable().optional(),
+  advanceAmortizedStmt: z.coerce.number().nullable().optional(),
   startDate: calendarDateSchema.optional(),
   endDate: calendarDateSchema.optional(),
   status: projectStatusSchema.optional(),

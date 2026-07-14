@@ -223,6 +223,10 @@ model Project {
   creacomProfitPercent   Float   @default(0) @map("creacom_profit_percent")
   // % de avance FÍSICO de obra (lo registra el residente; 100 = terminada).
   workProgressPercent    Float   @default(0) @map("work_progress_percent")
+  // Conciliación del estado de cuenta: anticipo de CONTRATO y cuánto se ha
+  // devengado (amortizado), autoritativo. Si están, mandan sobre lo calculado.
+  advanceTotalStmt       Float?  @map("advance_total_stmt")
+  advanceAmortizedStmt   Float?  @map("advance_amortized_stmt")
   startDate        DateTime? @map("start_date")
   endDate          DateTime? @map("end_date")
   status           String    @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | CANCELLED
