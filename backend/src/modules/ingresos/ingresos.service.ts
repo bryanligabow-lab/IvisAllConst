@@ -211,6 +211,10 @@ export class IngresosService {
           where: { deletedAt: null },
           select: { kind: true, amount: true },
         },
+        facturas: {
+          where: { deletedAt: null },
+          select: { guaranteeRetained: true },
+        },
       },
     });
 
@@ -226,6 +230,8 @@ export class IngresosService {
       presentadas: 0,
       aprobadas: 0,
       pagadas: 0,
+      anticipoPorDevengar: 0,
+      fondoGarantia: 0,
     };
 
     const rows = projects.map((p) => {
@@ -260,6 +266,13 @@ export class IngresosService {
         if (RECEIVABLE_STATUSES.includes(pl.status)) porCobrar += Number(pl.netPayable);
       }
 
+      // Conciliación (estado de cuenta): anticipo por devengar + fondo de garantía.
+      const anticipoPorDevengar =
+        p.advanceTotalStmt != null
+          ? Number(p.advanceTotalStmt) - Number(p.advanceAmortizedStmt ?? 0)
+          : 0;
+      const fondoGarantia = p.facturas.reduce((s, f) => s + Number(f.guaranteeRetained), 0);
+
       totals.planillado += planillado;
       totals.facturado += facturado;
       totals.porCobrar += porCobrar;
@@ -270,6 +283,8 @@ export class IngresosService {
       totals.presentadas += presentadas;
       totals.aprobadas += aprobadas;
       totals.pagadas += pagadas;
+      totals.anticipoPorDevengar += anticipoPorDevengar;
+      totals.fondoGarantia += fondoGarantia;
 
       return {
         id: p.id,
@@ -302,6 +317,8 @@ export class IngresosService {
           presentadas,
           aprobadas,
           pagadas,
+          anticipoPorDevengar,
+          fondoGarantia,
         },
       };
     });

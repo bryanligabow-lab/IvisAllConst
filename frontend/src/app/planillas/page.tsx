@@ -48,6 +48,8 @@ interface Overview {
     presentadas: number;
     aprobadas: number;
     pagadas: number;
+    anticipoPorDevengar: number;
+    fondoGarantia: number;
   };
   projects: OverviewProject[];
 }
@@ -188,6 +190,26 @@ export default function PlanillasOverviewPage() {
           <Kpi icon="🧾" tone="info" label="Facturado" value={formatCurrency(t.facturado, true)} hint={t.planillado > 0 ? `${Math.round((t.facturado / t.planillado) * 100)}% del planillado` : ''} />
           <Kpi icon="💰" tone="warn" label="Por cobrar" value={formatCurrency(t.porCobrar, true)} hint={t.planillado > 0 ? `${Math.round((t.porCobrar / t.planillado) * 100)}% del planillado` : ''} />
           <Kpi icon="🌱" tone="success" label="Ingresado (con anticipo)" value={formatCurrency(t.ingresado, true)} hint={`Anticipos ${formatCurrency(t.anticipos, true)}`} />
+        </div>
+      )}
+
+      {/* Conciliación del estado de cuenta */}
+      {t && (t.anticipoPorDevengar > 0 || t.fondoGarantia > 0) && (
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Kpi
+            icon="📉"
+            tone="warn"
+            label="Anticipo por devengar"
+            value={formatCurrency(t.anticipoPorDevengar, true)}
+            hint="Del anticipo de contrato que falta trabajar"
+          />
+          <Kpi
+            icon="🛡️"
+            tone="info"
+            label="Fondo de garantía por cobrar"
+            value={formatCurrency(t.fondoGarantia, true)}
+            hint="Retenido en facturas (se cobra al final)"
+          />
         </div>
       )}
 
