@@ -195,19 +195,32 @@ export default function PlanillasPage() {
               })()
             ) : (
               <dl className="grid grid-cols-2 gap-2 text-xs md:grid-cols-3">
-                <Row label="A. Valor de planilla" value={formatCurrency(Number(p.totalCurrent), true)} />
+                <Row label="Valor de planilla (base)" value={formatCurrency(Number(p.totalCurrent), true)} />
+                <Row label="IVA" value={`+${formatCurrency(Number(p.ivaAmount ?? 0), true)}`} />
                 <Row
-                  label="B. Amortización anticipo"
+                  label="Subtotal con IVA"
+                  value={formatCurrency(Number(p.totalCurrent) + Number(p.ivaAmount ?? 0), true)}
+                />
+                <Row
+                  label="Retención IVA"
+                  value={`-${formatCurrency(Number(p.ivaRetention ?? 0), true)}`}
+                />
+                <Row
+                  label="Retención renta"
+                  value={`-${formatCurrency(Number(p.incomeRetention ?? 0), true)}`}
+                />
+                <Row
+                  label="Amortización anticipo"
                   value={`-${formatCurrency(Number(p.advanceAmortization), true)}`}
                 />
                 <Row
-                  label="C. Fondo garantía"
+                  label="Fondo garantía"
                   value={`-${formatCurrency(Number(p.guaranteeRetention), true)}`}
                 />
                 <Row label="Planilla anterior" value={formatCurrency(Number(p.totalPrevious), true)} />
-                <Row label="Acumulado" value={formatCurrency(Number(p.totalAccumulated), true)} />
+                <Row label="Acumulado (base)" value={formatCurrency(Number(p.totalAccumulated), true)} />
                 <Row
-                  label="Total a pagar"
+                  label="Total a pagar (neto)"
                   value={formatCurrency(Number(p.netPayable), true)}
                   emphasis
                 />

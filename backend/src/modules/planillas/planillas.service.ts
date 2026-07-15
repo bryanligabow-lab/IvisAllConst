@@ -21,9 +21,21 @@ interface ComputedTotals {
   totalCurrent: number;
   totalPrevious: number;
   totalAccumulated: number;
+  ivaAmount: number;
   advanceAmortization: number;
   guaranteeRetention: number;
+  ivaRetention: number;
+  incomeRetention: number;
   netPayable: number;
+}
+
+interface ProjectTaxOpts {
+  advancePercent: number;
+  guaranteePercent: number;
+  vatPercent: number;
+  vatRetentionPercent: number;
+  incomeRetentionPercent: number;
+  isWithholdingAgent: boolean;
 }
 
 const PERCENT_DIVISOR = 100;
@@ -45,22 +57,42 @@ export const PLANILLA_STATUSES = [
 export type PlanillaStatus = (typeof PLANILLA_STATUSES)[number];
 
 export class PlanillasService {
-  /** Calcula amortización de anticipo y fondo de garantía sobre el valor de la planilla. */
+  /**
+   * Calcula IVA, retenciones (IVA y renta), amortización de anticipo y fondo de
+   * garantía sobre el valor (base) de la planilla, y el neto a pagar.
+   * Neto = (base + IVA) − retención IVA − retención renta − amortización − fondo.
+   */
   private static computeTotals(
     totalCurrent: number,
     totalPrevious: number,
-    advancePercent: number,
-    guaranteePercent: number,
+    opts: ProjectTaxOpts,
   ): ComputedTotals {
-    const advanceAmortization = totalCurrent * (advancePercent / PERCENT_DIVISOR);
-    const guaranteeRetention = totalCurrent * (guaranteePercent / PERCENT_DIVISOR);
-    const netPayable = totalCurrent - advanceAmortization - guaranteeRetention;
+    const d = PERCENT_DIVISOR;
+    const ivaAmount = totalCurrent * (opts.vatPercent / d);
+    const advanceAmortization = totalCurrent * (opts.advancePercent / d);
+    const guaranteeRetention = totalCurrent * (opts.guaranteePercent / d);
+    const ivaRetention = opts.isWithholdingAgent
+      ? ivaAmount * (opts.vatRetentionPercent / d)
+      : 0;
+    const incomeRetention = opts.isWithholdingAgent
+      ? totalCurrent * (opts.incomeRetentionPercent / d)
+      : 0;
+    const netPayable =
+      totalCurrent +
+      ivaAmount -
+      ivaRetention -
+      incomeRetention -
+      advanceAmortization -
+      guaranteeRetention;
     return {
       totalCurrent,
       totalPrevious,
       totalAccumulated: totalCurrent + totalPrevious,
+      ivaAmount,
       advanceAmortization,
       guaranteeRetention,
+      ivaRetention,
+      incomeRetention,
       netPayable,
     };
   }
@@ -108,8 +140,14 @@ export class PlanillasService {
     if (!project) return;
 
     // Proyectos sin anticipo (managesAdvance = false) no amortizan nada.
-    const advancePct = project.managesAdvance ? Number(project.advancePercent) : 0;
-    const guaranteePct = Number(project.guaranteePercent);
+    const taxOpts: ProjectTaxOpts = {
+      advancePercent: project.managesAdvance ? Number(project.advancePercent) : 0,
+      guaranteePercent: Number(project.guaranteePercent),
+      vatPercent: Number(project.vatPercent),
+      vatRetentionPercent: Number(project.vatRetentionPercent),
+      incomeRetentionPercent: Number(project.incomeRetentionPercent),
+      isWithholdingAgent: Boolean(project.isWithholdingAgent),
+    };
 
     const planillas = await prisma.planilla.findMany({
       where: { projectId, deletedAt: null, status: { not: 'CANCELLED' } },
@@ -135,12 +173,7 @@ export class PlanillasService {
           data: { previousAmount: prev, accumulatedAmount: newAccum },
         });
       }
-      const totals = this.computeTotals(
-        totalCurrent,
-        totalPrevious,
-        advancePct,
-        guaranteePct,
-      );
+      const totals = this.computeTotals(totalCurrent, totalPrevious, taxOpts);
       await prisma.planilla.update({
         where: { id: p.id },
         data: totals,
@@ -211,12 +244,14 @@ export class PlanillasService {
       };
     });
 
-    const totals = this.computeTotals(
-      totalCurrent,
-      totalPrevious,
-      project.managesAdvance ? Number(project.advancePercent) : 0,
-      Number(project.guaranteePercent),
-    );
+    const totals = this.computeTotals(totalCurrent, totalPrevious, {
+      advancePercent: project.managesAdvance ? Number(project.advancePercent) : 0,
+      guaranteePercent: Number(project.guaranteePercent),
+      vatPercent: Number(project.vatPercent),
+      vatRetentionPercent: Number(project.vatRetentionPercent),
+      incomeRetentionPercent: Number(project.incomeRetentionPercent),
+      isWithholdingAgent: Boolean(project.isWithholdingAgent),
+    });
 
     const created = await prisma.planilla.create({
       data: {

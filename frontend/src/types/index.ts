@@ -228,8 +228,11 @@ export interface Planilla {
   totalCurrent: string | number;
   totalPrevious: string | number;
   totalAccumulated: string | number;
+  ivaAmount?: string | number;
   advanceAmortization: string | number;
   guaranteeRetention: string | number;
+  ivaRetention?: string | number;
+  incomeRetention?: string | number;
   netPayable: string | number;
   // Últimos movimientos de estado (los devuelve el listado).
   statusEvents?: PlanillaStatusEvent[];

@@ -115,10 +115,19 @@ export async function exportPlanillaExcel(planillaId: string, res: Response): Pr
   liq.addRow({ concept: 'Monto contractual', value: contract });
   liq.addRow({ concept: `Anticipo (${planilla.project.advancePercent}%)`, value: advance });
   liq.addRow({});
-  liq.addRow({ concept: 'A. Valor de planilla', value: Number(planilla.totalCurrent) });
-  liq.addRow({ concept: 'B. Amortización anticipo', value: -Number(planilla.advanceAmortization) });
-  liq.addRow({ concept: `C. Fondo garantía (${planilla.project.guaranteePercent}%)`, value: -Number(planilla.guaranteeRetention) });
-  const totalRowLiq = liq.addRow({ concept: 'TOTAL A PAGAR', value: Number(planilla.netPayable) });
+  liq.addRow({ concept: 'Valor de planilla (base)', value: Number(planilla.totalCurrent) });
+  liq.addRow({ concept: `IVA (${planilla.project.vatPercent}%)`, value: Number(planilla.ivaAmount ?? 0) });
+  liq.addRow({
+    concept: 'Subtotal con IVA',
+    value: Number(planilla.totalCurrent) + Number(planilla.ivaAmount ?? 0),
+  });
+  if (planilla.project.isWithholdingAgent) {
+    liq.addRow({ concept: `Retención IVA (${planilla.project.vatRetentionPercent}%)`, value: -Number(planilla.ivaRetention ?? 0) });
+    liq.addRow({ concept: `Retención renta (${planilla.project.incomeRetentionPercent}%)`, value: -Number(planilla.incomeRetention ?? 0) });
+  }
+  liq.addRow({ concept: 'Amortización anticipo', value: -Number(planilla.advanceAmortization) });
+  liq.addRow({ concept: `Fondo garantía (${planilla.project.guaranteePercent}%)`, value: -Number(planilla.guaranteeRetention) });
+  const totalRowLiq = liq.addRow({ concept: 'TOTAL A PAGAR (neto)', value: Number(planilla.netPayable) });
   totalRowLiq.font = { bold: true };
   totalRowLiq.eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HIGHLIGHT_FILL } };
