@@ -252,7 +252,57 @@ export class PlanillasService {
     ]);
     // Status changes can affect downstream "planilla anterior" totals.
     await this.recomputeProjectTotals(existing.projectId);
+    // Al marcar PAGADA se registra el ingreso automáticamente; si se saca de
+    // pagada, se quita ese ingreso automático.
+    await this.syncPaidIngreso(id, status, changedBy);
     return updated;
+  }
+
+  /** Prefijo de la referencia de los ingresos creados automáticamente al pagar. */
+  private static readonly AUTO_INGRESO_REF = 'Cobro automático de planilla';
+
+  private static async syncPaidIngreso(
+    planillaId: string,
+    status: PlanillaStatus,
+    createdBy: string,
+  ) {
+    const planilla = await prisma.planilla.findFirst({
+      where: { id: planillaId, deletedAt: null },
+      include: { project: { include: { client: { select: { name: true } } } } },
+    });
+    if (!planilla) return;
+
+    const existingAuto = await prisma.ingreso.findFirst({
+      where: {
+        planillaId,
+        deletedAt: null,
+        reference: { startsWith: this.AUTO_INGRESO_REF },
+      },
+    });
+
+    if (status === 'PAID') {
+      if (existingAuto) return; // ya se registró
+      const amount = Number(planilla.netPayable) || Number(planilla.totalCurrent);
+      if (amount <= 0) return;
+      await prisma.ingreso.create({
+        data: {
+          projectId: planilla.projectId,
+          planillaId,
+          kind: 'PLANILLA',
+          amount,
+          ingresoDate: new Date(),
+          entity: planilla.project.client?.name ?? planilla.project.contractor ?? null,
+          reference: `${this.AUTO_INGRESO_REF} #${planilla.number}`,
+          createdBy,
+        },
+      });
+    } else if (existingAuto) {
+      // Dejó de estar pagada → quitar el ingreso automático.
+      await prisma.ingreso.update({
+        where: { id: existingAuto.id },
+        data: { deletedAt: new Date() },
+      });
+    }
   }
 
   static async softDelete(id: string) {
