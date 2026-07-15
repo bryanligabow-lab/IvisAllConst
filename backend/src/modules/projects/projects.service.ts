@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { ERRORS } from '../../shared/constants/error-messages';
+import { PlanillasService } from '../planillas/planillas.service';
 import type { CreateProjectDto, UpdateProjectDto } from './projects.validation';
 
 type RubroStatus = 'ok' | 'warn' | 'danger' | 'exhausted';
@@ -424,7 +425,23 @@ export class ProjectsService {
       data.subcontractorId = null;
       data.creacomProfitPercent = 0;
     }
-    return prisma.project.update({ where: { id }, data });
+    const updated = await prisma.project.update({ where: { id }, data });
+    // Si cambiaron los porcentajes de IVA/retenciones/anticipo/garantía, las
+    // planillas se recalculan para reflejar los nuevos valores.
+    const taxFields = [
+      'vatPercent',
+      'vatIncluded',
+      'isWithholdingAgent',
+      'vatRetentionPercent',
+      'incomeRetentionPercent',
+      'advancePercent',
+      'guaranteePercent',
+      'managesAdvance',
+    ] as const;
+    if (taxFields.some((f) => f in dto)) {
+      await PlanillasService.recomputeProjectTotals(id);
+    }
+    return updated;
   }
 
   /**

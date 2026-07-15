@@ -39,9 +39,9 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
   const [vatPercent, setVatPercent] = useState('15');
   const [vatIncluded, setVatIncluded] = useState(false);
   // Retenciones
-  const [isWithholdingAgent, setIsWithholdingAgent] = useState(false);
+  const [isWithholdingAgent, setIsWithholdingAgent] = useState(true);
   const [vatRetentionPercent, setVatRetentionPercent] = useState('70');
-  const [incomeRetentionPercent, setIncomeRetentionPercent] = useState('2');
+  const [incomeRetentionPercent, setIncomeRetentionPercent] = useState('3');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [status, setStatus] = useState<Project['status']>('ACTIVE');
@@ -80,7 +80,7 @@ export function CreateProjectModal({ open, onClose, initial, onSaved }: Props) {
       setVatIncluded(Boolean(initial.vatIncluded));
       setIsWithholdingAgent(Boolean(initial.isWithholdingAgent));
       setVatRetentionPercent(String(initial.vatRetentionPercent ?? 70));
-      setIncomeRetentionPercent(String(initial.incomeRetentionPercent ?? 2));
+      setIncomeRetentionPercent(String(initial.incomeRetentionPercent ?? 3));
       setStartDate(initial.startDate ? initial.startDate.slice(0, 10) : '');
       setEndDate(initial.endDate ? initial.endDate.slice(0, 10) : '');
       setStatus(initial.status);
