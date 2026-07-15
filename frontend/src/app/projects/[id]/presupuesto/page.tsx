@@ -7,7 +7,7 @@ import { AppShell } from '@/components/layouts/AppShell';
 import { ProjectTabs } from '@/components/layouts/ProjectTabs';
 import { CreateRubroModal } from '@/components/forms/CreateRubroModal';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
-import { apiDelete, apiGet } from '@/lib/api';
+import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { RUBRO_STATUS_LABEL } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
@@ -36,11 +36,27 @@ export default function PresupuestoPage() {
   // El operador (residente) ve solo porcentajes de avance, sin montos.
   const percentOnly = isRestricted();
   const canEditRubros = can('rubros.write');
+  const canEditProject = can('projects.update');
   const [rubroModal, setRubroModal] = useState<{ open: boolean; initial: RubroSummary | null }>({
     open: false,
     initial: null,
   });
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  // Edición inline del monto contractual (la "base sin IVA").
+  const [editContract, setEditContract] = useState(false);
+  const [contractInput, setContractInput] = useState('');
+  const [savingContract, setSavingContract] = useState(false);
+
+  async function saveContract(value: number) {
+    setSavingContract(true);
+    try {
+      await apiPatch(`/projects/${params.id}`, { contractAmount: value });
+      await mutate();
+      setEditContract(false);
+    } finally {
+      setSavingContract(false);
+    }
+  }
 
   return (
     <AppShell>
@@ -61,10 +77,59 @@ export default function PresupuestoPage() {
                 {data.project.name} — {percentOnly ? 'Avance por rubros' : 'Presupuesto por rubros'}
               </h1>
               {!percentOnly && (
-                <p className="text-xs text-ink-secondary">
-                  Monto contractual: {formatCurrency(data.project.contractAmount, true)} · Anticipo{' '}
-                  {data.project.advancePercent}%: {formatCurrency(data.project.advanceAmount, true)}
-                </p>
+                <div className="text-xs text-ink-secondary">
+                  {editContract ? (
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <span>Monto contractual (base sin IVA):</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={contractInput}
+                        onChange={(e) => setContractInput(e.target.value)}
+                        className="input w-32 py-1 text-xs"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveContract(Number(contractInput) || 0)}
+                        disabled={savingContract}
+                        className="btn-primary px-2 py-1 text-xs disabled:opacity-50"
+                      >
+                        {savingContract ? 'Guardando…' : 'Guardar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setContractInput(String(data.totals.budgeted.toFixed(2)))}
+                        className="text-brand hover:underline"
+                        title="Poner el total de los rubros"
+                      >
+                        = total rubros ({formatCurrency(data.totals.budgeted, true)})
+                      </button>
+                      <button type="button" onClick={() => setEditContract(false)} className="text-ink-tertiary hover:underline">
+                        Cancelar
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <span>
+                        Monto contractual: {formatCurrency(data.project.contractAmount, true)} · Anticipo{' '}
+                        {data.project.advancePercent}%: {formatCurrency(data.project.advanceAmount, true)}
+                      </span>
+                      {canEditProject && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContractInput(String(data.project.contractAmount ?? ''));
+                            setEditContract(true);
+                          }}
+                          className="text-brand hover:underline"
+                        >
+                          ✏️ editar
+                        </button>
+                      )}
+                    </span>
+                  )}
+                </div>
               )}
               {percentOnly && (
                 <p className="text-xs text-ink-secondary">
