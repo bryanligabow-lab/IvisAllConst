@@ -55,8 +55,16 @@ export function CreateRubroModal({
       setUtilityPercent(String(initial.utilityPercent ?? 0));
       setIncludesVat(Boolean(initial.includesVat));
       setBudgetedAmount(String(initial.budgetedAmount ?? ''));
-      // En edición respetamos el monto guardado (no recalcular automáticamente).
-      setTouchedBudget(true);
+      // ¿El monto guardado coincide con el auto-calculado (cantidad×precio×
+      // utilidad×IVA)? Si coincide, dejamos que se recalcule al cambiar el IVA
+      // o los componentes (así "¿Sumar IVA?" sí quita/pone el IVA). Si es un
+      // monto manual distinto, lo respetamos.
+      const iBase =
+        (Number(initial.quantity) || 0) *
+        (Number(initial.unitPrice) || 0) *
+        (1 + (Number(initial.utilityPercent) || 0) / 100);
+      const iComputed = iBase * (initial.includesVat ? 1 + (projectVatPercent || 0) / 100 : 1);
+      setTouchedBudget(Math.abs(iComputed - (Number(initial.budgetedAmount) || 0)) > 0.5);
       setSubcontractorId(initial.subcontractorId ?? '');
       setSubcontractAmount(
         initial.subcontractAmount != null ? String(initial.subcontractAmount) : '',
@@ -75,7 +83,7 @@ export function CreateRubroModal({
       setSubcontractAmount('');
     }
     setError(null);
-  }, [open, initial]);
+  }, [open, initial, projectVatPercent]);
 
   // Derivados — se recalculan en cada render.
   const q = parseFloat(quantity);
