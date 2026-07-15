@@ -11,7 +11,7 @@ import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { RUBRO_STATUS_LABEL } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
-import type { ProjectSummary, RubroStatus, RubroSummary } from '@/types';
+import type { IngresosSummary, ProjectSummary, RubroStatus, RubroSummary } from '@/types';
 
 const STATUS_CLASS: Record<RubroStatus, string> = {
   ok: 'badge-ok',
@@ -35,6 +35,11 @@ export default function PresupuestoPage() {
   const { isRestricted, can } = useAuthStore();
   // El operador (residente) ve solo porcentajes de avance, sin montos.
   const percentOnly = isRestricted();
+  // Total de ingresos (dinero recibido) del proyecto — se muestra en el cuadro.
+  const { data: ingresos } = useSWR<IngresosSummary>(
+    percentOnly ? null : `/ingresos/summary?projectId=${params.id}`,
+    apiGet,
+  );
   const canEditRubros = can('rubros.write');
   const canEditProject = can('projects.update');
   const [rubroModal, setRubroModal] = useState<{ open: boolean; initial: RubroSummary | null }>({
@@ -150,7 +155,7 @@ export default function PresupuestoPage() {
 
           {/* Breakdown IVA + retenciones (oculto en vista de avance) */}
           <div className={`card mb-4 ${percentOnly ? 'hidden' : ''}`}>
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
               <div>
                 <div className="text-xs uppercase text-ink-tertiary">Base sin IVA</div>
                 <div className="text-base font-medium">
@@ -178,6 +183,18 @@ export default function PresupuestoPage() {
                 <div className="text-base font-medium">
                   {formatCurrency(data.project.netReceivable, true)}
                 </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase text-ink-tertiary">Total de ingresos</div>
+                <div className="text-base font-medium text-success">
+                  {formatCurrency(ingresos?.ingresos.total ?? 0, true)}
+                </div>
+                {ingresos && (
+                  <div className="text-[10px] text-ink-tertiary">
+                    Anticipos {formatCurrency(ingresos.ingresos.anticipos, true)} · Planillas{' '}
+                    {formatCurrency(ingresos.ingresos.planillas, true)}
+                  </div>
+                )}
               </div>
             </div>
             {data.project.isWithholdingAgent && (
