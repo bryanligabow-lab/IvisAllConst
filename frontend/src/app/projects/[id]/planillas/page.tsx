@@ -213,10 +213,22 @@ export default function PlanillasPage() {
                   label="Amortización anticipo"
                   value={`-${formatCurrency(Number(p.advanceAmortization), true)}`}
                 />
+                {Number(p.advancePlanillaAmort ?? 0) > 0 && (
+                  <Row
+                    label="Anticipo planilla"
+                    value={`-${formatCurrency(Number(p.advancePlanillaAmort), true)}`}
+                  />
+                )}
                 <Row
                   label="Fondo garantía"
                   value={`-${formatCurrency(Number(p.guaranteeRetention), true)}`}
                 />
+                {Number(p.otherDiscount ?? 0) > 0 && (
+                  <Row
+                    label="Otros descuentos"
+                    value={`-${formatCurrency(Number(p.otherDiscount), true)}`}
+                  />
+                )}
                 <Row label="Planilla anterior" value={formatCurrency(Number(p.totalPrevious), true)} />
                 <Row label="Acumulado (base)" value={formatCurrency(Number(p.totalAccumulated), true)} />
                 <Row

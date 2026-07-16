@@ -126,7 +126,13 @@ export async function exportPlanillaExcel(planillaId: string, res: Response): Pr
     liq.addRow({ concept: `Retención renta (${planilla.project.incomeRetentionPercent}%)`, value: -Number(planilla.incomeRetention ?? 0) });
   }
   liq.addRow({ concept: 'Amortización anticipo', value: -Number(planilla.advanceAmortization) });
+  if (Number(planilla.advancePlanillaAmort ?? 0) > 0) {
+    liq.addRow({ concept: 'Anticipo planilla', value: -Number(planilla.advancePlanillaAmort) });
+  }
   liq.addRow({ concept: `Fondo garantía (${planilla.project.guaranteePercent}%)`, value: -Number(planilla.guaranteeRetention) });
+  if (Number(planilla.otherDiscount ?? 0) > 0) {
+    liq.addRow({ concept: 'Otros descuentos', value: -Number(planilla.otherDiscount) });
+  }
   const totalRowLiq = liq.addRow({ concept: 'TOTAL A PAGAR (neto)', value: Number(planilla.netPayable) });
   totalRowLiq.font = { bold: true };
   totalRowLiq.eachCell((cell) => {

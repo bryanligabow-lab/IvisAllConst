@@ -410,7 +410,14 @@ model Planilla {
   guaranteeRetention  Float     @default(0) @map("guarantee_retention")
   ivaRetention        Float     @default(0) @map("iva_retention")
   incomeRetention     Float     @default(0) @map("income_retention")
+  // Amortización de "anticipo a la planilla" y otros descuentos (materiales,
+  // descuento adicional). Vienen del estado de cuenta.
+  advancePlanillaAmort Float    @default(0) @map("advance_planilla_amort")
+  otherDiscount       Float     @default(0) @map("other_discount")
   netPayable          Float     @default(0) @map("net_payable")
+  // Si true, los valores (IVA/retenciones/amortización/neto) son los reales del
+  // estado de cuenta y NO se recalculan con fórmulas.
+  manualTotals        Boolean   @default(false) @map("manual_totals")
   createdBy           String    @map("created_by")
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")

@@ -26,6 +26,8 @@ interface ComputedTotals {
   guaranteeRetention: number;
   ivaRetention: number;
   incomeRetention: number;
+  advancePlanillaAmort: number;
+  otherDiscount: number;
   netPayable: number;
 }
 
@@ -93,6 +95,8 @@ export class PlanillasService {
       guaranteeRetention,
       ivaRetention,
       incomeRetention,
+      advancePlanillaAmort: 0,
+      otherDiscount: 0,
       netPayable,
     };
   }
@@ -172,6 +176,15 @@ export class PlanillasService {
           where: { id: it.id },
           data: { previousAmount: prev, accumulatedAmount: newAccum },
         });
+      }
+      // Las planillas con valores reales del estado de cuenta no se recalculan;
+      // solo mantenemos su acumulado por si cambia una planilla anterior.
+      if (p.manualTotals) {
+        await prisma.planilla.update({
+          where: { id: p.id },
+          data: { totalPrevious, totalAccumulated: totalCurrent + totalPrevious },
+        });
+        continue;
       }
       const totals = this.computeTotals(totalCurrent, totalPrevious, taxOpts);
       await prisma.planilla.update({
@@ -347,5 +360,71 @@ export class PlanillasService {
       data: { deletedAt: new Date() },
     });
     await this.recomputeProjectTotals(existing.projectId);
+  }
+
+  /**
+   * Reconcilia las planillas de un proyecto con el estado de cuenta: fija los
+   * valores reales (IVA, retenciones, amortizaciones, fondo, neto) marcándolas
+   * como manuales, y reemplaza los pagos (ingresos de planilla) por los reales.
+   */
+  static async reconcile(
+    projectId: string,
+    items: Array<{
+      planillaId: string;
+      ivaAmount: number;
+      ivaRetention: number;
+      incomeRetention: number;
+      advanceAmortization: number;
+      guaranteeRetention: number;
+      advancePlanillaAmort: number;
+      otherDiscount: number;
+      netPayable: number;
+      paid: number;
+    }>,
+    createdBy: string,
+  ) {
+    // Limpiar TODOS los pagos de planilla del proyecto (viejos/aproximados).
+    await prisma.ingreso.updateMany({
+      where: { projectId, kind: 'PLANILLA', deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+
+    for (const it of items) {
+      const pl = await prisma.planilla.findFirst({
+        where: { id: it.planillaId, projectId, deletedAt: null },
+        include: { project: { include: { client: { select: { name: true } } } } },
+      });
+      if (!pl) continue;
+      await prisma.planilla.update({
+        where: { id: it.planillaId },
+        data: {
+          ivaAmount: it.ivaAmount,
+          ivaRetention: it.ivaRetention,
+          incomeRetention: it.incomeRetention,
+          advanceAmortization: it.advanceAmortization,
+          guaranteeRetention: it.guaranteeRetention,
+          advancePlanillaAmort: it.advancePlanillaAmort,
+          otherDiscount: it.otherDiscount,
+          netPayable: it.netPayable,
+          manualTotals: true,
+        },
+      });
+      if (it.paid > 0) {
+        await prisma.ingreso.create({
+          data: {
+            projectId,
+            planillaId: it.planillaId,
+            kind: 'PLANILLA',
+            amount: it.paid,
+            ingresoDate: pl.periodEnd,
+            entity: pl.project.client?.name ?? pl.project.contractor ?? null,
+            reference: `Cobro planilla #${pl.number} (estado de cuenta)`,
+            createdBy,
+          },
+        });
+      }
+    }
+    await this.recomputeProjectTotals(projectId);
+    return { reconciled: items.length };
   }
 }

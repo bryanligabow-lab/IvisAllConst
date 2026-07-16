@@ -110,6 +110,39 @@ planillasRouter.delete(
   }),
 );
 
+// Reconcilia las planillas de un proyecto con los valores reales del estado
+// de cuenta (marca manuales y reemplaza los pagos).
+const reconcileSchema = z.object({
+  projectId: z.string().uuid(),
+  items: z
+    .array(
+      z.object({
+        planillaId: z.string().uuid(),
+        ivaAmount: z.coerce.number().default(0),
+        ivaRetention: z.coerce.number().default(0),
+        incomeRetention: z.coerce.number().default(0),
+        advanceAmortization: z.coerce.number().default(0),
+        guaranteeRetention: z.coerce.number().default(0),
+        advancePlanillaAmort: z.coerce.number().default(0),
+        otherDiscount: z.coerce.number().default(0),
+        netPayable: z.coerce.number().default(0),
+        paid: z.coerce.number().default(0),
+      }),
+    )
+    .min(1),
+});
+planillasRouter.post(
+  '/reconcile',
+  requirePermission(PERMISSIONS.PLANILLAS_WRITE),
+  validate(reconcileSchema),
+  requireProjectAccess((req) => req.body.projectId as string | undefined),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const r = await PlanillasService.reconcile(req.body.projectId, req.body.items, req.user.id);
+    return success(res, r);
+  }),
+);
+
 planillasRouter.get(
   '/:id/export',
   requirePermission(PERMISSIONS.PLANILLAS_EXPORT),
