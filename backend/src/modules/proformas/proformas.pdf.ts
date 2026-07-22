@@ -139,7 +139,7 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
   const headerTextY = tableTop + 10;
   doc.text('CANT', colX[0], headerTextY, { width: colWidths[0], align: 'center' });
   doc.text('UNI', colX[1], headerTextY, { width: colWidths[1], align: 'center' });
-  doc.text('DETALLE', colX[2] + 4, headerTextY, { width: colWidths[2] - 8, align: 'left' });
+  doc.text('DETALLE', colX[2] + 4, headerTextY, { width: colWidths[2] - 8, align: 'center' });
   doc.text('V. UNITARIO', colX[3], headerTextY, { width: colWidths[3], align: 'center' });
   doc.text('V. TOTAL', colX[4], headerTextY, { width: colWidths[4], align: 'center' });
 
@@ -202,9 +202,12 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const cellY = rowY + rowH / 2 - 5;
     doc.text(String(it.quantity), colX[0], cellY, { width: colWidths[0], align: 'center' });
     doc.text(it.unit, colX[1], cellY, { width: colWidths[1], align: 'center' });
-    doc.text(it.description, colX[2] + 4, rowY + 8, {
+    // El detalle va centrado (horizontal y verticalmente dentro de la fila) para
+    // que quede alineado con la imagen del rubro y con el resto de columnas.
+    const detailY = rowY + Math.max(6, (rowH - detailH) / 2);
+    doc.text(it.description, colX[2] + 4, detailY, {
       width: textW - 8,
-      align: 'left',
+      align: 'center',
     });
 
     // Imagen(es) del rubro, al lado de la descripción, CENTRADAS verticalmente

@@ -117,7 +117,7 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     sheet.getCell(row, 2).value = it.unit;
     sheet.mergeCells(row, 3, row, 5);
     sheet.getCell(row, 3).value = it.description;
-    sheet.getCell(row, 3).alignment = { wrapText: true, vertical: 'middle', horizontal: 'left' };
+    sheet.getCell(row, 3).alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
     sheet.getCell(row, 6).value = it.unitPrice;
     sheet.getCell(row, 6).numFmt = '"$"#,##0.00';
     sheet.getCell(row, 7).value = total;
