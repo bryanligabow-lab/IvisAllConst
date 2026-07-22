@@ -11,6 +11,7 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import { PLANILLA_STATUS_LABEL, PLANILLA_STATUS_CLASS } from '@/lib/planillaStatus';
+import { PlanillasPendientes } from '@/components/ui/PlanillasPendientes';
 import { useAuthStore } from '@/stores/authStore';
 import type { PlanillaStatus, Project } from '@/types';
 
@@ -267,6 +268,10 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Planillas pendientes de cobro (debajo del mapa). El operador no
+              ve montos, así que este panel es solo para el resto de roles. */}
+          {!restricted && can('ingresos.read') && <PlanillasPendientes />}
         </>
       )}
 
