@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPatch } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import {
@@ -11,6 +11,7 @@ import {
   PLANILLA_STATUS_LABEL,
   planillaProgress,
 } from '@/lib/planillaStatus';
+import { useAuthStore } from '@/stores/authStore';
 import type { PlanillaStatus } from '@/types';
 
 // Una planilla está "pendiente" mientras exista y todavía no se haya cobrado
@@ -32,6 +33,8 @@ interface OverviewPlanilla {
   totalCurrent: number;
   facturado: number;
   porCobrar: number;
+  estimatedAmount: number | null;
+  estimatedNote: string | null;
   periodStart: string | null;
   periodEnd: string | null;
 }
@@ -61,14 +64,16 @@ interface PendingRow extends OverviewPlanilla {
  * pendiente y en qué paso va?" sin entrar proyecto por proyecto.
  */
 export function PlanillasPendientes() {
-  const { data, isLoading, error } = useSWR<Overview>('/ingresos/overview', apiGet);
+  const { data, isLoading, error, mutate } = useSWR<Overview>('/ingresos/overview', apiGet);
+  // Solo gerencia (planillas.write) puede escribir el valor estimado.
+  const canEdit = useAuthStore().can('planillas.write');
   // Estados seleccionados. Vacío = todos (así al entrar se ve todo lo pendiente).
   const [selected, setSelected] = useState<PlanillaStatus[]>([]);
   // Cliente elegido en el selector. 'ALL' = todos los clientes.
   const [client, setClient] = useState('ALL');
   const [expanded, setExpanded] = useState(false);
 
-  const { rows, countByStatus, totalPorCobrar, clients } = useMemo(() => {
+  const { rows, countByStatus, totalPorCobrar, totalEstimado, clients } = useMemo(() => {
     const all: PendingRow[] = [];
     const clientSet = new Set<string>();
     for (const p of data?.projects ?? []) {
@@ -101,6 +106,7 @@ export function PlanillasPendientes() {
       rows: filtered,
       countByStatus: counts,
       totalPorCobrar: filtered.reduce((s, r) => s + r.porCobrar, 0),
+      totalEstimado: filtered.reduce((s, r) => s + (r.estimatedAmount ?? 0), 0),
       clients: [...clientSet].sort((a, b) => a.localeCompare(b)),
     };
   }, [data, selected, client]);
@@ -139,6 +145,16 @@ export function PlanillasPendientes() {
                 </option>
               ))}
             </select>
+          )}
+          {totalEstimado > 0 && (
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-ink-tertiary">
+                Estimado
+              </div>
+              <div className="text-sm font-semibold text-brand">
+                {formatCurrency(totalEstimado)}
+              </div>
+            </div>
           )}
           {totalPorCobrar > 0 && (
             <div className="text-right">
@@ -205,7 +221,7 @@ export function PlanillasPendientes() {
         {visible.length > 0 && (
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((r) => (
-              <PendingCard key={r.id} row={r} />
+              <PendingCard key={r.id} row={r} canEdit={canEdit} onSaved={() => mutate()} />
             ))}
           </div>
         )}
@@ -224,61 +240,226 @@ export function PlanillasPendientes() {
   );
 }
 
-function PendingCard({ row }: { row: PendingRow }) {
+function PendingCard({
+  row,
+  canEdit,
+  onSaved,
+}: {
+  row: PendingRow;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
   const prog = planillaProgress(row.status);
   return (
-    <Link
-      href={ROUTES.PROJECT_PLANILLAS(row.projectId)}
-      className="block rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink-primary">{row.projectName}</div>
-          <div className="truncate text-[11px] text-ink-secondary">
-            Planilla #{row.number}
-            {row.title ? ` · ${row.title}` : ''}
+    <div className="rounded-lg border border-surface-border bg-surface p-3 transition-all hover:border-brand/60 hover:shadow-card">
+      <Link href={ROUTES.PROJECT_PLANILLAS(row.projectId)} className="block">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-ink-primary">
+              {row.projectName}
+            </div>
+            <div className="truncate text-[11px] text-ink-secondary">
+              Planilla #{row.number}
+              {row.title ? ` · ${row.title}` : ''}
+            </div>
+            {row.clientName && (
+              <div className="truncate text-[10px] text-ink-tertiary">👤 {row.clientName}</div>
+            )}
           </div>
-          {row.clientName && (
-            <div className="truncate text-[10px] text-ink-tertiary">👤 {row.clientName}</div>
+          <span className={`${PLANILLA_STATUS_CLASS[row.status]} shrink-0`}>
+            {PLANILLA_STATUS_LABEL[row.status]}
+          </span>
+        </div>
+
+        <div className="mt-2 space-y-0.5 text-[11px]">
+          <div className="flex items-center justify-between">
+            <span className="text-ink-tertiary">Planillado</span>
+            <span className="font-medium">{formatCurrency(row.totalCurrent)}</span>
+          </div>
+          {row.porCobrar > 0 && (
+            <div className="flex items-center justify-between">
+              <span className="text-ink-tertiary">Por cobrar</span>
+              <span className="font-medium text-warning">{formatCurrency(row.porCobrar)}</span>
+            </div>
           )}
         </div>
-        <span className={`${PLANILLA_STATUS_CLASS[row.status]} shrink-0`}>
-          {PLANILLA_STATUS_LABEL[row.status]}
-        </span>
-      </div>
 
-      <div className="mt-2 space-y-0.5 text-[11px]">
-        <div className="flex items-center justify-between">
-          <span className="text-ink-tertiary">Planillado</span>
-          <span className="font-medium">{formatCurrency(row.totalCurrent)}</span>
+        {/* Barra: en qué paso del trámite va el cobro */}
+        <div className="mt-2">
+          <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
+            <span>Avance del trámite</span>
+            <span className="font-semibold text-ink-primary">{prog.pct}%</span>
+          </div>
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
+            <div
+              className="h-full bg-gradient-to-r from-brand to-brand-accent transition-all"
+              style={{ width: `${prog.pct}%` }}
+            />
+          </div>
         </div>
-        {row.porCobrar > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-ink-tertiary">Por cobrar</span>
-            <span className="font-medium text-warning">{formatCurrency(row.porCobrar)}</span>
+
+        {(row.periodStart || row.periodEnd) && (
+          <div className="mt-1 text-[10px] text-ink-tertiary">
+            📅 {formatCalendarDate(row.periodStart)} — {formatCalendarDate(row.periodEnd)}
+          </div>
+        )}
+      </Link>
+
+      <EstimateEditor row={row} canEdit={canEdit} onSaved={onSaved} />
+    </div>
+  );
+}
+
+// Valor estimado editable (conciliación): gerencia lo escribe mientras la
+// planilla no sale oficialmente y lo actualiza cuando llega el valor real.
+function EstimateEditor({
+  row,
+  canEdit,
+  onSaved,
+}: {
+  row: PendingRow;
+  canEdit: boolean;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(row.estimatedAmount != null ? String(row.estimatedAmount) : '');
+  const [note, setNote] = useState(row.estimatedNote ?? '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const hasEstimate = row.estimatedAmount != null;
+  // Diferencia del estimado contra lo planillado por el sistema.
+  const diff = hasEstimate ? (row.estimatedAmount as number) - row.totalCurrent : 0;
+
+  const save = async (clear = false) => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const amount = clear || val.trim() === '' ? null : Number(val);
+      if (amount != null && (Number.isNaN(amount) || amount < 0)) {
+        setErr('Monto inválido');
+        setSaving(false);
+        return;
+      }
+      await apiPatch(`/planillas/${row.id}/estimate`, {
+        estimatedAmount: amount,
+        estimatedNote: amount == null ? null : note.trim() || null,
+      });
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="mt-2 border-t border-surface-border pt-2 text-[11px]">
+        {hasEstimate ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-ink-tertiary">Estimado</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-brand">
+                {formatCurrency(row.estimatedAmount as number)}
+              </span>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="rounded px-1 text-ink-tertiary hover:text-ink-primary"
+                  title="Editar estimado"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
+          </div>
+        ) : canEdit ? (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-[11px] text-brand hover:underline"
+          >
+            + Valor estimado
+          </button>
+        ) : null}
+        {hasEstimate && diff !== 0 && (
+          <div className="mt-0.5 flex items-center justify-between text-[10px] text-ink-tertiary">
+            <span>Dif. vs planillado</span>
+            <span className={diff > 0 ? 'text-success' : 'text-danger'}>
+              {diff > 0 ? '+' : ''}
+              {formatCurrency(diff)}
+            </span>
+          </div>
+        )}
+        {hasEstimate && row.estimatedNote && (
+          <div className="mt-0.5 truncate text-[10px] italic text-ink-tertiary" title={row.estimatedNote}>
+            {row.estimatedNote}
           </div>
         )}
       </div>
+    );
+  }
 
-      {/* Barra: en qué paso del trámite va el cobro */}
-      <div className="mt-2">
-        <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
-          <span>Avance del trámite</span>
-          <span className="font-semibold text-ink-primary">{prog.pct}%</span>
-        </div>
-        <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
-          <div
-            className="h-full bg-gradient-to-r from-brand to-brand-accent transition-all"
-            style={{ width: `${prog.pct}%` }}
-          />
-        </div>
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-surface-border pt-2">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] text-ink-tertiary">$</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="Valor estimado"
+          autoFocus
+          className="input h-8 flex-1 text-xs"
+        />
       </div>
-
-      {(row.periodStart || row.periodEnd) && (
-        <div className="mt-1 text-[10px] text-ink-tertiary">
-          📅 {formatCalendarDate(row.periodStart)} — {formatCalendarDate(row.periodEnd)}
-        </div>
-      )}
-    </Link>
+      <input
+        type="text"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Nota (opcional)"
+        maxLength={300}
+        className="input h-8 w-full text-xs"
+      />
+      {err && <div className="text-[10px] text-danger">{err}</div>}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => save(false)}
+          disabled={saving}
+          className="btn-primary h-7 px-2 text-[11px] disabled:opacity-50"
+        >
+          {saving ? 'Guardando…' : 'Guardar'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(false);
+            setVal(row.estimatedAmount != null ? String(row.estimatedAmount) : '');
+            setNote(row.estimatedNote ?? '');
+            setErr(null);
+          }}
+          disabled={saving}
+          className="btn-secondary h-7 px-2 text-[11px]"
+        >
+          Cancelar
+        </button>
+        {hasEstimate && (
+          <button
+            type="button"
+            onClick={() => save(true)}
+            disabled={saving}
+            className="ml-auto text-[11px] text-danger hover:underline disabled:opacity-50"
+          >
+            Borrar
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

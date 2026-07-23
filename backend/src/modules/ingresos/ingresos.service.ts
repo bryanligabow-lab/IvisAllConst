@@ -203,6 +203,8 @@ export class IngresosService {
             totalCurrent: true,
             netPayable: true,
             advanceAmortization: true,
+            estimatedAmount: true,
+            estimatedNote: true,
             periodStart: true,
             periodEnd: true,
           },
@@ -304,6 +306,8 @@ export class IngresosService {
             totalCurrent: cur,
             facturado: facturadoPl,
             porCobrar: porCobrarPl,
+            estimatedAmount: pl.estimatedAmount != null ? Number(pl.estimatedAmount) : null,
+            estimatedNote: pl.estimatedNote ?? null,
             periodStart: pl.periodStart,
             periodEnd: pl.periodEnd,
           };

@@ -99,6 +99,31 @@ planillasRouter.patch(
   }),
 );
 
+// Valor estimado de la planilla (conciliación de pendientes). Gerencia lo
+// escribe a mano mientras la planilla no sale; enviar null lo limpia.
+const estimateSchema = z.object({
+  estimatedAmount: z.coerce.number().nonnegative().nullable(),
+  estimatedNote: z.string().max(300).nullish(),
+});
+planillasRouter.patch(
+  '/:id/estimate',
+  requirePermission(PERMISSIONS.PLANILLAS_WRITE),
+  validate(idParamSchema, 'params'),
+  validate(estimateSchema),
+  asyncHandler(async (req, res) => {
+    const existing = await PlanillasService.getById(req.params.id);
+    if (req.allowedProjectIds && !req.allowedProjectIds.includes(existing.projectId)) {
+      throw new UnauthorizedError('No tienes acceso a este proyecto');
+    }
+    const planilla = await PlanillasService.setEstimate(
+      req.params.id,
+      req.body.estimatedAmount,
+      req.body.estimatedNote,
+    );
+    return success(res, planilla);
+  }),
+);
+
 planillasRouter.delete(
   '/:id',
   requirePermission(PERMISSIONS.PLANILLAS_WRITE),

@@ -415,6 +415,11 @@ model Planilla {
   advancePlanillaAmort Float    @default(0) @map("advance_planilla_amort")
   otherDiscount       Float     @default(0) @map("other_discount")
   netPayable          Float     @default(0) @map("net_payable")
+  // Valor ESTIMADO por gerencia mientras la planilla aún no sale oficialmente
+  // (conciliación de pendientes): lo escribe Mayda a mano y lo actualiza cuando
+  // sale la planilla real. Es solo informativo, no entra en los cálculos.
+  estimatedAmount     Float?    @map("estimated_amount")
+  estimatedNote       String?   @map("estimated_note")
   // Si true, los valores (IVA/retenciones/amortización/neto) son los reales del
   // estado de cuenta y NO se recalculan con fórmulas.
   manualTotals        Boolean   @default(false) @map("manual_totals")

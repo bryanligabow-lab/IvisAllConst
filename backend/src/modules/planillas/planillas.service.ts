@@ -306,6 +306,22 @@ export class PlanillasService {
     return updated;
   }
 
+  /**
+   * Guarda el valor ESTIMADO de una planilla (conciliación de pendientes). Es
+   * un dato informativo que escribe gerencia mientras la planilla no sale
+   * oficialmente; no toca los cálculos ni el estado. `amount = null` lo limpia.
+   */
+  static async setEstimate(id: string, amount: number | null, note?: string | null) {
+    await this.getById(id); // valida que exista
+    return prisma.planilla.update({
+      where: { id },
+      data: {
+        estimatedAmount: amount,
+        estimatedNote: note?.trim() ? note.trim() : null,
+      },
+    });
+  }
+
   /** Prefijo de la referencia de los ingresos creados automáticamente al pagar. */
   private static readonly AUTO_INGRESO_REF = 'Cobro automático de planilla';
 
