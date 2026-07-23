@@ -64,15 +64,17 @@ export function PlanillasPendientes() {
   const { data, isLoading, error } = useSWR<Overview>('/ingresos/overview', apiGet);
   // Estados seleccionados. Vacío = todos (así al entrar se ve todo lo pendiente).
   const [selected, setSelected] = useState<PlanillaStatus[]>([]);
+  // Cliente elegido en el selector. 'ALL' = todos los clientes.
+  const [client, setClient] = useState('ALL');
   const [expanded, setExpanded] = useState(false);
 
-  const { rows, countByStatus, totalPorCobrar } = useMemo(() => {
+  const { rows, countByStatus, totalPorCobrar, clients } = useMemo(() => {
     const all: PendingRow[] = [];
-    const counts: Partial<Record<PlanillaStatus, number>> = {};
+    const clientSet = new Set<string>();
     for (const p of data?.projects ?? []) {
       for (const pl of p.planillas) {
         if (!PENDING_STATUSES.includes(pl.status)) continue;
-        counts[pl.status] = (counts[pl.status] ?? 0) + 1;
+        if (p.clientName) clientSet.add(p.clientName);
         all.push({
           ...pl,
           projectId: p.id,
@@ -89,13 +91,19 @@ export function PlanillasPendientes() {
       const n = a.projectName.localeCompare(b.projectName);
       return n !== 0 ? n : a.number - b.number;
     });
-    const filtered = selected.length > 0 ? all.filter((r) => selected.includes(r.status)) : all;
+    // El cliente se aplica primero: los conteos por estado son del cliente elegido.
+    const byClient = client === 'ALL' ? all : all.filter((r) => r.clientName === client);
+    const counts: Partial<Record<PlanillaStatus, number>> = {};
+    for (const r of byClient) counts[r.status] = (counts[r.status] ?? 0) + 1;
+    const filtered =
+      selected.length > 0 ? byClient.filter((r) => selected.includes(r.status)) : byClient;
     return {
       rows: filtered,
       countByStatus: counts,
       totalPorCobrar: filtered.reduce((s, r) => s + r.porCobrar, 0),
+      clients: [...clientSet].sort((a, b) => a.localeCompare(b)),
     };
-  }, [data, selected]);
+  }, [data, selected, client]);
 
   const toggle = (s: PlanillaStatus) =>
     setSelected((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -114,6 +122,24 @@ export function PlanillasPendientes() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {clients.length > 1 && (
+            <select
+              value={client}
+              onChange={(e) => {
+                setClient(e.target.value);
+                setSelected([]);
+              }}
+              className="input text-xs"
+              title="Filtrar por cliente"
+            >
+              <option value="ALL">Todos los clientes</option>
+              {clients.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
           {totalPorCobrar > 0 && (
             <div className="text-right">
               <div className="text-[10px] uppercase tracking-wider text-ink-tertiary">
