@@ -952,6 +952,15 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                 </div>
               </div>
             ))}
+            {/* Botón "añadir" también AL FINAL: así no hay que subir hasta el
+                encabezado para agregar otra línea cuando ya hay varias. */}
+            <button
+              type="button"
+              onClick={addItem}
+              className="w-full rounded-md border border-dashed border-surface-border py-2.5 text-xs font-medium text-ink-secondary transition-colors hover:border-brand/60 hover:text-brand"
+            >
+              + Añadir línea
+            </button>
             {notice && <div className="text-xs font-medium text-success">{notice}</div>}
           </div>
 
