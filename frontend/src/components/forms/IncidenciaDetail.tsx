@@ -4,7 +4,8 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Modal } from '@/components/ui/Modal';
 import { AuthImage } from '@/components/ui/AuthImage';
-import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
+import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
+import { apiDelete, apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { MODULE_OPTIONS } from '@/components/forms/CreateIncidenciaModal';
 import { useAuthStore } from '@/stores/authStore';
 import type {
@@ -76,6 +77,7 @@ export function IncidenciaDetail({ id, onClose, onChanged }: Props) {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showDelete, setShowDelete] = useState(false);
 
   async function send() {
     if (!id || !reply.trim()) return;
@@ -303,7 +305,39 @@ export function IncidenciaDetail({ id, onClose, onChanged }: Props) {
               </button>
             </div>
           )}
+
+          {/* Pie: volver y (para gerencia) eliminar la incidencia */}
+          <div className="flex items-center justify-between border-t border-surface-border pt-3">
+            {canManage ? (
+              <button
+                type="button"
+                onClick={() => setShowDelete(true)}
+                className="text-xs text-danger hover:underline"
+              >
+                🗑️ Eliminar incidencia
+              </button>
+            ) : (
+              <span />
+            )}
+            <button type="button" onClick={onClose} className="btn-secondary text-xs">
+              ← Volver
+            </button>
+          </div>
         </div>
+      )}
+
+      {data && (
+        <DeleteConfirmDialog
+          open={showDelete}
+          onClose={() => setShowDelete(false)}
+          itemLabel={`la incidencia #${data.number}`}
+          warning="Se borrará la incidencia con todo su hilo y su línea de tiempo."
+          onConfirm={async (code) => {
+            await apiDelete(`/incidencias/${data.id}`, { deleteCode: code });
+            onChanged();
+            onClose();
+          }}
+        />
       )}
     </Modal>
   );
