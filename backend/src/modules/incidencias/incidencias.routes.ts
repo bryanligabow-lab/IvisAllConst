@@ -62,6 +62,19 @@ incidenciasRouter.get(
   }),
 );
 
+// Latido del centinela: el técnico (skill/loop) deja constancia de que revisó.
+// Reinicia el timer "próxima revisión" del panel.
+const pingSchema = z.object({ cadenceMinutes: z.coerce.number().int().min(1).max(1440).optional() });
+incidenciasRouter.post(
+  '/centinela/ping',
+  requirePermission(PERMISSIONS.INCIDENCIAS_READ),
+  validate(pingSchema),
+  asyncHandler(async (req, res) => {
+    const r = await IncidenciasService.ping(req.body.cadenceMinutes);
+    return success(res, r);
+  }),
+);
+
 incidenciasRouter.get(
   '/:id',
   requirePermission(PERMISSIONS.INCIDENCIAS_READ),

@@ -66,7 +66,45 @@ interface MessageInput extends ImageInput {
   body: string;
 }
 
+const SENTINEL_ID = 'singleton';
+
 export class IncidenciasService {
+  // Estado del centinela: cuándo revisó por última vez, cada cuánto, y si sigue
+  // "activo" (el latido no se ha enfriado). Alimenta el timer del panel.
+  static async sentinel() {
+    const s = await prisma.supportSentinel.findUnique({ where: { id: SENTINEL_ID } });
+    const cadenceMinutes = s?.cadenceMinutes ?? 30;
+    const lastCheckAt = s?.lastCheckAt ?? null;
+    const nextReviewAt = lastCheckAt
+      ? new Date(lastCheckAt.getTime() + cadenceMinutes * 60_000)
+      : null;
+    // Activo si el último latido está dentro de 2.5x la cadencia (si no, el loop
+    // se detuvo → el panel lo dirá honestamente "en pausa").
+    const active = lastCheckAt
+      ? Date.now() - lastCheckAt.getTime() < cadenceMinutes * 60_000 * 2.5
+      : false;
+    return { lastCheckAt, cadenceMinutes, nextReviewAt, active };
+  }
+
+  // Latido del centinela: el técnico deja constancia de que revisó. Reinicia el
+  // timer "próxima revisión" del panel.
+  static async ping(cadenceMinutes?: number) {
+    const s = await prisma.supportSentinel.upsert({
+      where: { id: SENTINEL_ID },
+      update: {
+        lastCheckAt: new Date(),
+        ...(cadenceMinutes ? { cadenceMinutes } : {}),
+      },
+      create: {
+        id: SENTINEL_ID,
+        lastCheckAt: new Date(),
+        cadenceMinutes: cadenceMinutes ?? 30,
+      },
+    });
+    const nextReviewAt = new Date(s.lastCheckAt!.getTime() + s.cadenceMinutes * 60_000);
+    return { ok: true, lastCheckAt: s.lastCheckAt, cadenceMinutes: s.cadenceMinutes, nextReviewAt };
+  }
+
   static async list(filter?: { status?: string; urgency?: string; module?: string }) {
     const where = {
       deletedAt: null,
@@ -95,7 +133,8 @@ export class IncidenciasService {
       CERRADA: 0,
     };
     for (const g of grouped) counts[g.status] = g._count._all;
-    return { items, counts };
+    const sentinel = await this.sentinel();
+    return { items, counts, sentinel };
   }
 
   static async getById(id: string) {

@@ -911,3 +911,15 @@ model IncidenciaMessage {
   @@index([incidenciaId])
   @@map("incidencia_messages")
 }
+
+// Estado del "centinela" de soporte (singleton): cuándo revisó el técnico por
+// última vez y cada cuánto lo hace. Alimenta el timer "próxima revisión en
+// MM:SS" del panel. Si el latido se enfría (loop detenido) el panel lo dice.
+model SupportSentinel {
+  id             String    @id @default("singleton")
+  lastCheckAt    DateTime? @map("last_check_at")
+  cadenceMinutes Int       @default(30) @map("cadence_minutes")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("support_sentinel")
+}

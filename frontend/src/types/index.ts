@@ -350,7 +350,15 @@ export interface Incidencia {
   _count?: { messages: number };
 }
 
+export interface SupportSentinel {
+  lastCheckAt: string | null;
+  cadenceMinutes: number;
+  nextReviewAt: string | null;
+  active: boolean;
+}
+
 export interface IncidenciasOverview {
   items: Incidencia[];
   counts: Record<IncidenciaStatus, number>;
+  sentinel: SupportSentinel;
 }

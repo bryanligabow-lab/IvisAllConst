@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateIncidenciaModal, MODULE_OPTIONS } from '@/components/forms/CreateIncidenciaModal';
 import { IncidenciaDetail } from '@/components/forms/IncidenciaDetail';
+import { SentinelTimer, ResolutionEta } from '@/components/ui/SentinelTimer';
 import { apiGet } from '@/lib/api';
 import { formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
@@ -92,6 +93,9 @@ export default function SoportePage() {
 
       {data && (
         <>
+          {/* Timer del vigilante: próxima revisión (o "en pausa" si el loop paró) */}
+          <SentinelTimer sentinel={data.sentinel} />
+
           {/* Resumen por estado: se toca para filtrar */}
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
@@ -154,6 +158,7 @@ export default function SoportePage() {
                 <IncidenciaRow
                   key={inc.id}
                   inc={inc}
+                  sentinel={data.sentinel}
                   onClick={() => setOpenId(inc.id)}
                 />
               ))}
@@ -204,7 +209,15 @@ function StatCard({
   );
 }
 
-function IncidenciaRow({ inc, onClick }: { inc: Incidencia; onClick: () => void }) {
+function IncidenciaRow({
+  inc,
+  sentinel,
+  onClick,
+}: {
+  inc: Incidencia;
+  sentinel: IncidenciasOverview['sentinel'];
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
@@ -224,6 +237,7 @@ function IncidenciaRow({ inc, onClick }: { inc: Incidencia; onClick: () => void 
             <span className="text-ink-tertiary">💬 {inc._count?.messages}</span>
           )}
           <span className="text-ink-tertiary">· {formatCalendarDate(inc.createdAt)}</span>
+          <ResolutionEta status={inc.status} sentinel={sentinel} />
         </div>
       </div>
       <span className={`${STATUS_CLASS[inc.status]} shrink-0`}>{STATUS_LABEL[inc.status]}</span>
