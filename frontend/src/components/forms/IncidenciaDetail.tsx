@@ -1,0 +1,234 @@
+'use client';
+
+import { useState } from 'react';
+import useSWR from 'swr';
+import { Modal } from '@/components/ui/Modal';
+import { AuthImage } from '@/components/ui/AuthImage';
+import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
+import { MODULE_OPTIONS } from '@/components/forms/CreateIncidenciaModal';
+import { useAuthStore } from '@/stores/authStore';
+import type { Incidencia, IncidenciaStatus, IncidenciaUrgency } from '@/types';
+
+const STATUS_LABEL: Record<IncidenciaStatus, string> = {
+  ABIERTA: 'Abierta',
+  EN_REVISION: 'En revisión',
+  RESUELTA: 'Resuelta',
+  CERRADA: 'Cerrada',
+};
+const STATUS_CLASS: Record<IncidenciaStatus, string> = {
+  ABIERTA: 'badge-danger',
+  EN_REVISION: 'badge-warn',
+  RESUELTA: 'badge-ok',
+  CERRADA: 'badge-muted',
+};
+const URGENCY_LABEL: Record<IncidenciaUrgency, string> = {
+  ALTA: '🔴 Alta',
+  MEDIA: '🟡 Media',
+  BAJA: '🟢 Baja',
+};
+const MODULE_LABEL = Object.fromEntries(MODULE_OPTIONS.map((m) => [m.value, m.label]));
+
+function fmt(dt: string) {
+  return new Date(dt).toLocaleString('es-EC', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+interface Props {
+  id: string | null;
+  onClose: () => void;
+  onChanged: () => void;
+}
+
+// Detalle de una incidencia: descripción, captura y el hilo de conversación
+// entre quien reportó (OPERADOR) y el técnico de soporte (TECNICO), más la
+// caja para responder y las acciones de estado (cerrar/reabrir).
+export function IncidenciaDetail({ id, onClose, onChanged }: Props) {
+  const { data, isLoading, mutate } = useSWR<Incidencia>(id ? `/incidencias/${id}` : null, apiGet);
+  const canManage = useAuthStore().can('incidencias.manage');
+
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send() {
+    if (!id || !reply.trim()) return;
+    setSending(true);
+    setErr(null);
+    try {
+      await apiPost(`/incidencias/${id}/messages`, { body: reply.trim() });
+      setReply('');
+      await mutate();
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof ApiClientError ? e.message : 'No se pudo enviar');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function changeStatus(status: IncidenciaStatus) {
+    if (!id) return;
+    setSending(true);
+    setErr(null);
+    try {
+      await apiPatch(`/incidencias/${id}/status`, { status });
+      await mutate();
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof ApiClientError ? e.message : 'No se pudo cambiar el estado');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={!!id}
+      onClose={onClose}
+      title={data ? `Incidencia #${data.number}` : 'Incidencia'}
+      width="lg"
+    >
+      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
+      {data && (
+        <div className="space-y-4">
+          {/* Cabecera */}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-semibold text-ink-primary">{data.title}</h3>
+              <span className={STATUS_CLASS[data.status]}>{STATUS_LABEL[data.status]}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-tertiary">
+              <span className="badge-muted">{MODULE_LABEL[data.module] ?? data.module}</span>
+              <span>{URGENCY_LABEL[data.urgency]}</span>
+              <span>
+                · Reportó{' '}
+                {data.creator ? `${data.creator.firstName} ${data.creator.lastName}` : '—'} ·{' '}
+                {fmt(data.createdAt)}
+              </span>
+            </div>
+          </div>
+
+          {/* Descripción original */}
+          <div className="rounded-lg border border-surface-border bg-surface-muted/40 p-3">
+            <div className="whitespace-pre-wrap text-sm text-ink-primary">{data.description}</div>
+            {data.imageMime && (
+              <AuthImage
+                path={`/incidencias/${data.id}/image`}
+                alt="captura"
+                className="mt-2 max-h-64 rounded border border-surface-border object-contain"
+              />
+            )}
+          </div>
+
+          {/* Hilo de conversación */}
+          {data.messages && data.messages.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-tertiary">
+                Conversación
+              </div>
+              {data.messages.map((m) => {
+                const tecnico = m.authorRole === 'TECNICO';
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex ${tecnico ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        tecnico
+                          ? 'bg-brand/10 text-ink-primary'
+                          : 'bg-surface-muted text-ink-primary'
+                      }`}
+                    >
+                      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-tertiary">
+                        {tecnico
+                          ? '🛠️ Soporte técnico'
+                          : m.author
+                            ? `${m.author.firstName} ${m.author.lastName}`
+                            : 'Tú'}{' '}
+                        · {fmt(m.createdAt)}
+                      </div>
+                      <div className="whitespace-pre-wrap">{m.body}</div>
+                      {m.imageMime && (
+                        <AuthImage
+                          path={`/incidencias/messages/${m.id}/image`}
+                          alt="adjunto"
+                          className="mt-2 max-h-56 rounded border border-surface-border object-contain"
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {err && (
+            <div className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{err}</div>
+          )}
+
+          {/* Responder (si no está cerrada) */}
+          {data.status !== 'CERRADA' && (
+            <div className="space-y-2">
+              <textarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={2}
+                maxLength={4000}
+                className="input"
+                placeholder="Escribe una respuesta o aclaración…"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {data.status === 'RESUELTA' && (
+                    <button
+                      onClick={() => changeStatus('CERRADA')}
+                      disabled={sending}
+                      className="btn-secondary text-xs disabled:opacity-50"
+                      title="Confirmar que quedó resuelto"
+                    >
+                      🔒 Cerrar
+                    </button>
+                  )}
+                  {(data.status === 'ABIERTA' || data.status === 'EN_REVISION') && canManage && (
+                    <button
+                      onClick={() => changeStatus('RESUELTA')}
+                      disabled={sending}
+                      className="btn-secondary text-xs disabled:opacity-50"
+                    >
+                      ✓ Marcar resuelta
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={send}
+                  disabled={sending || !reply.trim()}
+                  className="btn-primary text-xs disabled:opacity-50"
+                >
+                  {sending ? 'Enviando…' : 'Responder'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {data.status === 'CERRADA' && (
+            <div className="flex items-center justify-between rounded-md bg-surface-muted/50 px-3 py-2 text-xs text-ink-secondary">
+              <span>Esta incidencia está cerrada.</span>
+              <button
+                onClick={() => changeStatus('ABIERTA')}
+                disabled={sending}
+                className="text-brand hover:underline disabled:opacity-50"
+              >
+                Reabrir
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}

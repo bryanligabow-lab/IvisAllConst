@@ -53,6 +53,10 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   // bitacora (libro de obra)
   { name: 'bitacora.read', resource: 'bitacora', action: 'read', description: 'Ver bitácora / libro de obra' },
   { name: 'bitacora.write', resource: 'bitacora', action: 'write', description: 'Registrar en la bitácora / libro de obra' },
+  // soporte / incidencias (solo admin para arriba)
+  { name: 'incidencias.read', resource: 'incidencias', action: 'read', description: 'Ver incidencias de soporte' },
+  { name: 'incidencias.write', resource: 'incidencias', action: 'write', description: 'Reportar incidencias y responder en el hilo' },
+  { name: 'incidencias.manage', resource: 'incidencias', action: 'manage', description: 'Responder como técnico y cambiar el estado de incidencias' },
 ];
 
 async function main() {

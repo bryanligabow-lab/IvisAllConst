@@ -50,6 +50,8 @@ model User {
   uploadedDocuments    ProjectDocument[]        @relation("DocUploadedBy")
   createdAttendance    Attendance[]             @relation("AttendanceCreatedBy")
   createdBitacora      BitacoraEntry[]          @relation("BitacoraCreatedBy")
+  createdIncidencias   Incidencia[]             @relation("IncidenciaCreatedBy")
+  incidenciaMessages   IncidenciaMessage[]      @relation("IncidenciaMsgAuthor")
 
   @@index([email])
   @@index([deletedAt])
@@ -851,4 +853,61 @@ model Factura {
   @@index([projectId])
   @@index([deletedAt])
   @@map("facturas")
+}
+
+// ---------------------------------------------------------------------------
+// SOPORTE / INCIDENCIAS
+// La gerencia (Ivis/Mayda) reporta problemas del sistema desde la pestaña
+// "Soporte": descripción, módulo afectado, captura opcional y urgencia. Queda
+// como una incidencia con un hilo de conversación entre quien reporta y el
+// técnico (soporte). Reemplaza el mandar capturas sueltas por WhatsApp.
+model Incidencia {
+  id          String    @id @default(uuid())
+  // Correlativo legible (#1, #2…) para referirse a ella. Se calcula max+1.
+  number      Int
+  title       String
+  description String
+  // Módulo/pantalla afectada: PROFORMAS, PLANILLAS, GASTOS, DASHBOARD, OTRO…
+  module      String    @default("OTRO")
+  // BAJA | MEDIA | ALTA
+  urgency     String    @default("MEDIA")
+  // ABIERTA | EN_REVISION | RESUELTA | CERRADA
+  status      String    @default("ABIERTA")
+  // Captura opcional (binario en BD, como gastos/bitácora).
+  imageData   Bytes?    @map("image_data")
+  imageMime   String?   @map("image_mime")
+  createdBy   String    @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  resolvedAt  DateTime? @map("resolved_at")
+  closedAt    DateTime? @map("closed_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  creator  User                @relation("IncidenciaCreatedBy", fields: [createdBy], references: [id])
+  messages IncidenciaMessage[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("incidencias")
+}
+
+// Un mensaje del hilo de una incidencia. authorRole distingue quién escribe:
+// OPERADOR (quien reportó / gerencia) o TECNICO (soporte, normalmente desde la
+// skill). authorId es null cuando lo publica la skill sin usuario asociado.
+model IncidenciaMessage {
+  id           String   @id @default(uuid())
+  incidenciaId String   @map("incidencia_id")
+  body         String
+  authorRole   String   @default("OPERADOR")
+  authorId     String?  @map("author_id")
+  authorName   String?  @map("author_name")
+  imageData    Bytes?   @map("image_data")
+  imageMime    String?  @map("image_mime")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  incidencia Incidencia @relation(fields: [incidenciaId], references: [id], onDelete: Cascade)
+  author     User?      @relation("IncidenciaMsgAuthor", fields: [authorId], references: [id])
+
+  @@index([incidenciaId])
+  @@map("incidencia_messages")
 }

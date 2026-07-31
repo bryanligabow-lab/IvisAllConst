@@ -29,6 +29,7 @@ const NAV_LINKS: NavLink[] = [
   { href: ROUTES.NOMINA, label: 'Nómina', perm: 'employees.read' },
   { href: ROUTES.PROFORMAS, label: 'Proformas', perm: 'proformas.read' },
   { href: ROUTES.DIRECTORIO, label: 'Directorio', perm: 'users.read' },
+  { href: ROUTES.SOPORTE, label: 'Soporte', perm: 'incidencias.read', unrestrictedOnly: true },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

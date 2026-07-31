@@ -317,3 +317,40 @@ export interface AuthUser {
   // Proyectos asignados (relevante para el rol operador).
   projectIds?: string[];
 }
+
+export type IncidenciaStatus = 'ABIERTA' | 'EN_REVISION' | 'RESUELTA' | 'CERRADA';
+export type IncidenciaUrgency = 'BAJA' | 'MEDIA' | 'ALTA';
+
+export interface IncidenciaMessage {
+  id: string;
+  body: string;
+  authorRole: 'OPERADOR' | 'TECNICO';
+  authorName: string | null;
+  imageMime: string | null;
+  createdAt: string;
+  author?: { firstName: string; lastName: string } | null;
+}
+
+export interface Incidencia {
+  id: string;
+  number: number;
+  title: string;
+  description: string;
+  module: string;
+  urgency: IncidenciaUrgency;
+  status: IncidenciaStatus;
+  imageMime: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  creator?: { firstName: string; lastName: string; email: string } | null;
+  messages?: IncidenciaMessage[];
+  _count?: { messages: number };
+}
+
+export interface IncidenciasOverview {
+  items: Incidencia[];
+  counts: Record<IncidenciaStatus, number>;
+}

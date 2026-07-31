@@ -72,6 +72,13 @@ export const PERMISSIONS = {
   // Bit\u00e1cora / libro de obra (Fase 2)
   BITACORA_READ: 'bitacora.read',
   BITACORA_WRITE: 'bitacora.write',
+
+  // Soporte / incidencias del sistema. Solo gerencia (admin para arriba):
+  // read = ver, write = reportar y responder en el hilo, manage = responder
+  // como t\u00e9cnico y cambiar el estado.
+  INCIDENCIAS_READ: 'incidencias.read',
+  INCIDENCIAS_WRITE: 'incidencias.write',
+  INCIDENCIAS_MANAGE: 'incidencias.manage',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

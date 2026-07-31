@@ -27,6 +27,7 @@ export const ROUTES = {
   CLIENTES: '/clientes',
   PROYECTOS_REPORT: '/proyectos',
   DIRECTORIO: '/directorio',
+  SOPORTE: '/soporte',
 } as const;
 
 export const RUBRO_STATUS_LABEL = {

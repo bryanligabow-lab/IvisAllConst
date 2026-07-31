@@ -22,6 +22,7 @@ import { proformasRouter } from './modules/proformas/proformas.routes';
 import { clientsRouter } from './modules/clients/clients.routes';
 import { productsRouter } from './modules/products/products.routes';
 import { notificationsRouter } from './modules/notifications/notifications.routes';
+import { incidenciasRouter } from './modules/incidencias/incidencias.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { failure } from './utils/apiResponse';
 import { ERRORS } from './shared/constants/error-messages';
@@ -75,6 +76,7 @@ export function buildApp() {
   app.use('/api/clients', clientsRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/incidencias', incidenciasRouter);
 
   app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
 
