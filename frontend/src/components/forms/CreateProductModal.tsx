@@ -141,7 +141,7 @@ export function CreateProductModal({ open, onClose, initial, onSaved }: Props) {
               <input
                 type="number"
                 inputMode="decimal"
-                step="0.01"
+                step="any"
                 min="0"
                 value={unitPrice}
                 onChange={(e) => setUnitPrice(e.target.value)}

@@ -840,7 +840,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                     className="input col-span-3"
                     placeholder="Cant"
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0"
                   />
                   <input
@@ -855,7 +855,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
                     className="input col-span-5"
                     placeholder="V. Unit"
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0"
                   />
                   <button
