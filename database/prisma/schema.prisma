@@ -876,6 +876,9 @@ model Incidencia {
   // Captura opcional (binario en BD, como gastos/bitácora).
   imageData   Bytes?    @map("image_data")
   imageMime   String?   @map("image_mime")
+  // Si el arreglo necesita desplegar (corta unos minutos) el ETA de resolución
+  // se difiere: el panel muestra "🌙 esta madrugada" en vez de "~X min".
+  expectsOvernight Boolean @default(false) @map("expects_overnight")
   createdBy   String    @map("created_by")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -885,10 +888,29 @@ model Incidencia {
 
   creator  User                @relation("IncidenciaCreatedBy", fields: [createdBy], references: [id])
   messages IncidenciaMessage[]
+  eventos  IncidenciaEvento[]
 
   @@index([status])
   @@index([deletedAt])
   @@map("incidencias")
+}
+
+// Paso INTERNO de la línea de tiempo de una incidencia (el "proceso": tomarla,
+// diagnosticar, arreglar, probar, desplegar). Los registra el técnico para que
+// la gerencia vea el trabajo, no solo la respuesta final.
+model IncidenciaEvento {
+  id           String   @id @default(uuid())
+  incidenciaId String   @map("incidencia_id")
+  // EN_REVISION | DIAGNOSTICO | ARREGLO | PRUEBA | DEPLOY | NOTA
+  tipo         String
+  detalle      String?
+  authorId     String?  @map("author_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  incidencia Incidencia @relation(fields: [incidenciaId], references: [id], onDelete: Cascade)
+
+  @@index([incidenciaId])
+  @@map("incidencia_eventos")
 }
 
 // Un mensaje del hilo de una incidencia. authorRole distingue quién escribe:

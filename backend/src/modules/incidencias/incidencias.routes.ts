@@ -15,6 +15,7 @@ import {
   INCIDENCIA_MODULES,
   INCIDENCIA_URGENCIES,
   INCIDENCIA_STATUSES,
+  INCIDENCIA_EVENTO_TIPOS,
 } from './incidencias.service';
 
 const imageFields = {
@@ -112,6 +113,23 @@ incidenciasRouter.post(
       asTecnico,
       authorId: req.user.id,
     });
+    return success(res, incidencia);
+  }),
+);
+
+// Registra un paso interno de la línea de tiempo (proceso del técnico).
+const eventoSchema = z.object({
+  tipo: z.enum(INCIDENCIA_EVENTO_TIPOS),
+  detalle: z.string().max(1000).nullish(),
+  esperaMadrugada: z.coerce.boolean().optional(),
+});
+incidenciasRouter.post(
+  '/:id/eventos',
+  requirePermission(PERMISSIONS.INCIDENCIAS_MANAGE),
+  validate(idParamSchema, 'params'),
+  validate(eventoSchema),
+  asyncHandler(async (req, res) => {
+    const incidencia = await IncidenciasService.addEvento(req.params.id, req.body, req.user?.id);
     return success(res, incidencia);
   }),
 );

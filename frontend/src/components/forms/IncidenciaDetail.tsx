@@ -7,7 +7,30 @@ import { AuthImage } from '@/components/ui/AuthImage';
 import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { MODULE_OPTIONS } from '@/components/forms/CreateIncidenciaModal';
 import { useAuthStore } from '@/stores/authStore';
-import type { Incidencia, IncidenciaStatus, IncidenciaUrgency } from '@/types';
+import type {
+  Incidencia,
+  IncidenciaEventoTipo,
+  IncidenciaStatus,
+  IncidenciaUrgency,
+} from '@/types';
+
+// Íconos y etiquetas de cada paso del proceso (línea de tiempo).
+const EVENTO_INFO: Record<IncidenciaEventoTipo, { icon: string; label: string }> = {
+  EN_REVISION: { icon: '👀', label: 'En revisión' },
+  DIAGNOSTICO: { icon: '🔍', label: 'Diagnóstico' },
+  ARREGLO: { icon: '🔧', label: 'Arreglo aplicado' },
+  PRUEBA: { icon: '✅', label: 'Prueba / verificación' },
+  DEPLOY: { icon: '🚀', label: 'Desplegado' },
+  NOTA: { icon: '📝', label: 'Nota' },
+};
+
+interface TimelinePoint {
+  ts: string;
+  icon: string;
+  label: string;
+  detalle?: string | null;
+  milestone?: boolean;
+}
 
 const STATUS_LABEL: Record<IncidenciaStatus, string> = {
   ABIERTA: 'Abierta',
@@ -123,6 +146,59 @@ export function IncidenciaDetail({ id, onClose, onChanged }: Props) {
               />
             )}
           </div>
+
+          {/* Proceso / línea de tiempo: cómo se está atendiendo, paso a paso */}
+          {(() => {
+            const points: TimelinePoint[] = [
+              {
+                ts: data.createdAt,
+                icon: '📩',
+                label: 'Reportada',
+                milestone: true,
+              },
+              ...(data.eventos ?? []).map((e) => ({
+                ts: e.createdAt,
+                icon: EVENTO_INFO[e.tipo]?.icon ?? '•',
+                label: EVENTO_INFO[e.tipo]?.label ?? e.tipo,
+                detalle: e.detalle,
+              })),
+              ...(data.resolvedAt
+                ? [{ ts: data.resolvedAt, icon: '✅', label: 'Resuelta', milestone: true }]
+                : []),
+              ...(data.closedAt
+                ? [{ ts: data.closedAt, icon: '🔒', label: 'Cerrada', milestone: true }]
+                : []),
+            ].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+            // Solo mostramos la línea si hay proceso registrado (más que "Reportada").
+            if (points.length <= 1) return null;
+            return (
+              <div>
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-tertiary">
+                  Proceso
+                </div>
+                <ol className="space-y-2 border-l border-surface-border pl-4">
+                  {points.map((p, i) => (
+                    <li key={i} className="relative">
+                      <span className="absolute -left-[22px] flex h-4 w-4 items-center justify-center text-[10px]">
+                        {p.icon}
+                      </span>
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span
+                          className={`text-xs ${p.milestone ? 'font-semibold text-ink-primary' : 'font-medium text-ink-secondary'}`}
+                        >
+                          {p.label}
+                        </span>
+                        <span className="text-[10px] text-ink-tertiary">{fmt(p.ts)}</span>
+                      </div>
+                      {p.detalle && (
+                        <div className="mt-0.5 text-[11px] text-ink-secondary">{p.detalle}</div>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            );
+          })()}
 
           {/* Hilo de conversación */}
           {data.messages && data.messages.length > 0 && (

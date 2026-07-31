@@ -15,6 +15,15 @@ export const INCIDENCIA_MODULES = [
 ] as const;
 export const INCIDENCIA_URGENCIES = ['BAJA', 'MEDIA', 'ALTA'] as const;
 export const INCIDENCIA_STATUSES = ['ABIERTA', 'EN_REVISION', 'RESUELTA', 'CERRADA'] as const;
+// Pasos internos de la línea de tiempo (el "proceso" de atención).
+export const INCIDENCIA_EVENTO_TIPOS = [
+  'EN_REVISION',
+  'DIAGNOSTICO',
+  'ARREGLO',
+  'PRUEBA',
+  'DEPLOY',
+  'NOTA',
+] as const;
 
 export type IncidenciaStatus = (typeof INCIDENCIA_STATUSES)[number];
 
@@ -46,6 +55,7 @@ const listSelect = {
   urgency: true,
   status: true,
   imageMime: true,
+  expectsOvernight: true,
   createdBy: true,
   createdAt: true,
   updatedAt: true,
@@ -154,10 +164,52 @@ export class IncidenciasService {
             author: { select: { firstName: true, lastName: true } },
           },
         },
+        eventos: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, tipo: true, detalle: true, createdAt: true },
+        },
       },
     });
     if (!incidencia) throw new NotFoundError('Incidencia no encontrada');
     return incidencia;
+  }
+
+  /**
+   * Registra un paso interno de la línea de tiempo (el "proceso": tomar,
+   * diagnosticar, arreglar, probar, desplegar). `EN_REVISION` mueve el estado
+   * a EN_REVISION si estaba ABIERTA. `esperaMadrugada` difiere el ETA (deploy).
+   * Solo se registra lo que de verdad se hizo — es la prueba del trabajo real.
+   */
+  static async addEvento(
+    id: string,
+    input: { tipo: string; detalle?: string | null; esperaMadrugada?: boolean },
+    authorId?: string | null,
+  ) {
+    const incidencia = await prisma.incidencia.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, status: true },
+    });
+    if (!incidencia) throw new NotFoundError('Incidencia no encontrada');
+
+    const toEnRevision = input.tipo === 'EN_REVISION' && incidencia.status === 'ABIERTA';
+    await prisma.$transaction([
+      prisma.incidenciaEvento.create({
+        data: {
+          incidenciaId: id,
+          tipo: input.tipo,
+          detalle: input.detalle?.trim() || null,
+          authorId: authorId ?? null,
+        },
+      }),
+      prisma.incidencia.update({
+        where: { id },
+        data: {
+          ...(toEnRevision ? { status: 'EN_REVISION' } : {}),
+          ...(input.esperaMadrugada ? { expectsOvernight: true } : {}),
+        },
+      }),
+    ]);
+    return this.getById(id);
   }
 
   static async create(input: CreateInput, userId: string) {

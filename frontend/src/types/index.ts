@@ -331,6 +331,21 @@ export interface IncidenciaMessage {
   author?: { firstName: string; lastName: string } | null;
 }
 
+export type IncidenciaEventoTipo =
+  | 'EN_REVISION'
+  | 'DIAGNOSTICO'
+  | 'ARREGLO'
+  | 'PRUEBA'
+  | 'DEPLOY'
+  | 'NOTA';
+
+export interface IncidenciaEvento {
+  id: string;
+  tipo: IncidenciaEventoTipo;
+  detalle: string | null;
+  createdAt: string;
+}
+
 export interface Incidencia {
   id: string;
   number: number;
@@ -340,6 +355,7 @@ export interface Incidencia {
   urgency: IncidenciaUrgency;
   status: IncidenciaStatus;
   imageMime: string | null;
+  expectsOvernight?: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -347,6 +363,7 @@ export interface Incidencia {
   closedAt: string | null;
   creator?: { firstName: string; lastName: string; email: string } | null;
   messages?: IncidenciaMessage[];
+  eventos?: IncidenciaEvento[];
   _count?: { messages: number };
 }
 

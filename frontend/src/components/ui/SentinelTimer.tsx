@@ -81,13 +81,23 @@ export function SentinelTimer({ sentinel }: { sentinel: SupportSentinel }) {
 export function ResolutionEta({
   status,
   sentinel,
+  expectsOvernight = false,
 }: {
   status: string;
   sentinel: SupportSentinel;
+  expectsOvernight?: boolean;
 }) {
   const secs = useCountdown(sentinel.nextReviewAt);
   if (status === 'RESUELTA') return <span className="text-success">✅ Resuelta</span>;
   if (status === 'CERRADA') return null;
+  // Si el arreglo ya está en proceso y necesita desplegar, el ETA se difiere.
+  if (expectsOvernight) {
+    return (
+      <span className="text-ink-tertiary" title="El arreglo requiere desplegar; se aplica en la ventana sin tráfico">
+        🌙 se resuelve esta madrugada
+      </span>
+    );
+  }
   if (!sentinel.active || secs === null) return null;
   const mins = Math.max(1, Math.ceil(secs / 60));
   return (

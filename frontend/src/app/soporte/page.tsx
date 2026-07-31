@@ -237,7 +237,11 @@ function IncidenciaRow({
             <span className="text-ink-tertiary">💬 {inc._count?.messages}</span>
           )}
           <span className="text-ink-tertiary">· {formatCalendarDate(inc.createdAt)}</span>
-          <ResolutionEta status={inc.status} sentinel={sentinel} />
+          <ResolutionEta
+            status={inc.status}
+            sentinel={sentinel}
+            expectsOvernight={inc.expectsOvernight}
+          />
         </div>
       </div>
       <span className={`${STATUS_CLASS[inc.status]} shrink-0`}>{STATUS_LABEL[inc.status]}</span>
