@@ -123,7 +123,7 @@ providersRouter.get(
     });
     if (!provider) throw new NotFoundError('Proveedor no encontrado');
 
-    const [gastos, orders] = await Promise.all([
+    const [gastos, orders, subcontracts] = await Promise.all([
       prisma.gasto.findMany({
         where: { providerId: provider.id, deletedAt: null },
         include: {
@@ -141,51 +141,66 @@ providersRouter.get(
         },
         orderBy: { scheduledDate: 'desc' },
       }),
+      // Valores subcontratados acordados por proyecto (los edita Bryan en la ficha).
+      prisma.projectSubcontract.findMany({
+        where: { providerId: provider.id },
+        include: { project: { select: { id: true, name: true, code: true, deletedAt: true } } },
+      }),
     ]);
 
     // Build per-project breakdown
-    const projectMap = new Map<
-      string,
-      { id: string; name: string; code: string; spent: number; pending: number; gastosCount: number; ordersCount: number }
-    >();
-
-    for (const g of gastos) {
-      const k = g.project.id;
-      const e = projectMap.get(k) ?? {
-        id: g.project.id,
-        name: g.project.name,
-        code: g.project.code,
+    interface ProjectRow {
+      id: string;
+      name: string;
+      code: string;
+      subcontractAmount: number; // valor acordado (editable)
+      spent: number; // lo que ya se le ha dado
+      pending: number; // pendiente de órdenes
+      gastosCount: number;
+      ordersCount: number;
+    }
+    const projectMap = new Map<string, ProjectRow>();
+    const ensure = (p: { id: string; name: string; code: string }): ProjectRow => {
+      const e = projectMap.get(p.id) ?? {
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        subcontractAmount: 0,
         spent: 0,
         pending: 0,
         gastosCount: 0,
         ordersCount: 0,
       };
+      projectMap.set(p.id, e);
+      return e;
+    };
+
+    // Primero los subcontratos acordados (aunque no tengan gastos todavía).
+    for (const s of subcontracts) {
+      if (s.project.deletedAt) continue;
+      const e = ensure(s.project);
+      e.subcontractAmount = s.amount;
+    }
+
+    for (const g of gastos) {
+      const e = ensure(g.project);
       e.spent += g.amount;
       e.gastosCount += 1;
-      projectMap.set(k, e);
     }
 
     for (const o of orders) {
       const paid = o.gastos.reduce((s, x) => s + x.amount, 0);
       const remaining = Math.max(0, o.amount - paid);
-      const k = o.project.id;
-      const e = projectMap.get(k) ?? {
-        id: o.project.id,
-        name: o.project.name,
-        code: o.project.code,
-        spent: 0,
-        pending: 0,
-        gastosCount: 0,
-        ordersCount: 0,
-      };
+      const e = ensure(o.project);
       if (o.status === 'PENDING') e.pending += remaining;
       e.ordersCount += 1;
-      projectMap.set(k, e);
     }
 
-    const projects = Array.from(projectMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    const projects = Array.from(projectMap.values())
+      .map((p) => ({ ...p, balance: p.subcontractAmount - p.spent }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const totalSubcontracted = projects.reduce((s, p) => s + p.subcontractAmount, 0);
 
     const totalSpent = gastos.reduce((s, g) => s + g.amount, 0);
     const totalDebt = orders.reduce((s, o) => {
@@ -196,7 +211,12 @@ providersRouter.get(
 
     return success(res, {
       provider,
-      totals: { totalSpent, totalDebt },
+      totals: {
+        totalSpent,
+        totalDebt,
+        totalSubcontracted,
+        totalBalance: totalSubcontracted - totalSpent,
+      },
       projects,
       gastos: gastos.map((g) => ({
         id: g.id,
@@ -224,6 +244,52 @@ providersRouter.get(
         };
       }),
     });
+  }),
+);
+
+// Fija/edita el valor subcontratado acordado a este proveedor para un proyecto.
+// amount = 0 elimina el registro (deja el proyecto sin subcontrato acordado).
+const subcontractSchema = z.object({
+  projectId: z.string().uuid(),
+  amount: z.coerce.number().nonnegative(),
+  notes: z.string().max(300).nullish(),
+});
+providersRouter.put(
+  '/:id/subcontract',
+  requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  validate(idParamSchema, 'params'),
+  validate(subcontractSchema),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const provider = await prisma.provider.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!provider) throw new NotFoundError('Proveedor no encontrado');
+    const project = await prisma.project.findFirst({
+      where: { id: req.body.projectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!project) throw new NotFoundError('Proyecto no encontrado');
+
+    if (req.body.amount === 0) {
+      await prisma.projectSubcontract.deleteMany({
+        where: { providerId: provider.id, projectId: project.id },
+      });
+      return success(res, { removed: true });
+    }
+    const saved = await prisma.projectSubcontract.upsert({
+      where: { projectId_providerId: { projectId: project.id, providerId: provider.id } },
+      update: { amount: req.body.amount, notes: req.body.notes ?? null },
+      create: {
+        projectId: project.id,
+        providerId: provider.id,
+        amount: req.body.amount,
+        notes: req.body.notes ?? null,
+        createdBy: req.user.id,
+      },
+    });
+    return success(res, saved);
   }),
 );
 

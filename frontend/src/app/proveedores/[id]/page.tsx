@@ -1,12 +1,26 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPut, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
+import { useAuthStore } from '@/stores/authStore';
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  code: string;
+  subcontractAmount: number;
+  spent: number;
+  balance: number;
+  pending: number;
+  gastosCount: number;
+  ordersCount: number;
+}
 
 interface ProviderDetail {
   provider: {
@@ -17,16 +31,13 @@ interface ProviderDetail {
     email: string | null;
     service: string | null;
   };
-  totals: { totalSpent: number; totalDebt: number };
-  projects: Array<{
-    id: string;
-    name: string;
-    code: string;
-    spent: number;
-    pending: number;
-    gastosCount: number;
-    ordersCount: number;
-  }>;
+  totals: {
+    totalSpent: number;
+    totalDebt: number;
+    totalSubcontracted: number;
+    totalBalance: number;
+  };
+  projects: ProjectRow[];
   gastos: Array<{
     id: string;
     description: string;
@@ -53,10 +64,12 @@ interface ProviderDetail {
 
 export default function ProviderDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data, isLoading, error } = useSWR<ProviderDetail>(
+  const { data, isLoading, error, mutate } = useSWR<ProviderDetail>(
     `/providers/${params.id}`,
     apiGet,
   );
+  const canWrite = useAuthStore().can('providers.write');
+  const [adding, setAdding] = useState(false);
 
   if (isLoading) {
     return (
@@ -97,58 +110,70 @@ export default function ProviderDetailPage() {
         </div>
       </header>
 
-      <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Metric label="Total pagado histórico" value={formatCurrency(totals.totalSpent)} tone="success" />
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric label="Total subcontratado" value={formatCurrency(totals.totalSubcontracted)} tone="brand" />
+        <Metric label="Total dado (pagado)" value={formatCurrency(totals.totalSpent)} tone="success" />
         <Metric
-          label="Deuda total pendiente"
-          value={formatCurrency(totals.totalDebt)}
-          tone={totals.totalDebt > 0 ? 'danger' : 'default'}
+          label="Saldo por pagar"
+          value={formatCurrency(totals.totalBalance)}
+          tone={totals.totalBalance > 0 ? 'danger' : 'default'}
         />
-        <Metric label="Proyectos relacionados" value={String(projects.length)} />
+        <Metric label="Proyectos" value={String(projects.length)} />
       </div>
 
       <section className="mb-6">
-        <h2 className="mb-2 text-sm font-medium">Por proyecto</h2>
-        {projects.length === 0 ? (
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-medium">Por proyecto (subcontratos)</h2>
+          {canWrite && (
+            <button onClick={() => setAdding(true)} className="btn-secondary text-xs">
+              + Agregar trabajo
+            </button>
+          )}
+        </div>
+
+        {adding && (
+          <AddSubcontractRow
+            providerId={provider.id}
+            existingIds={projects.map((p) => p.id)}
+            onClose={() => setAdding(false)}
+            onSaved={() => {
+              setAdding(false);
+              mutate();
+            }}
+          />
+        )}
+
+        {projects.length === 0 && !adding ? (
           <div className="card text-sm text-ink-secondary">
-            Aún no hay gastos ni órdenes con este proveedor.
+            Aún no hay trabajos con este proveedor. Usa <strong>+ Agregar trabajo</strong> para
+            registrar el valor subcontratado de un proyecto.
           </div>
-        ) : (
+        ) : projects.length > 0 ? (
           <div className="card overflow-x-auto">
             <table className="table-default">
               <thead>
                 <tr>
                   <th>Proyecto</th>
-                  <th className="text-right">Pagado</th>
-                  <th className="text-right">Pendiente</th>
-                  <th>Gastos</th>
-                  <th>Órdenes</th>
+                  <th className="text-right">Subcontratado</th>
+                  <th className="text-right">Dado (pagado)</th>
+                  <th className="text-right">Saldo</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {projects.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <Link
-                        href={ROUTES.PROJECT_PROVIDERS(p.id)}
-                        className="font-medium text-brand hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      <div className="text-xs text-ink-secondary">{p.code}</div>
-                    </td>
-                    <td className="text-right">{formatCurrency(p.spent)}</td>
-                    <td className={`text-right ${p.pending > 0 ? 'text-danger font-medium' : ''}`}>
-                      {formatCurrency(p.pending)}
-                    </td>
-                    <td className="text-xs">{p.gastosCount}</td>
-                    <td className="text-xs">{p.ordersCount}</td>
-                  </tr>
+                  <SubcontractRow
+                    key={p.id}
+                    providerId={provider.id}
+                    project={p}
+                    canWrite={canWrite}
+                    onSaved={() => mutate()}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </section>
 
       <section className="mb-6">
@@ -240,6 +265,192 @@ export default function ProviderDetailPage() {
   );
 }
 
+// Una fila de proyecto con el valor subcontratado editable inline.
+function SubcontractRow({
+  providerId,
+  project,
+  canWrite,
+  onSaved,
+}: {
+  providerId: string;
+  project: ProjectRow;
+  canWrite: boolean;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(project.subcontractAmount || ''));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const amount = Number(val) || 0;
+      await apiPut(`/providers/${providerId}/subcontract`, { projectId: project.id, amount });
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiClientError ? e.message : 'No se pudo guardar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <tr>
+      <td>
+        <Link
+          href={ROUTES.PROJECT_BUDGET(project.id)}
+          className="font-medium text-brand hover:underline"
+        >
+          {project.name}
+        </Link>
+        <div className="text-xs text-ink-secondary">
+          {project.code} · {project.gastosCount} gastos · {project.ordersCount} órdenes
+        </div>
+      </td>
+      <td className="text-right">
+        {editing ? (
+          <div className="flex items-center justify-end gap-1">
+            <input
+              type="number"
+              step="any"
+              min="0"
+              autoFocus
+              value={val}
+              onChange={(e) => setVal(e.target.value)}
+              className="input h-8 w-28 text-right text-xs"
+            />
+            <button
+              onClick={save}
+              disabled={saving}
+              className="btn-primary h-8 px-2 text-[11px] disabled:opacity-50"
+            >
+              {saving ? '…' : 'Guardar'}
+            </button>
+            <button
+              onClick={() => {
+                setEditing(false);
+                setVal(String(project.subcontractAmount || ''));
+                setErr(null);
+              }}
+              className="text-[11px] text-ink-tertiary hover:underline"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-1.5">
+            <span className={project.subcontractAmount > 0 ? 'font-medium text-brand' : 'text-ink-tertiary'}>
+              {project.subcontractAmount > 0 ? formatCurrency(project.subcontractAmount) : '—'}
+            </span>
+            {canWrite && (
+              <button
+                onClick={() => setEditing(true)}
+                className="rounded px-1 text-ink-tertiary hover:text-ink-primary"
+                title="Editar valor subcontratado"
+              >
+                ✏️
+              </button>
+            )}
+          </div>
+        )}
+        {err && <div className="text-[10px] text-danger">{err}</div>}
+      </td>
+      <td className="text-right">{formatCurrency(project.spent)}</td>
+      <td className={`text-right font-medium ${project.balance > 0 ? 'text-danger' : project.balance < 0 ? 'text-warning' : 'text-success'}`}>
+        {formatCurrency(project.balance)}
+      </td>
+      <td></td>
+    </tr>
+  );
+}
+
+// Fila para agregar un trabajo (proyecto + valor subcontratado) que aún no está.
+function AddSubcontractRow({
+  providerId,
+  existingIds,
+  onClose,
+  onSaved,
+}: {
+  providerId: string;
+  existingIds: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { data: projects } = useSWR<Array<{ id: string; name: string; code: string }>>(
+    '/projects?perPage=500',
+    apiGet,
+  );
+  const [projectId, setProjectId] = useState('');
+  const [val, setVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const options = (projects ?? []).filter((p) => !existingIds.includes(p.id));
+
+  async function save() {
+    if (!projectId) {
+      setErr('Elige un proyecto');
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await apiPut(`/providers/${providerId}/subcontract`, {
+        projectId,
+        amount: Number(val) || 0,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiClientError ? e.message : 'No se pudo guardar');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mb-2 rounded-lg border border-brand/40 bg-surface p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex-1 min-w-[200px]">
+          <span className="mb-1 block text-xs text-ink-secondary">Proyecto</span>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="input text-sm"
+          >
+            <option value="">— Elige un proyecto —</option>
+            {options.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.code})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="w-40">
+          <span className="mb-1 block text-xs text-ink-secondary">Valor subcontratado</span>
+          <input
+            type="number"
+            step="any"
+            min="0"
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder="0.00"
+            className="input text-sm"
+          />
+        </label>
+        <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
+          {saving ? 'Guardando…' : 'Agregar'}
+        </button>
+        <button onClick={onClose} className="btn-secondary text-xs">
+          Cancelar
+        </button>
+      </div>
+      {err && <div className="mt-1 text-xs text-danger">{err}</div>}
+    </div>
+  );
+}
+
 function Metric({
   label,
   value,
@@ -247,10 +458,16 @@ function Metric({
 }: {
   label: string;
   value: string;
-  tone?: 'default' | 'success' | 'danger';
+  tone?: 'default' | 'success' | 'danger' | 'brand';
 }) {
   const colour =
-    tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : 'text-ink-primary';
+    tone === 'success'
+      ? 'text-success'
+      : tone === 'danger'
+        ? 'text-danger'
+        : tone === 'brand'
+          ? 'text-brand'
+          : 'text-ink-primary';
   return (
     <div className="metric-card">
       <div className="text-xs text-ink-secondary">{label}</div>

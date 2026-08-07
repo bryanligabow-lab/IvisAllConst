@@ -252,6 +252,7 @@ model Project {
   assignments   ProjectAssignment[]
   attendance    Attendance[]
   bitacora      BitacoraEntry[]
+  subcontracts  ProjectSubcontract[]
 
   @@index([code])
   @@index([status])
@@ -587,6 +588,8 @@ model Provider {
   subcontractedProjects Project[]     @relation("ProjectSubcontractor")
   // Rubros (parciales) que ejecuta como subcontratista.
   subcontractedRubros   Rubro[]       @relation("RubroSubcontractor")
+  // Valor subcontratado acordado por proyecto (lo gestiona Bryan en la ficha).
+  subcontracts          ProjectSubcontract[]
 
   @@index([name])
   @@index([deletedAt])
@@ -944,4 +947,25 @@ model SupportSentinel {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@map("support_sentinel")
+}
+
+// Valor subcontratado acordado a un proveedor (subcontratista) para un proyecto
+// concreto. Bryan lo escribe/edita desde la ficha del proveedor. El saldo se
+// calcula: amount − (lo que ya se le ha pagado en gastos de ese proyecto).
+model ProjectSubcontract {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  providerId String   @map("provider_id")
+  amount     Float    @default(0)
+  notes      String?
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, providerId])
+  @@index([providerId])
+  @@map("project_subcontracts")
 }
