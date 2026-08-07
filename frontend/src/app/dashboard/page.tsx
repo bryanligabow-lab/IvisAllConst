@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { AppShell } from '@/components/layouts/AppShell';
@@ -12,6 +12,7 @@ import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import { PLANILLA_STATUS_LABEL, PLANILLA_STATUS_CLASS } from '@/lib/planillaStatus';
 import { PlanillasPendientes } from '@/components/ui/PlanillasPendientes';
+import { getRecentProjects, markProjectOpened } from '@/lib/recentProjects';
 import { useAuthStore } from '@/stores/authStore';
 import type { PlanillaStatus, Project } from '@/types';
 
@@ -29,6 +30,7 @@ interface DashboardProjectStat {
   status: Project['status'];
   startDate: string | null;
   endDate: string | null;
+  updatedAt?: string;
   contractAmount: number;
   budgeted: number;
   spent: number;
@@ -92,6 +94,12 @@ export default function DashboardPage() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   // Buscador de proyectos (por nombre, código o cliente).
   const [projectQuery, setProjectQuery] = useState('');
+  // Proyectos abiertos recientemente (localStorage) → salen de primeros.
+  const [recent, setRecent] = useState<Record<string, number>>({});
+  useEffect(() => {
+    setRecent(getRecentProjects());
+  }, []);
+  const openProject = (id: string) => setRecent(markProjectOpened(id));
   const { isRestricted, can } = useAuthStore();
   // El operador ve solo sus proyectos asignados y sin valores monetarios.
   const restricted = isRestricted();
@@ -231,7 +239,7 @@ export default function DashboardPage() {
               >
                 {(() => {
                   const pq = projectQuery.trim().toLowerCase();
-                  const shown = pq
+                  const filtered = pq
                     ? stats.projects.filter(
                         (p) =>
                           p.name.toLowerCase().includes(pq) ||
@@ -239,6 +247,12 @@ export default function DashboardPage() {
                           (p.clientName ?? '').toLowerCase().includes(pq),
                       )
                     : stats.projects;
+                  // Orden: primero los abiertos recientemente (por cuándo se
+                  // abrieron), y el resto en el orden del backend (últimos
+                  // modificados primero). Copia para no mutar el original.
+                  const shown = [...filtered].sort(
+                    (a, b) => (recent[b.id] ?? 0) - (recent[a.id] ?? 0),
+                  );
                   if (stats.projects.length === 0) {
                     return (
                       <div className="rounded-md border border-dashed border-surface-border bg-surface-muted/40 p-6 text-center text-sm text-ink-secondary">
@@ -260,6 +274,7 @@ export default function DashboardPage() {
                       project={p}
                       hideMoney={restricted}
                       canManage={canManageProjects}
+                      onOpen={() => openProject(p.id)}
                       onEdit={() => setEditingId(p.id)}
                       onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
                     />
@@ -340,12 +355,14 @@ function ProjectMiniCard({
   project,
   hideMoney = false,
   canManage = true,
+  onOpen,
   onEdit,
   onDelete,
 }: {
   project: DashboardProjectStat;
   hideMoney?: boolean;
   canManage?: boolean;
+  onOpen?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -389,7 +406,11 @@ function ProjectMiniCard({
         </div>
       )}
 
-      <Link href={ROUTES.PROJECT_BUDGET(project.id)} className={canManage ? 'block pr-12' : 'block'}>
+      <Link
+        href={ROUTES.PROJECT_BUDGET(project.id)}
+        onClick={() => onOpen?.()}
+        className={canManage ? 'block pr-12' : 'block'}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-ink-primary">

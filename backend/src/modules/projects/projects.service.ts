@@ -213,7 +213,9 @@ export class ProjectsService {
         deletedAt: null,
         ...(allowedProjectIds ? { id: { in: allowedProjectIds } } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      // Lo último modificado primero: los proyectos que se están trabajando
+      // suben, los inactivos bajan. (El frontend además sube los recién abiertos.)
+      orderBy: { updatedAt: 'desc' },
       include: {
         client: { select: { id: true, name: true } },
         subcontractor: { select: { id: true, name: true } },
@@ -372,6 +374,7 @@ export class ProjectsService {
         status: p.status,
         startDate: p.startDate,
         endDate: p.endDate,
+        updatedAt: p.updatedAt,
         contractAmount,
         budgeted,
         spent,
