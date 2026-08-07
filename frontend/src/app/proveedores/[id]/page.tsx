@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
-import { apiGet, apiPut, ApiClientError } from '@/lib/api';
+import { apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
@@ -64,7 +64,7 @@ interface ProviderDetail {
 
 export default function ProviderDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data, isLoading, error, mutate } = useSWR<ProviderDetail>(
+  const { data, isLoading, error } = useSWR<ProviderDetail>(
     `/providers/${params.id}`,
     apiGet,
   );
@@ -136,10 +136,6 @@ export default function ProviderDetailPage() {
             providerId={provider.id}
             existingIds={projects.map((p) => p.id)}
             onClose={() => setAdding(false)}
-            onSaved={() => {
-              setAdding(false);
-              mutate();
-            }}
           />
         )}
 
@@ -162,13 +158,7 @@ export default function ProviderDetailPage() {
               </thead>
               <tbody>
                 {projects.map((p) => (
-                  <SubcontractRow
-                    key={p.id}
-                    providerId={provider.id}
-                    project={p}
-                    canWrite={canWrite}
-                    onSaved={() => mutate()}
-                  />
+                  <SubcontractRow key={p.id} providerId={provider.id} project={p} />
                 ))}
               </tbody>
             </table>
@@ -265,45 +255,20 @@ export default function ProviderDetailPage() {
   );
 }
 
-// Una fila de proyecto con el valor subcontratado editable inline.
+// Una fila de proyecto: el valor subcontratado (suma de sus rubros) es de solo
+// lectura aquí; para editarlo entras al trabajo y le pones/quitas rubros.
 function SubcontractRow({
   providerId,
   project,
-  canWrite,
-  onSaved,
 }: {
   providerId: string;
   project: ProjectRow;
-  canWrite: boolean;
-  onSaved: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(String(project.subcontractAmount || ''));
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function save() {
-    setSaving(true);
-    setErr(null);
-    try {
-      const amount = Number(val) || 0;
-      await apiPut(`/providers/${providerId}/subcontract`, { projectId: project.id, amount });
-      setEditing(false);
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof ApiClientError ? e.message : 'No se pudo guardar');
-    } finally {
-      setSaving(false);
-    }
-  }
-
+  const href = ROUTES.PROVIDER_SUBCONTRACT(providerId, project.id);
   return (
     <tr>
       <td>
-        <Link
-          href={ROUTES.PROJECT_BUDGET(project.id)}
-          className="font-medium text-brand hover:underline"
-        >
+        <Link href={href} className="font-medium text-brand hover:underline">
           {project.name}
         </Link>
         <div className="text-xs text-ink-secondary">
@@ -311,80 +276,40 @@ function SubcontractRow({
         </div>
       </td>
       <td className="text-right">
-        {editing ? (
-          <div className="flex items-center justify-end gap-1">
-            <input
-              type="number"
-              step="any"
-              min="0"
-              autoFocus
-              value={val}
-              onChange={(e) => setVal(e.target.value)}
-              className="input h-8 w-28 text-right text-xs"
-            />
-            <button
-              onClick={save}
-              disabled={saving}
-              className="btn-primary h-8 px-2 text-[11px] disabled:opacity-50"
-            >
-              {saving ? '…' : 'Guardar'}
-            </button>
-            <button
-              onClick={() => {
-                setEditing(false);
-                setVal(String(project.subcontractAmount || ''));
-                setErr(null);
-              }}
-              className="text-[11px] text-ink-tertiary hover:underline"
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-1.5">
-            <span className={project.subcontractAmount > 0 ? 'font-medium text-brand' : 'text-ink-tertiary'}>
-              {project.subcontractAmount > 0 ? formatCurrency(project.subcontractAmount) : '—'}
-            </span>
-            {canWrite && (
-              <button
-                onClick={() => setEditing(true)}
-                className="rounded px-1 text-ink-tertiary hover:text-ink-primary"
-                title="Editar valor subcontratado"
-              >
-                ✏️
-              </button>
-            )}
-          </div>
-        )}
-        {err && <div className="text-[10px] text-danger">{err}</div>}
+        <span className={project.subcontractAmount > 0 ? 'font-medium text-brand' : 'text-ink-tertiary'}>
+          {project.subcontractAmount > 0 ? formatCurrency(project.subcontractAmount) : '—'}
+        </span>
       </td>
       <td className="text-right">{formatCurrency(project.spent)}</td>
       <td className={`text-right font-medium ${project.balance > 0 ? 'text-danger' : project.balance < 0 ? 'text-warning' : 'text-success'}`}>
         {formatCurrency(project.balance)}
       </td>
-      <td></td>
+      <td className="text-right">
+        <Link href={href} className="text-xs text-brand hover:underline whitespace-nowrap">
+          Entrar →
+        </Link>
+      </td>
     </tr>
   );
 }
 
-// Fila para agregar un trabajo (proyecto + valor subcontratado) que aún no está.
+// Fila para agregar un trabajo: elige un proyecto → crea el subcontrato y entra
+// a ponerle los rubros.
 function AddSubcontractRow({
   providerId,
   existingIds,
   onClose,
-  onSaved,
 }: {
   providerId: string;
   existingIds: string[];
   onClose: () => void;
-  onSaved: () => void;
 }) {
+  const router = useRouter();
   const { data: projects } = useSWR<Array<{ id: string; name: string; code: string }>>(
     '/projects?perPage=500',
     apiGet,
   );
   const [projectId, setProjectId] = useState('');
-  const [val, setVal] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -398,13 +323,10 @@ function AddSubcontractRow({
     setSaving(true);
     setErr(null);
     try {
-      await apiPut(`/providers/${providerId}/subcontract`, {
-        projectId,
-        amount: Number(val) || 0,
-      });
-      onSaved();
+      await apiPost(`/providers/${providerId}/subcontracts`, { projectId });
+      router.push(ROUTES.PROVIDER_SUBCONTRACT(providerId, projectId));
     } catch (e) {
-      setErr(e instanceof ApiClientError ? e.message : 'No se pudo guardar');
+      setErr(e instanceof ApiClientError ? e.message : 'No se pudo crear el trabajo');
       setSaving(false);
     }
   }
@@ -427,25 +349,16 @@ function AddSubcontractRow({
             ))}
           </select>
         </label>
-        <label className="w-40">
-          <span className="mb-1 block text-xs text-ink-secondary">Valor subcontratado</span>
-          <input
-            type="number"
-            step="any"
-            min="0"
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            placeholder="0.00"
-            className="input text-sm"
-          />
-        </label>
         <button onClick={save} disabled={saving} className="btn-primary text-xs disabled:opacity-50">
-          {saving ? 'Guardando…' : 'Agregar'}
+          {saving ? 'Creando…' : 'Crear y entrar'}
         </button>
         <button onClick={onClose} className="btn-secondary text-xs">
           Cancelar
         </button>
       </div>
+      <p className="mt-1 text-[11px] text-ink-tertiary">
+        Al entrar le pones los rubros; el valor subcontratado se suma de ellos.
+      </p>
       {err && <div className="mt-1 text-xs text-danger">{err}</div>}
     </div>
   );

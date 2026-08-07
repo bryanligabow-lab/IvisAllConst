@@ -964,8 +964,28 @@ model ProjectSubcontract {
 
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  // Rubros (partidas) del subcontrato: su parte se maneja como un mini-proyecto.
+  // El "valor subcontratado" (amount) = suma de estos rubros.
+  items    SubcontractItem[]
 
   @@unique([projectId, providerId])
   @@index([providerId])
   @@map("project_subcontracts")
+}
+
+// Rubro/partida del trabajo subcontratado a un proveedor (su parte del proyecto,
+// vista como un mini-presupuesto). El total del subcontrato = suma de sus rubros.
+model SubcontractItem {
+  id            String   @id @default(uuid())
+  subcontractId String   @map("subcontract_id")
+  description   String
+  amount        Float    @default(0)
+  orderIndex    Int      @default(0) @map("order_index")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  subcontract ProjectSubcontract @relation(fields: [subcontractId], references: [id], onDelete: Cascade)
+
+  @@index([subcontractId])
+  @@map("subcontract_items")
 }

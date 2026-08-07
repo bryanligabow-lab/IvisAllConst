@@ -293,6 +293,145 @@ providersRouter.put(
   }),
 );
 
+// --- Trabajo subcontratado con rubros propios (mini-proyecto de su parte) ---
+
+// Recalcula el total del subcontrato = suma de sus rubros. Devuelve el nuevo total.
+async function recomputeSubcontractAmount(subcontractId: string): Promise<number> {
+  const agg = await prisma.subcontractItem.aggregate({
+    where: { subcontractId },
+    _sum: { amount: true },
+  });
+  const total = agg._sum.amount ?? 0;
+  await prisma.projectSubcontract.update({ where: { id: subcontractId }, data: { amount: total } });
+  return total;
+}
+
+// Asegura que exista el "cascarón" del subcontrato (proveedor+proyecto) y lo
+// devuelve. Lo usa "+ Agregar trabajo" antes de entrar a ponerle rubros.
+providersRouter.post(
+  '/:id/subcontracts',
+  requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  validate(idParamSchema, 'params'),
+  validate(z.object({ projectId: z.string().uuid() })),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const [provider, project] = await Promise.all([
+      prisma.provider.findFirst({ where: { id: req.params.id, deletedAt: null }, select: { id: true } }),
+      prisma.project.findFirst({ where: { id: req.body.projectId, deletedAt: null }, select: { id: true } }),
+    ]);
+    if (!provider) throw new NotFoundError('Proveedor no encontrado');
+    if (!project) throw new NotFoundError('Proyecto no encontrado');
+    const sc = await prisma.projectSubcontract.upsert({
+      where: { projectId_providerId: { projectId: project.id, providerId: provider.id } },
+      update: {},
+      create: { projectId: project.id, providerId: provider.id, amount: 0, createdBy: req.user.id },
+    });
+    return success(res, sc, 201);
+  }),
+);
+
+// Detalle del trabajo subcontratado: rubros, total, pagado y saldo.
+providersRouter.get(
+  '/:id/subcontracts/:projectId',
+  requirePermission(PERMISSIONS.PROVIDERS_READ),
+  asyncHandler(async (req, res) => {
+    const { id, projectId } = req.params;
+    const sc = await prisma.projectSubcontract.findUnique({
+      where: { projectId_providerId: { projectId, providerId: id } },
+      include: {
+        items: { orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }] },
+        project: { select: { id: true, name: true, code: true } },
+        provider: { select: { id: true, name: true } },
+      },
+    });
+    if (!sc) throw new NotFoundError('Este proveedor no tiene ese trabajo registrado');
+    const paidAgg = await prisma.gasto.aggregate({
+      where: { providerId: id, projectId, deletedAt: null },
+      _sum: { amount: true },
+    });
+    const total = sc.items.reduce((s, it) => s + it.amount, 0);
+    const paid = paidAgg._sum.amount ?? 0;
+    return success(res, {
+      id: sc.id,
+      provider: sc.provider,
+      project: sc.project,
+      items: sc.items,
+      total,
+      paid,
+      balance: total - paid,
+    });
+  }),
+);
+
+const itemBodySchema = z.object({
+  description: z.string().min(1).max(500),
+  amount: z.coerce.number().nonnegative(),
+});
+
+// Agrega un rubro al trabajo subcontratado.
+providersRouter.post(
+  '/:id/subcontracts/:projectId/items',
+  requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  validate(itemBodySchema),
+  asyncHandler(async (req, res) => {
+    const { id, projectId } = req.params;
+    const sc = await prisma.projectSubcontract.findUnique({
+      where: { projectId_providerId: { projectId, providerId: id } },
+      select: { id: true, _count: { select: { items: true } } },
+    });
+    if (!sc) throw new NotFoundError('Trabajo subcontratado no encontrado');
+    const item = await prisma.subcontractItem.create({
+      data: {
+        subcontractId: sc.id,
+        description: req.body.description.trim(),
+        amount: req.body.amount,
+        orderIndex: sc._count.items,
+      },
+    });
+    const total = await recomputeSubcontractAmount(sc.id);
+    return success(res, { item, total }, 201);
+  }),
+);
+
+// Edita un rubro del trabajo subcontratado.
+providersRouter.patch(
+  '/:id/subcontracts/:projectId/items/:itemId',
+  requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  validate(itemBodySchema.partial()),
+  asyncHandler(async (req, res) => {
+    const item = await prisma.subcontractItem.findUnique({
+      where: { id: req.params.itemId },
+      select: { id: true, subcontractId: true },
+    });
+    if (!item) throw new NotFoundError('Rubro no encontrado');
+    await prisma.subcontractItem.update({
+      where: { id: item.id },
+      data: {
+        ...(req.body.description !== undefined ? { description: req.body.description.trim() } : {}),
+        ...(req.body.amount !== undefined ? { amount: req.body.amount } : {}),
+      },
+    });
+    const total = await recomputeSubcontractAmount(item.subcontractId);
+    return success(res, { total });
+  }),
+);
+
+// Elimina un rubro del trabajo subcontratado.
+providersRouter.delete(
+  '/:id/subcontracts/:projectId/items/:itemId',
+  requirePermission(PERMISSIONS.PROVIDERS_WRITE),
+  asyncHandler(async (req, res) => {
+    const item = await prisma.subcontractItem.findUnique({
+      where: { id: req.params.itemId },
+      select: { id: true, subcontractId: true },
+    });
+    if (!item) throw new NotFoundError('Rubro no encontrado');
+    await prisma.subcontractItem.delete({ where: { id: item.id } });
+    const total = await recomputeSubcontractAmount(item.subcontractId);
+    return success(res, { total });
+  }),
+);
+
 providersRouter.post(
   '/',
   requirePermission(PERMISSIONS.PROVIDERS_WRITE),
