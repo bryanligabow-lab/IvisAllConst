@@ -347,11 +347,20 @@ export class ChequesService {
         source?: string | null;
         cheques: ChequeInput[];
       }[];
+      replace?: boolean;
     },
     userId?: string,
   ) {
-    const existing = await prisma.cheque.count({ where: { deletedAt: null } });
-    if (existing > 0) return { skipped: true, reason: 'Ya hay cheques cargados', existing };
+    if (payload.replace) {
+      // Migración: limpia todo antes de recargar (idempotente).
+      await prisma.$transaction([
+        prisma.cheque.updateMany({ where: { deletedAt: null }, data: { deletedAt: new Date() } }),
+        prisma.chequeGroup.updateMany({ where: { deletedAt: null }, data: { deletedAt: new Date() } }),
+      ]);
+    } else {
+      const existing = await prisma.cheque.count({ where: { deletedAt: null } });
+      if (existing > 0) return { skipped: true, reason: 'Ya hay cheques cargados', existing };
+    }
 
     let created = 0;
     if (payload.registro?.length) {
