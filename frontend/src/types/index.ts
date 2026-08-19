@@ -379,3 +379,70 @@ export interface IncidenciasOverview {
   counts: Record<IncidenciaStatus, number>;
   sentinel: SupportSentinel;
 }
+
+export type ChequeStatus = 'COBRADO' | 'PENDIENTE' | 'VENCIDO' | 'ANULADO';
+
+export interface Cheque {
+  id: string;
+  issueDate: string | null;
+  number: string;
+  beneficiary: string | null;
+  bank: string | null;
+  account: string | null;
+  amount: number;
+  cashDate: string | null;
+  status: ChequeStatus;
+  notes: string | null;
+  groupId: string | null;
+  installment: number | null;
+}
+
+export interface ChequesOverview {
+  totals: {
+    emitido: number;
+    cobrado: number;
+    pendiente: number;
+    anulado: number;
+    count: number;
+    countPendiente: number;
+    countCobrado: number;
+  };
+  proximos: Array<{
+    id: string;
+    number: string;
+    beneficiary: string | null;
+    bank: string | null;
+    amount: number;
+    issueDate: string | null;
+    groupName: string | null;
+    daysUntil: number;
+    overdue: boolean;
+  }>;
+  proximosMonto: number;
+  bancos: string[];
+}
+
+export interface ChequeGroupSummary {
+  id: string;
+  name: string;
+  source: string | null;
+  notes: string | null;
+  total: number;
+  cuotas: number;
+  pagadas: number;
+  faltan: number;
+  montoPagado: number;
+  saldo: number;
+  nextDue: string | null;
+}
+
+export interface ChequeGroupDetail {
+  id: string;
+  name: string;
+  source: string | null;
+  notes: string | null;
+  cheques: Cheque[];
+  total: number;
+  montoPagado: number;
+  saldo: number;
+}

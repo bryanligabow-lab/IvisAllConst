@@ -79,6 +79,10 @@ export const PERMISSIONS = {
   INCIDENCIAS_READ: 'incidencias.read',
   INCIDENCIAS_WRITE: 'incidencias.write',
   INCIDENCIAS_MANAGE: 'incidencias.manage',
+
+  // Control de cheques + financiamientos de maquinaria (solo admin para arriba).
+  CHEQUES_READ: 'cheques.read',
+  CHEQUES_WRITE: 'cheques.write',
 } as const;
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 

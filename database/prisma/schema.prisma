@@ -989,3 +989,55 @@ model SubcontractItem {
   @@index([subcontractId])
   @@map("subcontract_items")
 }
+
+// ---------------------------------------------------------------------------
+// CHEQUES — control de cheques emitidos + financiamientos de maquinaria
+// ---------------------------------------------------------------------------
+
+// Financiamiento de maquinaria (se paga con cheques mensuales). Ej. "MIXER 3",
+// "VOLQUETA". El saldo/cuotas faltantes se calculan de sus cheques.
+model ChequeGroup {
+  id          String    @id @default(uuid())
+  name        String    // máquina / financiamiento (MIXER 3, VOLQUETA…)
+  source      String?   // banco/fuente que paga (CREACOM GUAYAQUIL, PAVIMENTACIÓN…)
+  notes       String?
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  cheques Cheque[]
+
+  @@index([deletedAt])
+  @@map("cheque_groups")
+}
+
+// Un cheque. Los del registro general tienen groupId null; los de un
+// financiamiento de maquinaria apuntan a su ChequeGroup.
+model Cheque {
+  id          String    @id @default(uuid())
+  issueDate   DateTime? @map("issue_date")   // Fecha de emisión / post-fechado
+  number      String    @default("")          // Nro de cheque (algunos en blanco)
+  beneficiary String?
+  bank        String?
+  account     String?
+  amount      Float     @default(0)
+  cashDate    DateTime? @map("cash_date")     // Fecha en que se cobró
+  // COBRADO | PENDIENTE | VENCIDO | ANULADO
+  status      String    @default("PENDIENTE")
+  notes       String?
+  groupId     String?   @map("group_id")
+  installment Int?      @map("installment")   // nº de cuota dentro del financiamiento
+  createdBy   String?   @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  group ChequeGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([issueDate])
+  @@index([groupId])
+  @@index([deletedAt])
+  @@map("cheques")
+}

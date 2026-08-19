@@ -57,6 +57,9 @@ const PERMISSIONS: Array<{ name: string; resource: string; action: string; descr
   { name: 'incidencias.read', resource: 'incidencias', action: 'read', description: 'Ver incidencias de soporte' },
   { name: 'incidencias.write', resource: 'incidencias', action: 'write', description: 'Reportar incidencias y responder en el hilo' },
   { name: 'incidencias.manage', resource: 'incidencias', action: 'manage', description: 'Responder como técnico y cambiar el estado de incidencias' },
+  // cheques (control de cheques + maquinaria)
+  { name: 'cheques.read', resource: 'cheques', action: 'read', description: 'Ver el control de cheques' },
+  { name: 'cheques.write', resource: 'cheques', action: 'write', description: 'Registrar/editar cheques y financiamientos' },
 ];
 
 async function main() {

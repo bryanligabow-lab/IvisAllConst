@@ -30,6 +30,7 @@ export const ROUTES = {
   PROYECTOS_REPORT: '/proyectos',
   DIRECTORIO: '/directorio',
   SOPORTE: '/soporte',
+  CHEQUES: '/cheques',
 } as const;
 
 export const RUBRO_STATUS_LABEL = {
