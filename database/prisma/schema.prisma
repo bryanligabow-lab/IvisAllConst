@@ -1016,13 +1016,16 @@ model ChequeGroup {
 // financiamiento de maquinaria apuntan a su ChequeGroup.
 model Cheque {
   id          String    @id @default(uuid())
-  issueDate   DateTime? @map("issue_date")   // Fecha de emisión / post-fechado
+  issueDate   DateTime? @map("issue_date")   // Fecha de emisión (cuándo se giró)
+  // Fecha en que SE VA a cobrar (postfechado). Es la que manda en el calendario
+  // y en "próximos a cobrar". Si es null se usa issueDate.
+  dueDate     DateTime? @map("due_date")
   number      String    @default("")          // Nro de cheque (algunos en blanco)
   beneficiary String?
   bank        String?
   account     String?
   amount      Float     @default(0)
-  cashDate    DateTime? @map("cash_date")     // Fecha en que se cobró
+  cashDate    DateTime? @map("cash_date")     // Fecha en que YA se cobró
   // COBRADO | PENDIENTE | VENCIDO | ANULADO
   status      String    @default("PENDIENTE")
   notes       String?
@@ -1037,6 +1040,7 @@ model Cheque {
 
   @@index([status])
   @@index([issueDate])
+  @@index([dueDate])
   @@index([groupId])
   @@index([deletedAt])
   @@map("cheques")

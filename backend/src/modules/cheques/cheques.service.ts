@@ -7,6 +7,7 @@ export type ChequeStatus = (typeof CHEQUE_STATUSES)[number];
 const chequeSelect = {
   id: true,
   issueDate: true,
+  dueDate: true,
   number: true,
   beneficiary: true,
   bank: true,
@@ -24,8 +25,14 @@ function startOfToday(): number {
   return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
 }
 
+/** Fecha que manda para el cobro: la de cobro esperada (postfechado) o, si no, la de emisión. */
+function effectiveDue(c: { dueDate?: Date | null; issueDate?: Date | null }): Date | null {
+  return c.dueDate ?? c.issueDate ?? null;
+}
+
 interface ChequeInput {
   issueDate?: Date | null;
+  dueDate?: Date | null;
   number?: string;
   beneficiary?: string | null;
   bank?: string | null;
@@ -79,14 +86,14 @@ export class ChequesService {
     const today = startOfToday();
     const limit = today + days * 86_400_000;
     const proximos = cheques
-      .filter(
-        (c) =>
-          c.status === 'PENDIENTE' &&
-          c.issueDate != null &&
-          new Date(c.issueDate).getTime() <= limit,
-      )
+      .filter((c) => {
+        if (c.status !== 'PENDIENTE') return false;
+        const due = effectiveDue(c);
+        return due != null && new Date(due).getTime() <= limit;
+      })
       .map((c) => {
-        const t = new Date(c.issueDate as Date).getTime();
+        const due = effectiveDue(c) as Date;
+        const t = new Date(due).getTime();
         const diffDays = Math.round((t - today) / 86_400_000);
         return {
           id: c.id,
@@ -95,6 +102,7 @@ export class ChequesService {
           bank: c.bank,
           amount: c.amount,
           issueDate: c.issueDate,
+          dueDate: due,
           groupName: c.group?.name ?? null,
           daysUntil: diffDays, // negativo = ya debió cobrarse (atrasado)
           overdue: diffDays < 0,
@@ -115,6 +123,8 @@ export class ChequesService {
     bank?: string;
     q?: string;
     scope?: string; // 'registro' (default, groupId null) | 'all'
+    from?: string; // rango por fecha de cobro (calendario)
+    to?: string;
   }) {
     const where: Record<string, unknown> = { deletedAt: null };
     if (filter.scope !== 'all') where.groupId = null;
@@ -127,17 +137,56 @@ export class ChequesService {
         { notes: { contains: filter.q, mode: 'insensitive' } },
       ];
     }
+    // El rango mira la fecha de cobro esperada (dueDate) o, si no hay, la de emisión.
+    if (filter.from || filter.to) {
+      const range: Record<string, Date> = {};
+      if (filter.from) range.gte = new Date(filter.from);
+      if (filter.to) range.lte = new Date(filter.to);
+      where.AND = [{ OR: [{ dueDate: range }, { dueDate: null, issueDate: range }] }];
+    }
     return prisma.cheque.findMany({
       where,
       select: chequeSelect,
-      orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ dueDate: 'desc' }, { issueDate: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  /**
+   * Marca como COBRADO todos los pendientes cuya fecha de cobro sea <= `until`.
+   * Es la puesta al día del histórico ("todo lo de antes ya se cobró"), para que
+   * solo queden pendientes los cheques de hoy en adelante.
+   */
+  static async bulkMarkCashedUntil(until: Date) {
+    const candidatos = await prisma.cheque.findMany({
+      where: { deletedAt: null, status: 'PENDIENTE' },
+      select: { id: true, dueDate: true, issueDate: true },
+    });
+    const ids = candidatos
+      .filter((c) => {
+        const due = effectiveDue(c);
+        return due != null && new Date(due).getTime() <= until.getTime();
+      })
+      .map((c) => c.id);
+    if (ids.length === 0) return { updated: 0 };
+    // La fecha de cobro real queda en su propia fecha prevista (no todas hoy).
+    await prisma.$transaction(
+      candidatos
+        .filter((c) => ids.includes(c.id))
+        .map((c) =>
+          prisma.cheque.update({
+            where: { id: c.id },
+            data: { status: 'COBRADO', cashDate: effectiveDue(c) },
+          }),
+        ),
+    );
+    return { updated: ids.length };
   }
 
   static async create(input: ChequeInput, userId?: string) {
     return prisma.cheque.create({
       data: {
         issueDate: input.issueDate ?? null,
+        dueDate: input.dueDate ?? null,
         number: input.number?.trim() ?? '',
         beneficiary: input.beneficiary?.trim() || null,
         bank: input.bank?.trim() || null,
@@ -164,6 +213,7 @@ export class ChequesService {
       where: { id },
       data: {
         ...(input.issueDate !== undefined ? { issueDate: input.issueDate } : {}),
+        ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
         ...(input.number !== undefined ? { number: input.number.trim() } : {}),
         ...(input.beneficiary !== undefined ? { beneficiary: input.beneficiary?.trim() || null } : {}),
         ...(input.bank !== undefined ? { bank: input.bank?.trim() || null } : {}),
@@ -210,7 +260,7 @@ export class ChequesService {
       include: {
         cheques: {
           where: { deletedAt: null },
-          select: { amount: true, status: true, issueDate: true },
+          select: { amount: true, status: true, issueDate: true, dueDate: true },
         },
       },
       orderBy: { name: 'asc' },
@@ -222,7 +272,7 @@ export class ChequesService {
       const montoPagado = pagadas.reduce((s, c) => s + c.amount, 0);
       const saldo = pendientes.reduce((s, c) => s + c.amount, 0);
       const nextDue = pendientes
-        .map((c) => c.issueDate)
+        .map((c) => effectiveDue(c))
         .filter((d): d is Date => d != null)
         .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null;
       return {
@@ -299,6 +349,7 @@ export class ChequesService {
         dt.setMonth(dt.getMonth() + i);
         return {
           issueDate: dt,
+          dueDate: dt,
           number: firstNumber != null ? String(firstNumber + i) : '',
           beneficiary: input.name.trim(),
           bank: input.source?.trim() || null,
@@ -367,6 +418,7 @@ export class ChequesService {
       await prisma.cheque.createMany({
         data: payload.registro.map((c) => ({
           issueDate: c.issueDate ?? null,
+          dueDate: c.dueDate ?? null,
           number: c.number?.trim() ?? '',
           beneficiary: c.beneficiary || null,
           bank: c.bank || null,
@@ -387,6 +439,7 @@ export class ChequesService {
         await prisma.cheque.createMany({
           data: g.cheques.map((c) => ({
             issueDate: c.issueDate ?? null,
+            dueDate: c.dueDate ?? null,
             number: c.number?.trim() ?? '',
             beneficiary: c.beneficiary || null,
             bank: c.bank || g.source || null,

@@ -26,6 +26,7 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
   const [bank, setBank] = useState('');
   const [amount, setAmount] = useState('');
   const [issueDate, setIssueDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<ChequeStatus>('PENDIENTE');
   const [cashDate, setCashDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -39,6 +40,7 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
     setBank(initial?.bank ?? '');
     setAmount(initial ? String(initial.amount) : '');
     setIssueDate(initial?.issueDate ? initial.issueDate.slice(0, 10) : '');
+    setDueDate(initial?.dueDate ? initial.dueDate.slice(0, 10) : '');
     setStatus(initial?.status ?? 'PENDIENTE');
     setCashDate(initial?.cashDate ? initial.cashDate.slice(0, 10) : '');
     setNotes(initial?.notes ?? '');
@@ -56,8 +58,9 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
         bank: bank.trim() || null,
         amount: Number(amount) || 0,
         issueDate: issueDate || null,
+        dueDate: dueDate || issueDate || null,
         status,
-        cashDate: status === 'COBRADO' ? cashDate || issueDate || null : null,
+        cashDate: status === 'COBRADO' ? cashDate || dueDate || issueDate || null : null,
         notes: notes.trim() || null,
       };
       if (isEdit && initial) await apiPatch(`/cheques/${initial.id}`, payload);
@@ -120,16 +123,22 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
           <Field label="Fecha de emisión">
             <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className="input" />
           </Field>
-          <Field label="Estado">
-            <select value={status} onChange={(e) => setStatus(e.target.value as ChequeStatus)} className="input">
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+          <Field
+            label="Se cobra el"
+            hint="Postfechado: la fecha en que se va a cobrar. Es la que sale en el calendario."
+          >
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input" />
           </Field>
         </div>
+        <Field label="Estado">
+          <select value={status} onChange={(e) => setStatus(e.target.value as ChequeStatus)} className="input">
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </Field>
         {status === 'COBRADO' && (
           <Field label="Fecha en que se cobró" hint="Si la dejas vacía, se usa la de emisión.">
             <input type="date" value={cashDate} onChange={(e) => setCashDate(e.target.value)} className="input" />

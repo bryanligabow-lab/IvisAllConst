@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateChequeModal } from '@/components/forms/CreateChequeModal';
 import { CreateChequeGroupModal } from '@/components/forms/CreateChequeGroupModal';
+import { ChequesCalendar } from '@/components/ui/ChequesCalendar';
 import { apiGet, apiPost } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
@@ -31,7 +32,7 @@ const STATUS_LABEL: Record<ChequeStatus, string> = {
 
 export default function ChequesPage() {
   const canWrite = useAuthStore().can('cheques.write');
-  const [tab, setTab] = useState<'registro' | 'maquinaria'>('registro');
+  const [tab, setTab] = useState<'registro' | 'calendario' | 'maquinaria'>('registro');
 
   const { data: overview, mutate: mutateOverview } = useSWR<ChequesOverview>(
     '/cheques/overview',
@@ -76,14 +77,19 @@ export default function ChequesPage() {
         <TabBtn active={tab === 'registro'} onClick={() => setTab('registro')}>
           Registro
         </TabBtn>
+        <TabBtn active={tab === 'calendario'} onClick={() => setTab('calendario')}>
+          Calendario
+        </TabBtn>
         <TabBtn active={tab === 'maquinaria'} onClick={() => setTab('maquinaria')}>
           Maquinaria
         </TabBtn>
       </div>
 
-      {tab === 'registro' ? (
+      {tab === 'registro' && (
         <RegistroTab bancos={overview?.bancos ?? []} canWrite={canWrite} onChanged={refreshAll} />
-      ) : (
+      )}
+      {tab === 'calendario' && <ChequesCalendar canWrite={canWrite} onChanged={refreshAll} />}
+      {tab === 'maquinaria' && (
         <MaquinariaTab bancos={overview?.bancos ?? []} canWrite={canWrite} onChanged={refreshAll} />
       )}
     </AppShell>
@@ -126,7 +132,7 @@ function ProximosAlert({ overview }: { overview: ChequesOverview }) {
                   {p.number ? ` · #${p.number}` : ''}
                 </div>
                 <div className="text-[10px] text-ink-tertiary">
-                  {p.bank ?? ''} · {formatCalendarDate(p.issueDate)}
+                  {p.bank ?? ''} · se cobra {formatCalendarDate(p.dueDate ?? p.issueDate)}
                 </div>
               </div>
               <div className="shrink-0 text-right">
@@ -202,6 +208,8 @@ function RegistroTab({
         )}
       </div>
 
+      {canWrite && status === 'PENDIENTE' && <PonerAlDia onDone={refresh} />}
+
       <div className="mb-3 flex flex-wrap gap-1.5">
         {(['PENDIENTE', 'COBRADO', 'ANULADO', 'ALL'] as const).map((s) => (
           <button
@@ -266,6 +274,67 @@ function RegistroTab({
   );
 }
 
+// Puesta al día: marca cobrados todos los pendientes hasta una fecha. Sirve para
+// el histórico ("todo lo de antes ya se cobró") y deja pendiente solo lo de hoy.
+function PonerAlDia({ onDone }: { onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const [until, setUntil] = useState(yesterday);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = (await apiPost('/cheques/bulk-cash', { until })) as { updated: number };
+      setMsg(`${r.updated} cheques marcados como cobrados.`);
+      onDone();
+    } catch {
+      setMsg('No se pudo completar.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mb-3 w-full rounded-md border border-dashed border-surface-border py-2 text-xs text-ink-secondary hover:border-brand/60 hover:text-ink-primary"
+      >
+        ⏩ Poner al día (marcar cobrados los anteriores)
+      </button>
+    );
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border border-brand/40 bg-surface p-3">
+      <div className="mb-2 text-xs text-ink-secondary">
+        Marca como <strong>cobrados</strong> todos los pendientes que se cobraban hasta esta fecha:
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          value={until}
+          onChange={(e) => setUntil(e.target.value)}
+          className="input text-sm"
+        />
+        <button onClick={run} disabled={busy} className="btn-primary text-xs disabled:opacity-50">
+          {busy ? 'Aplicando…' : 'Aplicar'}
+        </button>
+        <button onClick={() => setOpen(false)} className="btn-secondary text-xs">
+          Cancelar
+        </button>
+      </div>
+      {msg && <div className="mt-2 text-xs font-medium text-success">{msg}</div>}
+      <div className="mt-1 text-[10px] text-ink-tertiary">
+        Cada cheque queda con su propia fecha de cobro. Se puede deshacer uno por uno.
+      </div>
+    </div>
+  );
+}
+
 function ChequeCard({
   cheque: c,
   canWrite,
@@ -308,8 +377,9 @@ function ChequeCard({
         <div>
           <div className="text-lg font-semibold tracking-tight">{formatCurrency(c.amount)}</div>
           <div className="text-[10px] text-ink-tertiary">
-            📅 Emitido {formatCalendarDate(c.issueDate)}
-            {c.status === 'COBRADO' && c.cashDate ? ` · Cobrado ${formatCalendarDate(c.cashDate)}` : ''}
+            {c.status === 'COBRADO'
+              ? `✅ Cobrado ${formatCalendarDate(c.cashDate ?? c.dueDate ?? c.issueDate)}`
+              : `📅 Se cobra ${formatCalendarDate(c.dueDate ?? c.issueDate)}`}
           </div>
         </div>
         {canWrite && (
@@ -320,7 +390,7 @@ function ChequeCard({
                 disabled={busy}
                 className="rounded-md bg-success px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
-                ✓ Cobrado
+                Marcar cobrado
               </button>
             )}
             {c.status === 'COBRADO' && (

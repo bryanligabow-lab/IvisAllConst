@@ -13,6 +13,8 @@ import { ChequesService, CHEQUE_STATUSES } from './cheques.service';
 
 const chequeBodySchema = z.object({
   issueDate: calendarDateSchema.nullish(),
+  // Fecha en que se VA a cobrar (postfechado) — la que alimenta el calendario.
+  dueDate: calendarDateSchema.nullish(),
   number: z.string().max(40).optional(),
   beneficiary: z.string().max(200).nullish(),
   bank: z.string().max(120).nullish(),
@@ -59,6 +61,17 @@ chequesRouter.post(
   requirePermission(PERMISSIONS.CHEQUES_WRITE),
   asyncHandler(async (req, res) => {
     return success(res, await ChequesService.bulkImport(req.body, req.user?.id));
+  }),
+);
+
+// Puesta al día: marca cobrados todos los pendientes con fecha de cobro <= until.
+const bulkCashSchema = z.object({ until: calendarDateSchema });
+chequesRouter.post(
+  '/bulk-cash',
+  requirePermission(PERMISSIONS.CHEQUES_WRITE),
+  validate(bulkCashSchema),
+  asyncHandler(async (req, res) => {
+    return success(res, await ChequesService.bulkMarkCashedUntil(req.body.until));
   }),
 );
 

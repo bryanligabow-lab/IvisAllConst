@@ -385,6 +385,7 @@ export type ChequeStatus = 'COBRADO' | 'PENDIENTE' | 'VENCIDO' | 'ANULADO';
 export interface Cheque {
   id: string;
   issueDate: string | null;
+  dueDate: string | null;
   number: string;
   beneficiary: string | null;
   bank: string | null;
@@ -414,6 +415,7 @@ export interface ChequesOverview {
     bank: string | null;
     amount: number;
     issueDate: string | null;
+    dueDate: string | null;
     groupName: string | null;
     daysUntil: number;
     overdue: boolean;
