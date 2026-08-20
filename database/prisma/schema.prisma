@@ -1022,7 +1022,8 @@ model Cheque {
   dueDate     DateTime? @map("due_date")
   number      String    @default("")          // Nro de cheque (algunos en blanco)
   beneficiary String?
-  bank        String?
+  bank        String?   // libre (legacy). La fuente de verdad es chequeraId.
+  chequeraId  String?   @map("chequera_id")
   account     String?
   amount      Float     @default(0)
   cashDate    DateTime? @map("cash_date")     // Fecha en que YA se cobró
@@ -1036,12 +1037,32 @@ model Cheque {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  group ChequeGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  group    ChequeGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  chequera Chequera?    @relation(fields: [chequeraId], references: [id], onDelete: SetNull)
 
+  @@index([chequeraId])
   @@index([status])
   @@index([issueDate])
   @@index([dueDate])
   @@index([groupId])
   @@index([deletedAt])
   @@map("cheques")
+}
+
+// Chequera: una libreta de cheques de una empresa en un banco. Reemplaza el
+// campo libre `Cheque.bank` (que traía variantes del mismo banco escritas
+// distinto). El "próximo folio" se calcula del número más alto usado.
+model Chequera {
+  id        String    @id            // slug: "creacom-gye"
+  corto     String                   // "Creacom · Guayaquil" (lo que se muestra)
+  empresa   String
+  banco     String
+  orderIndex Int      @default(0) @map("order_index")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  cheques Cheque[]
+
+  @@map("chequeras")
 }

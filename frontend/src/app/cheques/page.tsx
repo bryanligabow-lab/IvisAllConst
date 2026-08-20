@@ -1,259 +1,139 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateChequeModal } from '@/components/forms/CreateChequeModal';
 import { CreateChequeGroupModal } from '@/components/forms/CreateChequeGroupModal';
 import { ChequesCalendar } from '@/components/ui/ChequesCalendar';
+import { ResumenTab } from '@/components/cheques/ResumenTab';
+import { CuentasTab } from '@/components/cheques/CuentasTab';
+import { ChequeDetalle } from '@/components/cheques/ChequeDetalle';
 import { apiGet, apiPost } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import type {
   Cheque,
   ChequeStatus,
-  ChequesOverview,
+  Chequera,
   ChequeGroupSummary,
   ChequeGroupDetail,
 } from '@/types';
 
-const STATUS_BADGE: Record<ChequeStatus, string> = {
-  PENDIENTE: 'badge-warn',
-  COBRADO: 'badge-ok',
-  VENCIDO: 'badge-danger',
-  ANULADO: 'badge-muted',
-};
+type Vista = 'resumen' | 'cheques' | 'calendario' | 'maquinas' | 'cuentas';
+
+const TABS: { id: Vista; label: string }[] = [
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'cheques', label: 'Cheques' },
+  { id: 'calendario', label: 'Calend.' },
+  { id: 'maquinas', label: 'Máquinas' },
+  { id: 'cuentas', label: 'Cuentas' },
+];
+
 const STATUS_LABEL: Record<ChequeStatus, string> = {
   PENDIENTE: 'Pendiente',
   COBRADO: 'Cobrado',
   VENCIDO: 'Vencido',
   ANULADO: 'Anulado',
 };
+// Barra de color del estado (acento = pendiente, tinta = cobrado).
+const STATUS_BAR: Record<ChequeStatus, string> = {
+  PENDIENTE: 'bg-brand',
+  COBRADO: 'bg-ink-primary',
+  VENCIDO: 'bg-danger',
+  ANULADO: 'bg-ink-tertiary',
+};
 
 export default function ChequesPage() {
   const canWrite = useAuthStore().can('cheques.write');
-  const [tab, setTab] = useState<'registro' | 'calendario' | 'maquinaria'>('registro');
+  const [vista, setVista] = useState<Vista>('resumen');
+  const [detalle, setDetalle] = useState<Cheque | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Cheque | null>(null);
+  const [filtroChequera, setFiltroChequera] = useState('');
+  const [rev, setRev] = useState(0); // fuerza refresco de las vistas
 
-  const { data: overview, mutate: mutateOverview } = useSWR<ChequesOverview>(
-    '/cheques/overview',
-    apiGet,
-  );
+  const { data: chequeras } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
+  const refresh = () => setRev((r) => r + 1);
 
-  const refreshAll = () => {
-    mutateOverview();
+  const irACheques = (chequeraId = '') => {
+    setFiltroChequera(chequeraId);
+    setDetalle(null);
+    setVista('cheques');
   };
 
   return (
     <AppShell>
-      <div className="mb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Cheques</h1>
-        <p className="text-xs text-ink-secondary">
-          Control de cheques y financiamientos de maquinaria
-        </p>
+      <div className="mb-3">
+        <div className="text-[10px] uppercase tracking-[.1em] text-brand">Control de cheques</div>
+        <h1 className="text-2xl font-bold tracking-tight">Chequera</h1>
       </div>
 
-      {/* KPIs */}
-      {overview && (
-        <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Kpi label="Emitido" value={formatCurrency(overview.totals.emitido)} />
-          <Kpi label="Cobrado" value={formatCurrency(overview.totals.cobrado)} tone="success" />
-          <Kpi
-            label="Pendiente"
-            value={formatCurrency(overview.totals.pendiente)}
-            hint={`${overview.totals.countPendiente} cheques`}
-            tone="warning"
-          />
-          <Kpi label="Cheques" value={String(overview.totals.count)} />
-        </div>
-      )}
-
-      {/* Próximos a cobrar — la alerta */}
-      {overview && overview.proximos.length > 0 && (
-        <ProximosAlert overview={overview} />
-      )}
-
-      {/* Tabs */}
-      <div className="mb-3 flex gap-2 border-b border-surface-border">
-        <TabBtn active={tab === 'registro'} onClick={() => setTab('registro')}>
-          Registro
-        </TabBtn>
-        <TabBtn active={tab === 'calendario'} onClick={() => setTab('calendario')}>
-          Calendario
-        </TabBtn>
-        <TabBtn active={tab === 'maquinaria'} onClick={() => setTab('maquinaria')}>
-          Maquinaria
-        </TabBtn>
-      </div>
-
-      {tab === 'registro' && (
-        <RegistroTab bancos={overview?.bancos ?? []} canWrite={canWrite} onChanged={refreshAll} />
-      )}
-      {tab === 'calendario' && <ChequesCalendar canWrite={canWrite} onChanged={refreshAll} />}
-      {tab === 'maquinaria' && (
-        <MaquinariaTab bancos={overview?.bancos ?? []} canWrite={canWrite} onChanged={refreshAll} />
-      )}
-    </AppShell>
-  );
-}
-
-function ProximosAlert({ overview }: { overview: ChequesOverview }) {
-  const [open, setOpen] = useState(true);
-  const overdue = overview.proximos.filter((p) => p.overdue).length;
-  return (
-    <div className="mb-4 rounded-lg border border-warning/40 bg-warning-soft/40">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔔</span>
-          <div>
-            <div className="text-sm font-semibold text-ink-primary">
-              Próximos a cobrar ({overview.proximos.length})
-            </div>
-            <div className="text-[11px] text-ink-secondary">
-              {formatCurrency(overview.proximosMonto)}
-              {overdue > 0 && <span className="text-danger"> · {overdue} atrasados</span>}
-            </div>
-          </div>
-        </div>
-        <span className="text-ink-tertiary">{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div className="max-h-72 space-y-1.5 overflow-y-auto px-3 pb-3">
-          {overview.proximos.slice(0, 40).map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between gap-2 rounded-md bg-surface px-3 py-2 text-xs"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-medium text-ink-primary">
-                  {p.beneficiary || p.groupName || 'Sin beneficiario'}
-                  {p.number ? ` · #${p.number}` : ''}
-                </div>
-                <div className="text-[10px] text-ink-tertiary">
-                  {p.bank ?? ''} · se cobra {formatCalendarDate(p.dueDate ?? p.issueDate)}
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="font-semibold">{formatCurrency(p.amount)}</div>
-                <div className={`text-[10px] ${p.overdue ? 'text-danger' : 'text-warning'}`}>
-                  {p.overdue
-                    ? `atrasado ${Math.abs(p.daysUntil)}d`
-                    : p.daysUntil === 0
-                      ? 'hoy'
-                      : `en ${p.daysUntil}d`}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---- Registro ----
-
-function RegistroTab({
-  bancos,
-  canWrite,
-  onChanged,
-}: {
-  bancos: string[];
-  canWrite: boolean;
-  onChanged: () => void;
-}) {
-  const [status, setStatus] = useState<ChequeStatus | 'ALL'>('PENDIENTE');
-  const [bank, setBank] = useState('');
-  const [q, setQ] = useState('');
-  const [limit, setLimit] = useState(30);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing] = useState<Cheque | null>(null);
-
-  const params = new URLSearchParams();
-  if (status !== 'ALL') params.set('status', status);
-  if (bank) params.set('bank', bank);
-  if (q.trim()) params.set('q', q.trim());
-  const { data, isLoading, mutate } = useSWR<Cheque[]>(`/cheques?${params.toString()}`, apiGet);
-
-  const refresh = () => {
-    mutate();
-    onChanged();
-  };
-
-  const shown = (data ?? []).slice(0, limit);
-
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="🔍 Buscar beneficiario, nº…"
-          className="input min-w-[160px] flex-1 text-sm"
-        />
-        <select value={bank} onChange={(e) => setBank(e.target.value)} className="input text-sm">
-          <option value="">Todos los bancos</option>
-          {bancos.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
-        {canWrite && (
-          <button onClick={() => setShowCreate(true)} className="btn-primary whitespace-nowrap text-sm">
-            + Nuevo cheque
-          </button>
-        )}
-      </div>
-
-      {canWrite && status === 'PENDIENTE' && <PonerAlDia onDone={refresh} />}
-
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        {(['PENDIENTE', 'COBRADO', 'ANULADO', 'ALL'] as const).map((s) => (
+      {/* Tabs: 5 columnas, plano, sin esquinas redondeadas */}
+      <div className="mb-4 grid grid-cols-5 border-y-2 border-surface-border">
+        {TABS.map((t) => (
           <button
-            key={s}
+            key={t.id}
             onClick={() => {
-              setStatus(s);
-              setLimit(30);
+              setVista(t.id);
+              setDetalle(null);
             }}
-            className={`rounded-full border px-3 py-1.5 text-xs ${
-              status === s
-                ? 'border-brand bg-brand text-white'
-                : 'border-surface-border text-ink-secondary hover:text-ink-primary'
+            className={`border-r border-surface-border py-2.5 text-[10px] font-bold uppercase tracking-[.06em] last:border-r-0 ${
+              vista === t.id ? 'bg-ink-primary text-white' : 'text-ink-secondary'
             }`}
           >
-            {s === 'ALL' ? 'Todos' : STATUS_LABEL[s]}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
-      {data && data.length === 0 && (
-        <div className="rounded-lg border border-dashed border-surface-border bg-surface-muted/40 p-8 text-center text-sm text-ink-secondary">
-          No hay cheques con estos filtros.
-        </div>
+      {detalle ? (
+        <ChequeDetalle
+          cheque={detalle}
+          chequeras={chequeras ?? []}
+          canWrite={canWrite}
+          onBack={() => setDetalle(null)}
+          onEdit={() => setEditing(detalle)}
+          onChanged={() => {
+            refresh();
+            setDetalle(null);
+          }}
+        />
+      ) : (
+        <>
+          {vista === 'resumen' && (
+            <ResumenTab
+              key={rev}
+              onVerCheques={() => irACheques()}
+              onVerCalendario={() => setVista('calendario')}
+              onVerMaquinas={() => setVista('maquinas')}
+            />
+          )}
+          {vista === 'cheques' && (
+            <ChequesTab
+              key={rev}
+              chequeras={chequeras ?? []}
+              chequeraId={filtroChequera}
+              onChequera={setFiltroChequera}
+              onOpen={setDetalle}
+              canWrite={canWrite}
+              onChanged={refresh}
+            />
+          )}
+          {vista === 'calendario' && (
+            <ChequesCalendar key={rev} canWrite={canWrite} onChanged={refresh} />
+          )}
+          {vista === 'maquinas' && <MaquinasTab key={rev} canWrite={canWrite} onChanged={refresh} />}
+          {vista === 'cuentas' && <CuentasTab key={rev} onVerCheques={irACheques} />}
+        </>
       )}
 
-      <div className="space-y-2">
-        {shown.map((c) => (
-          <ChequeCard
-            key={c.id}
-            cheque={c}
-            canWrite={canWrite}
-            onEdit={() => setEditing(c)}
-            onChanged={refresh}
-          />
-        ))}
-      </div>
-
-      {data && data.length > limit && (
+      {canWrite && !detalle && (
         <button
-          onClick={() => setLimit((l) => l + 50)}
-          className="mt-3 w-full rounded-md border border-surface-border py-2.5 text-sm text-ink-secondary hover:border-brand/60 hover:text-ink-primary"
+          onClick={() => setShowCreate(true)}
+          className="fixed bottom-6 right-4 z-40 bg-brand px-4 py-3.5 text-sm font-bold uppercase tracking-[.04em] text-white shadow-card"
         >
-          Ver más ({data.length - limit} restantes)
+          + Cheque
         </button>
       )}
 
@@ -261,97 +141,152 @@ function RegistroTab({
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onSaved={refresh}
-        bancos={bancos}
+        chequeras={chequeras ?? []}
       />
       <CreateChequeModal
         open={!!editing}
         onClose={() => setEditing(null)}
-        onSaved={refresh}
+        onSaved={() => {
+          refresh();
+          setDetalle(null);
+        }}
         initial={editing}
-        bancos={bancos}
+        chequeras={chequeras ?? []}
       />
-    </div>
+    </AppShell>
   );
 }
 
-// Puesta al día: marca cobrados todos los pendientes hasta una fecha. Sirve para
-// el histórico ("todo lo de antes ya se cobró") y deja pendiente solo lo de hoy.
-function PonerAlDia({ onDone }: { onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  const [until, setUntil] = useState(yesterday);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+// ---------------- Cheques (lista) ----------------
 
-  async function run() {
-    setBusy(true);
-    setMsg(null);
-    try {
-      const r = (await apiPost('/cheques/bulk-cash', { until })) as { updated: number };
-      setMsg(`${r.updated} cheques marcados como cobrados.`);
-      onDone();
-    } catch {
-      setMsg('No se pudo completar.');
-    } finally {
-      setBusy(false);
-    }
-  }
+function ChequesTab({
+  chequeras,
+  chequeraId,
+  onChequera,
+  onOpen,
+  canWrite,
+  onChanged,
+}: {
+  chequeras: Chequera[];
+  chequeraId: string;
+  onChequera: (id: string) => void;
+  onOpen: (c: Cheque) => void;
+  canWrite: boolean;
+  onChanged: () => void;
+}) {
+  const [filtro, setFiltro] = useState<ChequeStatus | 'ALL'>('PENDIENTE');
+  const [q, setQ] = useState('');
+  const [limit, setLimit] = useState(25);
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="mb-3 w-full rounded-md border border-dashed border-surface-border py-2 text-xs text-ink-secondary hover:border-brand/60 hover:text-ink-primary"
-      >
-        ⏩ Poner al día (marcar cobrados los anteriores)
-      </button>
-    );
-  }
+  const params = new URLSearchParams({ scope: 'all' });
+  if (filtro !== 'ALL') params.set('status', filtro);
+  if (chequeraId) params.set('chequeraId', chequeraId);
+  if (q.trim()) params.set('q', q.trim());
+  const { data, isLoading, mutate } = useSWR<Cheque[]>(`/cheques?${params}`, apiGet);
+
+  const lista = data ?? [];
+  const total = lista.reduce((s, c) => s + c.amount, 0);
+  const chequeraSel = chequeras.find((c) => c.id === chequeraId);
 
   return (
-    <div className="mb-3 rounded-lg border border-brand/40 bg-surface p-3">
-      <div className="mb-2 text-xs text-ink-secondary">
-        Marca como <strong>cobrados</strong> todos los pendientes que se cobraban hasta esta fecha:
+    <div>
+      <div className="grid grid-cols-4 border-2 border-surface-border">
+        {(['PENDIENTE', 'COBRADO', 'ANULADO', 'ALL'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => {
+              setFiltro(s);
+              setLimit(25);
+            }}
+            className={`border-r border-surface-border py-2.5 text-[11px] font-bold uppercase tracking-[.04em] last:border-r-0 ${
+              filtro === s ? 'bg-brand text-white' : 'text-ink-secondary'
+            }`}
+          >
+            {s === 'PENDIENTE' ? 'Pend.' : s === 'ALL' ? 'Todos' : STATUS_LABEL[s]}
+          </button>
+        ))}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <input
-          type="date"
-          value={until}
-          onChange={(e) => setUntil(e.target.value)}
-          className="input text-sm"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por número o beneficiario"
+          className="input min-w-[150px] flex-1 text-sm"
         />
-        <button onClick={run} disabled={busy} className="btn-primary text-xs disabled:opacity-50">
-          {busy ? 'Aplicando…' : 'Aplicar'}
-        </button>
-        <button onClick={() => setOpen(false)} className="btn-secondary text-xs">
-          Cancelar
-        </button>
+        <select
+          value={chequeraId}
+          onChange={(e) => onChequera(e.target.value)}
+          className="input text-sm"
+        >
+          <option value="">Todas las chequeras</option>
+          {chequeras.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.corto}
+            </option>
+          ))}
+        </select>
       </div>
-      {msg && <div className="mt-2 text-xs font-medium text-success">{msg}</div>}
-      <div className="mt-1 text-[10px] text-ink-tertiary">
-        Cada cheque queda con su propia fecha de cobro. Se puede deshacer uno por uno.
+
+      <div className="mt-2 flex items-center justify-between border-b border-surface-border py-2 text-[11px] text-ink-secondary">
+        <span>
+          {lista.length} cheques{chequeraSel ? ` · ${chequeraSel.corto}` : ''}
+        </span>
+        <span>Total {formatCurrency(total)}</span>
       </div>
+
+      {isLoading && <div className="py-4 text-sm text-ink-secondary">Cargando…</div>}
+      {!isLoading && lista.length === 0 && (
+        <div className="py-10 text-center text-sm text-ink-tertiary">
+          No hay cheques con estos filtros.
+        </div>
+      )}
+
+      {lista.slice(0, limit).map((c) => (
+        <FilaCheque
+          key={c.id}
+          cheque={c}
+          canWrite={canWrite}
+          onOpen={() => onOpen(c)}
+          onChanged={() => {
+            mutate();
+            onChanged();
+          }}
+        />
+      ))}
+
+      {lista.length > limit && (
+        <button
+          onClick={() => setLimit((l) => l + 50)}
+          className="mt-3 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase text-ink-secondary"
+        >
+          Ver más ({lista.length - limit})
+        </button>
+      )}
+      <div className="h-16" />
     </div>
   );
 }
 
-function ChequeCard({
+function FilaCheque({
   cheque: c,
   canWrite,
-  onEdit,
+  onOpen,
   onChanged,
 }: {
   cheque: Cheque;
   canWrite: boolean;
-  onEdit: () => void;
+  onOpen: () => void;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const due = c.dueDate ?? c.issueDate;
 
-  async function toggleCashed(cashed: boolean) {
+  async function marcar(e: React.MouseEvent) {
+    e.stopPropagation();
     setBusy(true);
     try {
-      await apiPost(`/cheques/${c.id}/cash`, { cashed });
+      await apiPost(`/cheques/${c.id}/cash`, { cashed: c.status !== 'COBRADO' });
       onChanged();
     } finally {
       setBusy(false);
@@ -359,196 +294,186 @@ function ChequeCard({
   }
 
   return (
-    <div className="rounded-lg border border-surface-border bg-surface p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink-primary">
-            {c.beneficiary || 'Sin beneficiario'}
-          </div>
-          <div className="truncate text-[11px] text-ink-secondary">
-            {c.number ? `Cheque #${c.number}` : 'Sin número'}
-            {c.bank ? ` · ${c.bank}` : ''}
-          </div>
+    <div
+      onClick={onOpen}
+      className="flex cursor-pointer items-center gap-3 border-b border-surface-border py-3"
+    >
+      <span className={`h-9 w-1.5 shrink-0 ${STATUS_BAR[c.status]}`} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold text-ink-primary">
+          {c.beneficiary || 'Sin beneficiario'}
+          {c.number && <span className="ml-1 text-[10px] text-ink-tertiary">#{c.number}</span>}
         </div>
-        <span className={`${STATUS_BADGE[c.status]} shrink-0`}>{STATUS_LABEL[c.status]}</span>
-      </div>
-
-      <div className="mt-2 flex items-end justify-between gap-2">
-        <div>
-          <div className="text-lg font-semibold tracking-tight">{formatCurrency(c.amount)}</div>
-          <div className="text-[10px] text-ink-tertiary">
-            {c.status === 'COBRADO'
-              ? `✅ Cobrado ${formatCalendarDate(c.cashDate ?? c.dueDate ?? c.issueDate)}`
-              : `📅 Se cobra ${formatCalendarDate(c.dueDate ?? c.issueDate)}`}
-          </div>
+        <div className="truncate text-[11px] text-ink-tertiary">
+          {c.status === 'COBRADO'
+            ? `cobrado ${formatCalendarDate(c.cashDate ?? due)}`
+            : `cobro ${formatCalendarDate(due)}`}
         </div>
-        {canWrite && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {c.status === 'PENDIENTE' && (
-              <button
-                onClick={() => toggleCashed(true)}
-                disabled={busy}
-                className="rounded-md bg-success px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-              >
-                Marcar cobrado
-              </button>
-            )}
-            {c.status === 'COBRADO' && (
-              <button
-                onClick={() => toggleCashed(false)}
-                disabled={busy}
-                className="rounded-md border border-surface-border px-2 py-1.5 text-[11px] text-ink-secondary disabled:opacity-50"
-              >
-                Deshacer
-              </button>
-            )}
-            <button
-              onClick={onEdit}
-              className="rounded-md px-1.5 py-1.5 text-ink-tertiary hover:text-ink-primary"
-              title="Editar"
-            >
-              ✏️
-            </button>
-          </div>
-        )}
       </div>
-      {c.notes && <div className="mt-1 text-[10px] italic text-ink-tertiary">{c.notes}</div>}
+      <div className="shrink-0 text-right">
+        <div className="text-[15px] font-bold">{formatCurrency(c.amount)}</div>
+        <div className="text-[10px] uppercase text-ink-tertiary">{STATUS_LABEL[c.status]}</div>
+      </div>
+      {canWrite && c.status !== 'ANULADO' && (
+        <button
+          onClick={marcar}
+          disabled={busy}
+          className={`shrink-0 px-2 py-1.5 text-[10px] font-bold uppercase disabled:opacity-50 ${
+            c.status === 'COBRADO'
+              ? 'border border-surface-border text-ink-tertiary'
+              : 'bg-success text-white'
+          }`}
+        >
+          {c.status === 'COBRADO' ? '↩' : 'Cobrar'}
+        </button>
+      )}
     </div>
   );
 }
 
-// ---- Maquinaria ----
+// ---------------- Máquinas ----------------
 
-function MaquinariaTab({
-  bancos,
-  canWrite,
-  onChanged,
-}: {
-  bancos: string[];
-  canWrite: boolean;
-  onChanged: () => void;
-}) {
-  const { data: groups, isLoading, mutate } = useSWR<ChequeGroupSummary[]>('/cheques/groups', apiGet);
+function MaquinasTab({ canWrite, onChanged }: { canWrite: boolean; onChanged: () => void }) {
+  const { data, isLoading, mutate } = useSWR<ChequeGroupSummary[]>('/cheques/groups', apiGet);
+  const [abierta, setAbierta] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+
+  const grupos = data ?? [];
+  const saldo = grupos.reduce((s, g) => s + g.saldo, 0);
+  const restantes = grupos.reduce((s, g) => s + g.faltan, 0);
+  const activas = grupos.filter((g) => g.faltan > 0).length;
+  const pagadas = grupos.filter((g) => g.faltan === 0).length;
 
   const refresh = () => {
     mutate();
     onChanged();
   };
 
+  if (isLoading) return <div className="py-6 text-sm text-ink-secondary">Cargando…</div>;
+
   return (
     <div>
-      {canWrite && (
-        <div className="mb-3 flex justify-end">
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm">
-            + Financiamiento
-          </button>
+      <div className="border-b-2 border-surface-border pb-3">
+        <div className="text-[10px] uppercase tracking-[.1em] text-ink-secondary">
+          Falta por cubrir
         </div>
-      )}
-
-      {isLoading && <div className="text-sm text-ink-secondary">Cargando…</div>}
-      {groups && groups.length === 0 && (
-        <div className="rounded-lg border border-dashed border-surface-border bg-surface-muted/40 p-8 text-center text-sm text-ink-secondary">
-          Aún no hay financiamientos. Usa <strong>+ Financiamiento</strong> para agregar una
-          maquinaria pagada a cuotas.
+        <div className="text-[32px] font-bold leading-none tracking-[-.02em]">
+          {formatCurrency(saldo)}
         </div>
-      )}
-
-      <div className="space-y-3">
-        {(groups ?? []).map((g) => (
-          <GroupCard key={g.id} group={g} canWrite={canWrite} onChanged={refresh} />
-        ))}
+        <div className="mt-1 text-xs text-ink-tertiary">
+          {restantes} {restantes === 1 ? 'cuota restante' : 'cuotas restantes'} en {activas}{' '}
+          {activas === 1 ? 'máquina' : 'máquinas'}
+          {pagadas > 0 && ` · ${pagadas} ya pagada${pagadas === 1 ? '' : 's'}`}
+        </div>
       </div>
+
+      {grupos.map((g) => (
+        <MaquinaFila
+          key={g.id}
+          grupo={g}
+          abierta={abierta === g.id}
+          onToggle={() => setAbierta(abierta === g.id ? null : g.id)}
+          canWrite={canWrite}
+          onChanged={refresh}
+        />
+      ))}
+
+      {canWrite && (
+        <button
+          onClick={() => setShowCreate(true)}
+          className="mt-4 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase text-ink-secondary"
+        >
+          + Financiamiento
+        </button>
+      )}
+      <div className="h-16" />
 
       <CreateChequeGroupModal
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onSaved={refresh}
-        bancos={bancos}
       />
     </div>
   );
 }
 
-function GroupCard({
-  group: g,
+function MaquinaFila({
+  grupo: g,
+  abierta,
+  onToggle,
   canWrite,
   onChanged,
 }: {
-  group: ChequeGroupSummary;
+  grupo: ChequeGroupSummary;
+  abierta: boolean;
+  onToggle: () => void;
   canWrite: boolean;
   onChanged: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const pct = g.cuotas > 0 ? Math.round((g.pagadas / g.cuotas) * 100) : 0;
-
-  const { data: detail, mutate } = useSWR<ChequeGroupDetail>(
-    open ? `/cheques/groups/${g.id}` : null,
+  const { data: detalle, mutate } = useSWR<ChequeGroupDetail>(
+    abierta ? `/cheques/groups/${g.id}` : null,
     apiGet,
   );
-
-  const refresh = () => {
-    mutate();
-    onChanged();
-  };
+  const cuota = g.cuotas > 0 ? g.total / g.cuotas : 0;
+  const pagada = g.faltan === 0;
 
   return (
-    <div className="rounded-lg border border-surface-border bg-surface">
-      <button onClick={() => setOpen((v) => !v)} className="w-full p-3 text-left">
-        <div className="flex items-start justify-between gap-2">
+    <div className="border-b border-surface-border">
+      <button onClick={onToggle} className="w-full py-3 text-left">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink-primary">🚜 {g.name}</div>
-            {g.source && <div className="truncate text-[11px] text-ink-secondary">{g.source}</div>}
+            <div className="truncate text-base font-bold">{g.name}</div>
+            {g.source && <div className="truncate text-[11px] text-ink-tertiary">{g.source}</div>}
           </div>
-          <span className="shrink-0 text-ink-tertiary">{open ? '▾' : '▸'}</span>
-        </div>
-
-        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-          <div>
-            <div className="text-[10px] text-ink-tertiary">Faltan</div>
-            <div className="text-base font-semibold text-danger">{g.faltan}</div>
-            <div className="text-[9px] text-ink-tertiary">de {g.cuotas} cuotas</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-ink-tertiary">Saldo</div>
-            <div className="text-base font-semibold text-warning">{formatCurrency(g.saldo)}</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-ink-tertiary">Total</div>
-            <div className="text-base font-semibold">{formatCurrency(g.total)}</div>
-          </div>
-        </div>
-
-        <div className="mt-2">
-          <div className="mb-0.5 flex justify-between text-[10px] text-ink-secondary">
-            <span>{g.pagadas} pagadas</span>
-            <span>{pct}%</span>
-          </div>
-          <div className="relative h-1.5 overflow-hidden rounded-full bg-surface-muted">
-            <div className="h-full bg-success transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          {g.nextDue && (
-            <div className="mt-1 text-[10px] text-ink-tertiary">
-              Próxima cuota: {formatCalendarDate(g.nextDue)}
+          <div className="shrink-0 text-right">
+            <div className={`text-base font-bold ${pagada ? 'text-ink-tertiary' : 'text-brand'}`}>
+              {pagada ? 'Pagada' : formatCurrency(g.saldo)}
             </div>
-          )}
+            {!pagada && (
+              <div className="text-[10px] uppercase text-ink-tertiary">
+                {g.faltan} {g.faltan === 1 ? 'cuota' : 'cuotas'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Barra segmentada: un segmento por cuota */}
+        <div className="mt-2 flex gap-[3px]">
+          {Array.from({ length: g.cuotas }, (_, i) => (
+            <span key={i} className={`h-2 flex-1 ${i < g.pagadas ? 'bg-ink-primary' : 'bg-brand'}`} />
+          ))}
+        </div>
+
+        <div className="mt-1.5 flex justify-between gap-2 text-[11px] text-ink-tertiary">
+          <span className="truncate">
+            {g.pagadas} de {g.cuotas} pagadas{cuota > 0 && ` · cuota ${formatCurrency(cuota)}`}
+          </span>
+          <span className="shrink-0">
+            {pagada ? 'Cerrada' : g.nextDue ? `Termina ${formatCalendarDate(g.nextDue)}` : ''}
+          </span>
         </div>
       </button>
 
-      {open && detail && (
-        <div className="border-t border-surface-border p-3">
-          <div className="space-y-1.5">
-            {detail.cheques.map((c) => (
-              <GroupChequeRow key={c.id} cheque={c} canWrite={canWrite} onChanged={refresh} />
-            ))}
-          </div>
+      {abierta && detalle && (
+        <div className="border-t border-surface-border bg-surface-muted/40 px-1 pb-2">
+          {detalle.cheques.map((c) => (
+            <CuotaFila
+              key={c.id}
+              cheque={c}
+              canWrite={canWrite}
+              onChanged={() => {
+                mutate();
+                onChanged();
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function GroupChequeRow({
+function CuotaFila({
   cheque: c,
   canWrite,
   onChanged,
@@ -571,87 +496,28 @@ function GroupChequeRow({
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md bg-surface-muted/40 px-3 py-2">
-      <div className="min-w-0">
-        <div className="text-xs font-medium">
-          Cuota {c.installment ?? '—'}
-          {c.number ? ` · #${c.number}` : ''}
-        </div>
-        <div className="text-[10px] text-ink-tertiary">{formatCalendarDate(c.issueDate)}</div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="text-xs font-semibold">{formatCurrency(c.amount)}</span>
-        {canWrite ? (
-          <button
-            onClick={toggle}
-            disabled={busy}
-            className={`rounded-md px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${
-              cobrado
-                ? 'border border-surface-border text-ink-secondary'
-                : 'bg-success text-white'
-            }`}
-          >
-            {cobrado ? 'Pagada ✓' : 'Pagar'}
-          </button>
-        ) : (
-          <span className={cobrado ? 'badge-ok' : 'badge-warn'}>
-            {cobrado ? 'Pagada' : 'Pendiente'}
-          </span>
-        )}
-      </div>
+    <div className="flex items-center gap-2 border-b border-surface-border py-2 text-xs last:border-b-0">
+      <span className="w-6 shrink-0 text-ink-tertiary">{c.installment ?? '—'}</span>
+      <span className="w-[74px] shrink-0 font-semibold">
+        {formatCalendarDate(c.dueDate ?? c.issueDate)}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-ink-tertiary">
+        {c.number ? `#${c.number}` : ''}
+      </span>
+      <span className="w-[76px] shrink-0 text-right font-semibold">{formatCurrency(c.amount)}</span>
+      {canWrite ? (
+        <button
+          onClick={toggle}
+          disabled={busy}
+          className={`shrink-0 px-2 py-1 text-[10px] font-bold uppercase disabled:opacity-50 ${
+            cobrado ? 'border border-surface-border text-ink-tertiary' : 'bg-success text-white'
+          }`}
+        >
+          {cobrado ? '✓' : 'Pagar'}
+        </button>
+      ) : (
+        <span className={`h-2 w-2 shrink-0 ${cobrado ? 'bg-ink-primary' : 'bg-brand'}`} />
+      )}
     </div>
-  );
-}
-
-// ---- pequeños ----
-
-function Kpi({
-  label,
-  value,
-  hint,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: 'default' | 'success' | 'warning' | 'danger';
-}) {
-  const colour =
-    tone === 'success'
-      ? 'text-success'
-      : tone === 'warning'
-        ? 'text-warning'
-        : tone === 'danger'
-          ? 'text-danger'
-          : 'text-ink-primary';
-  return (
-    <div className="metric-card">
-      <div className="text-[11px] text-ink-secondary">{label}</div>
-      <div className={`mt-0.5 text-lg font-semibold tracking-tight ${colour}`}>{value}</div>
-      {hint && <div className="text-[10px] text-ink-tertiary">{hint}</div>}
-    </div>
-  );
-}
-
-function TabBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium ${
-        active
-          ? 'border-brand text-brand'
-          : 'border-transparent text-ink-secondary hover:text-ink-primary'
-      }`}
-    >
-      {children}
-    </button>
   );
 }

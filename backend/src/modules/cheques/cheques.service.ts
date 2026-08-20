@@ -1,5 +1,6 @@
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
+import { CHEQUERAS_SEED, bankToChequeraId } from './chequeras.data';
 
 export const CHEQUE_STATUSES = ['COBRADO', 'PENDIENTE', 'VENCIDO', 'ANULADO'] as const;
 export type ChequeStatus = (typeof CHEQUE_STATUSES)[number];
@@ -11,6 +12,7 @@ const chequeSelect = {
   number: true,
   beneficiary: true,
   bank: true,
+  chequeraId: true,
   account: true,
   amount: true,
   cashDate: true,
@@ -33,6 +35,7 @@ function effectiveDue(c: { dueDate?: Date | null; issueDate?: Date | null }): Da
 interface ChequeInput {
   issueDate?: Date | null;
   dueDate?: Date | null;
+  chequeraId?: string | null;
   number?: string;
   beneficiary?: string | null;
   bank?: string | null;
@@ -123,6 +126,7 @@ export class ChequesService {
     bank?: string;
     q?: string;
     scope?: string; // 'registro' (default, groupId null) | 'all'
+    chequeraId?: string;
     from?: string; // rango por fecha de cobro (calendario)
     to?: string;
   }) {
@@ -130,6 +134,7 @@ export class ChequesService {
     if (filter.scope !== 'all') where.groupId = null;
     if (filter.status) where.status = filter.status;
     if (filter.bank) where.bank = filter.bank;
+    if (filter.chequeraId) where.chequeraId = filter.chequeraId;
     if (filter.q) {
       where.OR = [
         { beneficiary: { contains: filter.q, mode: 'insensitive' } },
@@ -190,6 +195,7 @@ export class ChequesService {
         number: input.number?.trim() ?? '',
         beneficiary: input.beneficiary?.trim() || null,
         bank: input.bank?.trim() || null,
+        chequeraId: input.chequeraId ?? bankToChequeraId(input.bank),
         account: input.account?.trim() || null,
         amount: input.amount ?? 0,
         cashDate: input.cashDate ?? null,
@@ -217,6 +223,7 @@ export class ChequesService {
         ...(input.number !== undefined ? { number: input.number.trim() } : {}),
         ...(input.beneficiary !== undefined ? { beneficiary: input.beneficiary?.trim() || null } : {}),
         ...(input.bank !== undefined ? { bank: input.bank?.trim() || null } : {}),
+        ...(input.chequeraId !== undefined ? { chequeraId: input.chequeraId } : {}),
         ...(input.account !== undefined ? { account: input.account?.trim() || null } : {}),
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
         ...(input.cashDate !== undefined ? { cashDate: input.cashDate } : {}),
@@ -456,4 +463,113 @@ export class ChequesService {
     }
     return { skipped: false, created };
   }
+
+  // --- Chequeras (cuentas) ---
+
+  /** Crea las 7 chequeras si faltan y asigna la chequera a los cheques que no la tienen. */
+  static async ensureChequeras() {
+    for (const c of CHEQUERAS_SEED) {
+      await prisma.chequera.upsert({
+        where: { id: c.id },
+        update: { corto: c.corto, empresa: c.empresa, banco: c.banco, orderIndex: c.orderIndex },
+        create: { ...c },
+      });
+    }
+    // Backfill: mapear el texto libre del banco a su chequera.
+    const sinChequera = await prisma.cheque.findMany({
+      where: { deletedAt: null, chequeraId: null },
+      select: { id: true, bank: true },
+    });
+    let asignados = 0;
+    for (const ch of sinChequera) {
+      await prisma.cheque.update({
+        where: { id: ch.id },
+        data: { chequeraId: bankToChequeraId(ch.bank) },
+      });
+      asignados += 1;
+    }
+    return { chequeras: CHEQUERAS_SEED.length, asignados };
+  }
+
+  /** Chequeras con sus cifras: emitidos, pendiente y próximo folio. */
+  static async chequeras() {
+    const [libretas, cheques] = await Promise.all([
+      prisma.chequera.findMany({ where: { deletedAt: null }, orderBy: { orderIndex: 'asc' } }),
+      prisma.cheque.findMany({
+        where: { deletedAt: null },
+        select: { chequeraId: true, amount: true, status: true, number: true },
+      }),
+    ]);
+    return libretas.map((l) => {
+      const propios = cheques.filter((c) => c.chequeraId === l.id);
+      const activos = propios.filter((c) => c.status !== 'ANULADO');
+      const pendiente = propios
+        .filter((c) => c.status === 'PENDIENTE')
+        .reduce((s, c) => s + c.amount, 0);
+      const nums = propios
+        .map((c) => Number(c.number))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      return {
+        id: l.id,
+        corto: l.corto,
+        empresa: l.empresa,
+        banco: l.banco,
+        emitidos: activos.length,
+        emitidoMonto: activos.reduce((s, c) => s + c.amount, 0),
+        pendiente,
+        pendientesCount: propios.filter((c) => c.status === 'PENDIENTE').length,
+        proximoFolio: nums.length ? Math.max(...nums) + 1 : null,
+      };
+    });
+  }
+
+  /** Resumen tipo dashboard: la foto del negocio en 5 segundos. */
+  static async resumen() {
+    const [cheques, grupos] = await Promise.all([
+      prisma.cheque.findMany({
+        where: { deletedAt: null },
+        select: { ...chequeSelect, chequera: { select: { corto: true } } },
+      }),
+      this.groupsOverview(),
+    ]);
+    const hoy = startOfToday();
+    const activos = cheques.filter((c) => c.status !== 'ANULADO');
+    const pend = activos.filter((c) => c.status === 'PENDIENTE');
+    const cob = activos.filter((c) => c.status === 'COBRADO');
+
+    const conFecha = pend
+      .map((c) => ({ c, due: effectiveDue(c) }))
+      .filter((x): x is { c: (typeof pend)[number]; due: Date } => x.due != null)
+      .map((x) => ({ ...x, dias: Math.round((new Date(x.due).getTime() - hoy) / 86_400_000) }))
+      .sort((a, b) => a.dias - b.dias);
+
+    const fila = (x: (typeof conFecha)[number]) => ({
+      id: x.c.id,
+      number: x.c.number,
+      beneficiary: x.c.beneficiary,
+      chequera: x.c.chequera?.corto ?? null,
+      amount: x.c.amount,
+      dueDate: x.due,
+      dias: x.dias,
+    });
+
+    return {
+      totalPendiente: pend.reduce((s, c) => s + c.amount, 0),
+      countPendiente: pend.length,
+      totalCobrado: cob.reduce((s, c) => s + c.amount, 0),
+      countCobrado: cob.length,
+      countTotal: activos.length,
+      // Atención: vencidos (ya pasó la fecha) + los que se cobran en <= 3 días.
+      atencion: conFecha.filter((x) => x.dias <= 3).slice(0, 6).map(fila),
+      // Próximos 7 días.
+      proximos7: conFecha.filter((x) => x.dias >= 0 && x.dias <= 7).map(fila),
+      maquinaria: {
+        saldo: grupos.reduce((s, g) => s + g.saldo, 0),
+        cuotasRestantes: grupos.reduce((s, g) => s + g.faltan, 0),
+        activas: grupos.filter((g) => g.faltan > 0).length,
+        pagadas: grupos.filter((g) => g.faltan === 0).length,
+      },
+    };
+  }
+
 }

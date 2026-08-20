@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiPost, apiPatch, ApiClientError } from '@/lib/api';
-import type { Cheque, ChequeStatus } from '@/types';
+import type { Cheque, ChequeStatus, Chequera } from '@/types';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   initial?: Cheque | null;
-  bancos?: string[];
+  chequeras?: Chequera[];
 }
 
 const STATUS_OPTIONS: { value: ChequeStatus; label: string }[] = [
@@ -19,11 +19,11 @@ const STATUS_OPTIONS: { value: ChequeStatus; label: string }[] = [
   { value: 'ANULADO', label: 'Anulado' },
 ];
 
-export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = [] }: Props) {
+export function CreateChequeModal({ open, onClose, onSaved, initial, chequeras = [] }: Props) {
   const isEdit = !!initial;
   const [number, setNumber] = useState('');
   const [beneficiary, setBeneficiary] = useState('');
-  const [bank, setBank] = useState('');
+  const [chequeraId, setChequeraId] = useState('');
   const [amount, setAmount] = useState('');
   const [issueDate, setIssueDate] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -37,7 +37,7 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
     if (!open) return;
     setNumber(initial?.number ?? '');
     setBeneficiary(initial?.beneficiary ?? '');
-    setBank(initial?.bank ?? '');
+    setChequeraId(initial?.chequeraId ?? '');
     setAmount(initial ? String(initial.amount) : '');
     setIssueDate(initial?.issueDate ? initial.issueDate.slice(0, 10) : '');
     setDueDate(initial?.dueDate ? initial.dueDate.slice(0, 10) : '');
@@ -55,7 +55,7 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
       const payload = {
         number: number.trim(),
         beneficiary: beneficiary.trim() || null,
-        bank: bank.trim() || null,
+        chequeraId: chequeraId || null,
         amount: Number(amount) || 0,
         issueDate: issueDate || null,
         dueDate: dueDate || issueDate || null,
@@ -104,20 +104,20 @@ export function CreateChequeModal({ open, onClose, onSaved, initial, bancos = []
             placeholder="A quién / concepto"
           />
         </Field>
-        <Field label="Banco / cuenta">
-          <input
-            value={bank}
-            onChange={(e) => setBank(e.target.value)}
-            list="bancos-list"
-            maxLength={120}
+        <Field label="Chequera" hint="De qué libreta sale el cheque.">
+          <select
+            value={chequeraId}
+            onChange={(e) => setChequeraId(e.target.value)}
             className="input"
-            placeholder="Ej. CREACOM GUAYAQUIL"
-          />
-          <datalist id="bancos-list">
-            {bancos.map((b) => (
-              <option key={b} value={b} />
+          >
+            <option value="">— Elegir chequera —</option>
+            {chequeras.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.corto}
+                {c.proximoFolio ? ` (próx. #${c.proximoFolio})` : ''}
+              </option>
             ))}
-          </datalist>
+          </select>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fecha de emisión">

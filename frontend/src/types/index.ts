@@ -386,6 +386,7 @@ export interface Cheque {
   id: string;
   issueDate: string | null;
   dueDate: string | null;
+  chequeraId?: string | null;
   number: string;
   beneficiary: string | null;
   bank: string | null;
@@ -447,4 +448,42 @@ export interface ChequeGroupDetail {
   total: number;
   montoPagado: number;
   saldo: number;
+}
+
+export interface Chequera {
+  id: string;
+  corto: string;
+  empresa: string;
+  banco: string;
+  emitidos: number;
+  emitidoMonto: number;
+  pendiente: number;
+  pendientesCount: number;
+  proximoFolio: number | null;
+}
+
+export interface ChequeResumenRow {
+  id: string;
+  number: string;
+  beneficiary: string | null;
+  chequera: string | null;
+  amount: number;
+  dueDate: string;
+  dias: number;
+}
+
+export interface ChequesResumen {
+  totalPendiente: number;
+  countPendiente: number;
+  totalCobrado: number;
+  countCobrado: number;
+  countTotal: number;
+  atencion: ChequeResumenRow[];
+  proximos7: ChequeResumenRow[];
+  maquinaria: {
+    saldo: number;
+    cuotasRestantes: number;
+    activas: number;
+    pagadas: number;
+  };
 }

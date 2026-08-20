@@ -18,6 +18,7 @@ const chequeBodySchema = z.object({
   number: z.string().max(40).optional(),
   beneficiary: z.string().max(200).nullish(),
   bank: z.string().max(120).nullish(),
+  chequeraId: z.string().max(40).nullish(),
   account: z.string().max(80).nullish(),
   amount: z.coerce.number().nonnegative().optional(),
   cashDate: calendarDateSchema.nullish(),
@@ -34,6 +35,33 @@ chequesRouter.get(
   asyncHandler(async (req, res) => {
     const days = Math.min(90, Math.max(1, Number(req.query.days) || 15));
     return success(res, await ChequesService.overview(days));
+  }),
+);
+
+// Resumen tipo dashboard (pantalla principal del módulo).
+chequesRouter.get(
+  '/resumen',
+  requirePermission(PERMISSIONS.CHEQUES_READ),
+  asyncHandler(async (_req, res) => {
+    return success(res, await ChequesService.resumen());
+  }),
+);
+
+// Chequeras (cuentas) con sus cifras y próximo folio.
+chequesRouter.get(
+  '/chequeras',
+  requirePermission(PERMISSIONS.CHEQUES_READ),
+  asyncHandler(async (_req, res) => {
+    return success(res, await ChequesService.chequeras());
+  }),
+);
+
+// Crea las chequeras y asigna la suya a los cheques que aún no la tienen.
+chequesRouter.post(
+  '/chequeras/sync',
+  requirePermission(PERMISSIONS.CHEQUES_WRITE),
+  asyncHandler(async (_req, res) => {
+    return success(res, await ChequesService.ensureChequeras());
   }),
 );
 
