@@ -9,7 +9,7 @@ import { ChequesCalendar } from '@/components/ui/ChequesCalendar';
 import { ResumenTab } from '@/components/cheques/ResumenTab';
 import { CuentasTab } from '@/components/cheques/CuentasTab';
 import { ChequeDetalle } from '@/components/cheques/ChequeDetalle';
-import { apiGet, apiPost } from '@/lib/api';
+import { apiGet, apiPost, apiPatch } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import type {
@@ -416,13 +416,49 @@ function MaquinaFila({
   );
   const cuota = g.cuotas > 0 ? g.total / g.cuotas : 0;
   const pagada = g.faltan === 0;
+  const [editando, setEditando] = useState(false);
+
+  if (editando) {
+    return (
+      <RenombrarMaquina
+        grupo={g}
+        onClose={() => setEditando(false)}
+        onSaved={() => {
+          setEditando(false);
+          onChanged();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="border-b border-surface-border">
       <button onClick={onToggle} className="w-full py-3 text-left">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-base font-bold">{g.name}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-base font-bold">{g.name}</span>
+              {canWrite && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditando(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      setEditando(true);
+                    }
+                  }}
+                  className="shrink-0 cursor-pointer px-1 text-xs text-ink-tertiary hover:text-brand"
+                  title="Cambiar el nombre"
+                >
+                  ✏️
+                </span>
+              )}
+            </div>
             {g.source && <div className="truncate text-[11px] text-ink-tertiary">{g.source}</div>}
           </div>
           <div className="shrink-0 text-right">
@@ -518,6 +554,75 @@ function CuotaFila({
       ) : (
         <span className={`h-2 w-2 shrink-0 ${cobrado ? 'bg-ink-primary' : 'bg-brand'}`} />
       )}
+    </div>
+  );
+}
+
+/** Cambiar el nombre (y la chequera) de una máquina/financiamiento. */
+function RenombrarMaquina({
+  grupo: g,
+  onClose,
+  onSaved,
+}: {
+  grupo: ChequeGroupSummary;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(g.name);
+  const [source, setSource] = useState(g.source ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function guardar() {
+    if (!name.trim()) {
+      setErr('Ponle un nombre');
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await apiPatch(`/cheques/groups/${g.id}`, {
+        name: name.trim(),
+        source: source.trim() || null,
+      });
+      onSaved();
+    } catch {
+      setErr('No se pudo guardar');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-b border-surface-border py-3">
+      <div className="mb-1 text-[10px] uppercase tracking-[.06em] text-ink-secondary">
+        Nombre de la máquina
+      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        autoFocus
+        maxLength={120}
+        className="input mb-2 w-full text-sm"
+        placeholder="Ej. MIXER 1"
+      />
+      <div className="mb-1 text-[10px] uppercase tracking-[.06em] text-ink-secondary">
+        Chequera / fuente
+      </div>
+      <input
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+        maxLength={120}
+        className="input mb-2 w-full text-sm"
+      />
+      {err && <div className="mb-2 text-xs text-danger">{err}</div>}
+      <div className="flex gap-2">
+        <button onClick={guardar} disabled={busy} className="btn-primary text-xs disabled:opacity-50">
+          {busy ? 'Guardando…' : 'Guardar'}
+        </button>
+        <button onClick={onClose} className="btn-secondary text-xs">
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }

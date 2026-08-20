@@ -149,10 +149,21 @@ export class ChequesService {
       if (filter.to) range.lte = new Date(filter.to);
       where.AND = [{ OR: [{ dueDate: range }, { dueDate: null, issueDate: range }] }];
     }
-    return prisma.cheque.findMany({
-      where,
-      select: chequeSelect,
-      orderBy: [{ dueDate: 'desc' }, { issueDate: 'desc' }, { createdAt: 'desc' }],
+    const items = await prisma.cheque.findMany({ where, select: chequeSelect });
+    // Orden: lo más reciente primero. Para un cheque cobrado manda la fecha en
+    // que SE COBRÓ; para los demás, la fecha en que se cobra. Los que no tienen
+    // ninguna fecha van al final (si no, Postgres los pondría primero).
+    const clave = (c: (typeof items)[number]) => {
+      const d = c.status === 'COBRADO' ? (c.cashDate ?? effectiveDue(c)) : effectiveDue(c);
+      return d ? new Date(d).getTime() : null;
+    };
+    return items.sort((a, b) => {
+      const ka = clave(a);
+      const kb = clave(b);
+      if (ka === null && kb === null) return 0;
+      if (ka === null) return 1; // sin fecha, al final
+      if (kb === null) return -1;
+      return kb - ka; // descendente
     });
   }
 
