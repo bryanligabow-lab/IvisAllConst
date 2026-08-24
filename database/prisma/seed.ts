@@ -239,6 +239,35 @@ async function main() {
     });
   }
 
+  // ---------- Rol jefe (Gabriel / Mayda) ----------
+  // Consulta acotada: proyectos, subcontratistas (proveedores), proformas
+  // (con descarga) y cheques. Nada más.
+  const jefe = await prisma.role.upsert({
+    where: { name: 'jefe' },
+    update: {},
+    create: {
+      name: 'jefe',
+      description: 'Jefatura: consulta proyectos, subcontratistas, proformas y cheques',
+      isSystem: true,
+    },
+  });
+
+  const jefePermNames = [
+    'projects.read',
+    'rubros.read', // ver el presupuesto dentro del proyecto
+    'providers.read', // subcontratistas
+    'proformas.read',
+    'proformas.export', // descargar la proforma
+    'cheques.read',
+  ];
+  for (const p of allPermissions.filter((x) => jefePermNames.includes(x.name))) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: jefe.id, permissionId: p.id } },
+      update: {},
+      create: { roleId: jefe.id, permissionId: p.id },
+    });
+  }
+
   // ---------- Usuario admin ----------
   const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@ivisallconst.local';
   const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin123!';

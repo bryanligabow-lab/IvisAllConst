@@ -80,7 +80,7 @@ export default function ProyectosReportPage() {
   const { data, isLoading, error, mutate } = useSWR<Stats>('/projects/stats/global', apiGet);
   const { can } = useAuthStore();
   const canDelete = can('projects.delete');
-  const [filter, setFilter] = useState<'ALL' | Project['status']>('ALL');
+  const [filter, setFilter] = useState<'ALL' | Project['status']>('ACTIVE');
   const [query, setQuery] = useState('');
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 

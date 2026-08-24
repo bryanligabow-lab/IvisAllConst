@@ -24,6 +24,7 @@ import { productsRouter } from './modules/products/products.routes';
 import { notificationsRouter } from './modules/notifications/notifications.routes';
 import { incidenciasRouter } from './modules/incidencias/incidencias.routes';
 import { chequesRouter } from './modules/cheques/cheques.routes';
+import { homeRouter } from './modules/home/home.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { failure } from './utils/apiResponse';
 import { ERRORS } from './shared/constants/error-messages';
@@ -79,6 +80,7 @@ export function buildApp() {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/incidencias', incidenciasRouter);
   app.use('/api/cheques', chequesRouter);
+  app.use('/api/home', homeRouter);
 
   app.use('/api', (_req, res) => failure(res, 'NOT_FOUND', ERRORS.NOT_FOUND, 404));
 

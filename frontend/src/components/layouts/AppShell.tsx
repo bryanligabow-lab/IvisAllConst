@@ -14,6 +14,8 @@ interface NavLink {
   href: string;
   label: string;
   perm: string;
+  /** Permisos extra que TAMBIÉN debe tener (además de `perm`). */
+  alsoPerms?: string[];
   // Visible solo para roles sin restricción por proyecto (oculta reportes
   // globales en dinero a operadores).
   unrestrictedOnly?: boolean;
@@ -22,7 +24,8 @@ interface NavLink {
 const NAV_LINKS: NavLink[] = [
   { href: ROUTES.DASHBOARD, label: 'Inicio', perm: 'projects.read' },
   { href: ROUTES.PROYECTOS_REPORT, label: 'Proyectos', perm: 'projects.read', unrestrictedOnly: true },
-  { href: ROUTES.PROVIDERS, label: 'Proveedores', perm: 'providers.read' },
+  // Proveedores es la vista de órdenes de compra y saldos: los jefes no la ven.
+  { href: ROUTES.PROVIDERS, label: 'Proveedores', perm: 'providers.read', alsoPerms: ['payment_orders.read'] },
   { href: ROUTES.SUBCONTRATISTAS, label: 'Subcontratistas', perm: 'providers.read', unrestrictedOnly: true },
   { href: ROUTES.PLANILLAS, label: 'Planillas', perm: 'ingresos.read', unrestrictedOnly: true },
   { href: ROUTES.CLIENTES, label: 'Clientes', perm: 'clients.read' },
@@ -73,7 +76,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const restricted = isRestricted();
   const links = NAV_LINKS.filter(
-    (l) => can(l.perm) && (!l.unrestrictedOnly || !restricted),
+    (l) =>
+      can(l.perm) &&
+      (l.alsoPerms ?? []).every((p) => can(p)) &&
+      (!l.unrestrictedOnly || !restricted),
   );
 
   const isActive = (href: string) =>

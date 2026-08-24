@@ -11,6 +11,7 @@ import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
+import { downloadProforma } from '@/lib/downloadProforma';
 
 interface ProformaListItem {
   id: string;
@@ -43,6 +44,7 @@ export default function ProformasPage() {
   const { data, isLoading, mutate } = useSWR<ProformaListItem[]>('/proformas', apiGet);
   const { can } = useAuthStore();
   const canWrite = can('proformas.write');
+  const canExport = can('proformas.export');
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<ProformaEditData | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
@@ -191,6 +193,15 @@ export default function ProformasPage() {
                       >
                         👁️
                       </Link>
+                      {canExport && (
+                        <button
+                          onClick={() => downloadProforma(p.id, 'pdf', p.number, p.projectLabel)}
+                          className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                          title="Descargar PDF"
+                        >
+                          ⬇️
+                        </button>
+                      )}
                       {canWrite && (
                         <>
                           <button

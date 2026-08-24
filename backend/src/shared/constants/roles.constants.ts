@@ -11,6 +11,9 @@ export const ROLES = {
   OPERADOR: 'operador',
   // Solo lectura: ve toda la información del sistema, no puede editar nada.
   VIEWER: 'viewer',
+  // Jefes (Gabriel/Mayda): solo consultan proyectos, subcontratistas,
+  // proformas y cheques. No ven gastos, órdenes, nómina ni directorio.
+  JEFE: 'jefe',
 } as const;
 export type RoleName = (typeof ROLES)[keyof typeof ROLES];
 
