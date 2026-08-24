@@ -9,7 +9,7 @@ const MES_CORTO = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP'
 
 /**
  * Resumen: el estado del negocio en cinco segundos.
- * Cifra grande → par pendientes/cobrados → atención → próximos 7 días → maquinaria.
+ * Cifra grande → par pendientes/cobrados → atención → próximos 3 cheques → maquinaria.
  */
 export function ResumenTab({
   onVerCheques,
@@ -72,7 +72,14 @@ export function ResumenTab({
                   {r.beneficiary || 'Sin beneficiario'}
                   <span className="text-ink-tertiary">
                     {' '}
-                    · {r.dias < 0 ? `venció hace ${Math.abs(r.dias)}d` : r.dias === 0 ? 'hoy' : `en ${r.dias}d`}
+                    ·{' '}
+                    {r.dias === null
+                      ? 'sin fecha'
+                      : r.dias < 0
+                        ? `venció hace ${Math.abs(r.dias)}d`
+                        : r.dias === 0
+                          ? 'hoy'
+                          : `en ${r.dias}d`}
                   </span>
                 </span>
                 <span className="shrink-0 font-bold text-ink-primary">
@@ -84,19 +91,21 @@ export function ResumenTab({
         </div>
       )}
 
-      {/* 4. Próximos 7 días */}
+      {/* 4. Los próximos 3 cheques a cobrar (sin importar la fecha) */}
       <div>
         <div className="flex items-baseline justify-between border-b-2 border-surface-border pb-1">
-          <h2 className="text-[13px] font-bold uppercase tracking-[.06em]">Próximos 7 días</h2>
+          <h2 className="text-[13px] font-bold uppercase tracking-[.06em]">
+            Próximos 3 cheques a cobrar
+          </h2>
           <button onClick={onVerCalendario} className="text-[11px] font-bold text-brand">
             Calendario
           </button>
         </div>
-        {data.proximos7.length === 0 ? (
-          <div className="py-3 text-xs text-ink-tertiary">Sin cobros esta semana.</div>
+        {data.proximos3.length === 0 ? (
+          <div className="py-3 text-xs text-ink-tertiary">No hay cheques por cobrar.</div>
         ) : (
           <div>
-            {data.proximos7.map((r) => (
+            {data.proximos3.map((r) => (
               <FilaProxima key={r.id} row={r} />
             ))}
           </div>
@@ -130,12 +139,18 @@ export function ResumenTab({
 }
 
 function FilaProxima({ row }: { row: ChequeResumenRow }) {
-  const d = new Date(row.dueDate);
+  const d = row.dueDate ? new Date(row.dueDate) : null;
   return (
     <div className="flex items-center gap-3 border-b border-surface-border py-2">
       <div className="w-11 shrink-0 border-r-2 border-surface-border pr-2">
-        <div className="text-[10px] uppercase text-ink-tertiary">{MES_CORTO[d.getMonth()]}</div>
-        <div className="text-[19px] font-bold leading-none">{d.getDate()}</div>
+        {d ? (
+          <>
+            <div className="text-[10px] uppercase text-ink-tertiary">{MES_CORTO[d.getMonth()]}</div>
+            <div className="text-[19px] font-bold leading-none">{d.getDate()}</div>
+          </>
+        ) : (
+          <div className="text-[10px] uppercase leading-tight text-ink-tertiary">Sin fecha</div>
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-ink-primary">
@@ -149,7 +164,13 @@ function FilaProxima({ row }: { row: ChequeResumenRow }) {
       <div className="shrink-0 text-right">
         <div className="text-[15px] font-bold">{formatCurrency(row.amount)}</div>
         <div className="text-[10px] uppercase text-ink-tertiary">
-          {row.dias === 0 ? 'hoy' : `en ${row.dias}d`}
+          {row.dias === null
+            ? '—'
+            : row.dias === 0
+              ? 'hoy'
+              : row.dias > 0
+                ? `en ${row.dias}d`
+                : `venció ${Math.abs(row.dias)}d`}
         </div>
       </div>
     </div>

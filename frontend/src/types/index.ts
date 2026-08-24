@@ -468,8 +468,8 @@ export interface ChequeResumenRow {
   beneficiary: string | null;
   chequera: string | null;
   amount: number;
-  dueDate: string;
-  dias: number;
+  dueDate: string | null;
+  dias: number | null;
 }
 
 export interface ChequesResumen {
@@ -479,7 +479,7 @@ export interface ChequesResumen {
   countCobrado: number;
   countTotal: number;
   atencion: ChequeResumenRow[];
-  proximos7: ChequeResumenRow[];
+  proximos3: ChequeResumenRow[];
   maquinaria: {
     saldo: number;
     cuotasRestantes: number;

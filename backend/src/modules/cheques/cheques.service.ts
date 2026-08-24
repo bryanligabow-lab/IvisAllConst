@@ -150,20 +150,21 @@ export class ChequesService {
       where.AND = [{ OR: [{ dueDate: range }, { dueDate: null, issueDate: range }] }];
     }
     const items = await prisma.cheque.findMany({ where, select: chequeSelect });
-    // Orden: lo más reciente primero. Para un cheque cobrado manda la fecha en
-    // que SE COBRÓ; para los demás, la fecha en que se cobra. Los que no tienen
-    // ninguna fecha van al final (si no, Postgres los pondría primero).
-    const clave = (c: (typeof items)[number]) => {
+    // Orden: la fecha MÁS PRÓXIMA a hoy primero. Con esta única regla, los
+    // pendientes salen del que se cobra antes al que se cobra después, y los
+    // cobrados del último cobrado hacia atrás. Los que no tienen fecha, al final.
+    const hoy = startOfToday();
+    const distancia = (c: (typeof items)[number]) => {
       const d = c.status === 'COBRADO' ? (c.cashDate ?? effectiveDue(c)) : effectiveDue(c);
-      return d ? new Date(d).getTime() : null;
+      return d ? Math.abs(new Date(d).getTime() - hoy) : null;
     };
     return items.sort((a, b) => {
-      const ka = clave(a);
-      const kb = clave(b);
-      if (ka === null && kb === null) return 0;
-      if (ka === null) return 1; // sin fecha, al final
-      if (kb === null) return -1;
-      return kb - ka; // descendente
+      const da = distancia(a);
+      const db = distancia(b);
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
     });
   }
 
@@ -554,7 +555,16 @@ export class ChequesService {
       .map((x) => ({ ...x, dias: Math.round((new Date(x.due).getTime() - hoy) / 86_400_000) }))
       .sort((a, b) => a.dias - b.dias);
 
-    const fila = (x: (typeof conFecha)[number]) => ({
+    interface FilaResumen {
+      id: string;
+      number: string;
+      beneficiary: string | null;
+      chequera: string | null;
+      amount: number;
+      dueDate: Date | null;
+      dias: number | null;
+    }
+    const fila = (x: (typeof conFecha)[number]): FilaResumen => ({
       id: x.c.id,
       number: x.c.number,
       beneficiary: x.c.beneficiary,
@@ -572,8 +582,27 @@ export class ChequesService {
       countTotal: activos.length,
       // Atención: vencidos (ya pasó la fecha) + los que se cobran en <= 3 días.
       atencion: conFecha.filter((x) => x.dias <= 3).slice(0, 6).map(fila),
-      // Próximos 7 días.
-      proximos7: conFecha.filter((x) => x.dias >= 0 && x.dias <= 7).map(fila),
+      // Los próximos 3 cheques por cobrar, sin importar cuándo caigan. Si
+      // sobran cupos, se completan con los pendientes que no tienen fecha.
+      proximos3: ([
+        // primero los que ya vencieron o caen hoy/adelante, en orden;
+        // luego, si faltan, los pendientes sin fecha.
+        ...conFecha.filter((x) => x.dias >= 0).map(fila),
+        ...conFecha.filter((x) => x.dias < 0).map(fila),
+        ...pend
+          .filter((c) => effectiveDue(c) == null)
+          .map(
+            (c): FilaResumen => ({
+              id: c.id,
+              number: c.number,
+              beneficiary: c.beneficiary,
+              chequera: c.chequera?.corto ?? null,
+              amount: c.amount,
+              dueDate: null,
+              dias: null,
+            }),
+          ),
+      ] as FilaResumen[]).slice(0, 3),
       maquinaria: {
         saldo: grupos.reduce((s, g) => s + g.saldo, 0),
         cuotasRestantes: grupos.reduce((s, g) => s + g.faltan, 0),
