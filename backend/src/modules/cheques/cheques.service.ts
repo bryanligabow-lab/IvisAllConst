@@ -145,8 +145,18 @@ export class ChequesService {
     // El rango mira la fecha de cobro esperada (dueDate) o, si no hay, la de emisión.
     if (filter.from || filter.to) {
       const range: Record<string, Date> = {};
-      if (filter.from) range.gte = new Date(filter.from);
-      if (filter.to) range.lte = new Date(filter.to);
+      if (filter.from) {
+        const desde = new Date(filter.from);
+        desde.setUTCHours(0, 0, 0, 0);
+        range.gte = desde;
+      }
+      if (filter.to) {
+        // Hasta el FINAL del último día: las fechas se guardan al mediodía UTC,
+        // así que un `lte` a medianoche dejaba fuera los cheques de ese día.
+        const hasta = new Date(filter.to);
+        hasta.setUTCHours(23, 59, 59, 999);
+        range.lte = hasta;
+      }
       where.AND = [{ OR: [{ dueDate: range }, { dueDate: null, issueDate: range }] }];
     }
     const items = await prisma.cheque.findMany({ where, select: chequeSelect });

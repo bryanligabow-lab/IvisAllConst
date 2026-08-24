@@ -123,7 +123,7 @@ providersRouter.get(
     });
     if (!provider) throw new NotFoundError('Proveedor no encontrado');
 
-    const [gastos, orders, subcontracts] = await Promise.all([
+    const [gastos, orders, subcontracts, proyectosDerivados, rubrosSub] = await Promise.all([
       prisma.gasto.findMany({
         where: { providerId: provider.id, deletedAt: null },
         include: {
@@ -145,6 +145,20 @@ providersRouter.get(
       prisma.projectSubcontract.findMany({
         where: { providerId: provider.id },
         include: { project: { select: { id: true, name: true, code: true, deletedAt: true } } },
+      }),
+      // Proyectos cuya ejecución COMPLETA se le derivó a este proveedor
+      // (Project.subcontractorId), aunque todavía no tengan gastos ni rubros.
+      prisma.project.findMany({
+        where: { subcontractorId: provider.id, deletedAt: null },
+        select: { id: true, name: true, code: true, contractAmount: true },
+      }),
+      // Rubros sueltos subcontratados a este proveedor (subcontratación parcial).
+      prisma.rubro.findMany({
+        where: { subcontractorId: provider.id, deletedAt: null },
+        select: {
+          subcontractAmount: true,
+          project: { select: { id: true, name: true, code: true, deletedAt: true } },
+        },
       }),
     ]);
 
@@ -180,6 +194,21 @@ providersRouter.get(
       if (s.project.deletedAt) continue;
       const e = ensure(s.project);
       e.subcontractAmount = s.amount;
+    }
+
+    // Proyectos derivados por completo a este subcontratista: aparecen aunque
+    // no se les haya puesto todavía el valor ni tengan gastos.
+    for (const p of proyectosDerivados) {
+      ensure(p);
+    }
+
+    // Subcontratación parcial por rubro: suma lo acordado en esos rubros.
+    for (const r of rubrosSub) {
+      if (!r.project || r.project.deletedAt) continue;
+      const e = ensure(r.project);
+      if (!subcontracts.some((s) => s.projectId === r.project.id)) {
+        e.subcontractAmount += r.subcontractAmount ?? 0;
+      }
     }
 
     for (const g of gastos) {
