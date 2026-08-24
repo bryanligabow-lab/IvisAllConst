@@ -378,3 +378,100 @@ proformasRouter.get(
     throw new BadRequestError(`Formato no soportado: ${format}`);
   }),
 );
+
+// --- Convertir una proforma en proyecto ---------------------------------
+// Evita volver a escribir todo: el proyecto nace con el cliente, el monto del
+// contrato y un rubro por cada ítem de la proforma. Opcionalmente se deriva a
+// un subcontratista en el mismo paso.
+const convertSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  code: z.string().min(1).max(60).optional(),
+  city: z.string().max(120).nullish(),
+  executionType: z.enum(['OWN', 'SUBCONTRACTED']).optional(),
+  subcontractorId: z.string().uuid().nullish(),
+});
+
+/** Genera un código único a partir del nombre (SLUG, SLUG-2, SLUG-3…). */
+async function codigoUnico(base: string): Promise<string> {
+  const slug =
+    base
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'PROYECTO';
+  for (let i = 0; i < 50; i += 1) {
+    const code = i === 0 ? slug : `${slug}-${i + 1}`;
+    const existe = await prisma.project.findUnique({ where: { code }, select: { id: true } });
+    if (!existe) return code;
+  }
+  return `${slug}-${Date.now()}`;
+}
+
+proformasRouter.post(
+  '/:id/convert',
+  requirePermission(PERMISSIONS.PROJECTS_CREATE),
+  validate(idParamSchema, 'params'),
+  validate(convertSchema),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const proforma = await prisma.proforma.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+      include: { items: { orderBy: { orderIndex: 'asc' } } },
+    });
+    if (!proforma) throw new NotFoundError('Proforma no encontrada');
+    if (proforma.projectId) {
+      throw new BadRequestError('Esta proforma ya se convirtió en proyecto');
+    }
+    if (proforma.items.length === 0) {
+      throw new BadRequestError('La proforma no tiene ítems');
+    }
+
+    const totales = computeProformaTotals(proforma.items, proforma.ivaPercent);
+    const nombre =
+      req.body.name?.trim() ||
+      proforma.projectLabel?.trim() ||
+      `Proforma ${proforma.number}`;
+    const code = req.body.code?.trim() || (await codigoUnico(nombre));
+    const subcontratado = req.body.executionType === 'SUBCONTRACTED';
+
+    const project = await prisma.project.create({
+      data: {
+        code,
+        name: nombre,
+        contractor: proforma.clientName,
+        clientId: proforma.clientId,
+        city: req.body.city?.trim() || null,
+        description: `Creado desde la proforma ${proforma.number}`,
+        contractAmount: totales.total,
+        vatPercent: proforma.ivaPercent,
+        executionType: subcontratado ? 'SUBCONTRACTED' : 'OWN',
+        subcontractorId: subcontratado ? (req.body.subcontractorId ?? null) : null,
+        status: 'ACTIVE',
+        createdBy: req.user.id,
+        // Un rubro por ítem, conservando cantidad, unidad y precio.
+        rubros: {
+          create: proforma.items.map((it, i) => ({
+            code: String(i + 1),
+            name: it.description.split('\n')[0].slice(0, 200),
+            unit: it.unit,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            budgetedAmount: it.quantity * it.unitPrice,
+            orderIndex: i,
+          })),
+        },
+      },
+      include: { rubros: true },
+    });
+
+    // Deja el enlace en la proforma para no convertirla dos veces.
+    await prisma.proforma.update({
+      where: { id: proforma.id },
+      data: { projectId: project.id },
+    });
+
+    return success(res, { project, rubros: project.rubros.length }, 201);
+  }),
+);

@@ -12,6 +12,7 @@ import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { ROUTES } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { downloadProforma } from '@/lib/downloadProforma';
+import { ConvertProformaModal } from '@/components/forms/ConvertProformaModal';
 
 interface ProformaListItem {
   id: string;
@@ -24,6 +25,8 @@ interface ProformaListItem {
   iva: number;
   total: number;
   items: Array<{ id: string; description?: string }>;
+  projectId: string | null;
+  project?: { id: string; name: string; code: string } | null;
 }
 
 const STATUS_LABEL = {
@@ -45,6 +48,8 @@ export default function ProformasPage() {
   const { can } = useAuthStore();
   const canWrite = can('proformas.write');
   const canExport = can('proformas.export');
+  const canConvert = can('projects.create');
+  const [converting, setConverting] = useState<ProformaListItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<ProformaEditData | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
@@ -111,6 +116,24 @@ export default function ProformasPage() {
           mutate();
           setEditing(null);
         }}
+      />
+
+      <ConvertProformaModal
+        open={!!converting}
+        onClose={() => setConverting(null)}
+        proforma={
+          converting
+            ? {
+                id: converting.id,
+                number: converting.number,
+                clientName: converting.clientName,
+                projectLabel: converting.projectLabel,
+                total: converting.total,
+                itemsCount: converting.items.length,
+              }
+            : null
+        }
+        onConverted={() => mutate()}
       />
 
       <DeleteConfirmDialog
@@ -202,6 +225,24 @@ export default function ProformasPage() {
                           ⬇️
                         </button>
                       )}
+                      {canConvert &&
+                        (p.projectId ? (
+                          <Link
+                            href={ROUTES.PROJECT_BUDGET(p.projectId)}
+                            className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                            title={`Ya es proyecto: ${p.project?.name ?? ''}`}
+                          >
+                            🏗️
+                          </Link>
+                        ) : (
+                          <button
+                            onClick={() => setConverting(p)}
+                            className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                            title="Convertir en proyecto"
+                          >
+                            🏗️
+                          </button>
+                        ))}
                       {canWrite && (
                         <>
                           <button
