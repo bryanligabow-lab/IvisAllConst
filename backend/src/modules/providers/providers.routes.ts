@@ -365,15 +365,41 @@ providersRouter.get(
   requirePermission(PERMISSIONS.PROVIDERS_READ),
   asyncHandler(async (req, res) => {
     const { id, projectId } = req.params;
-    const sc = await prisma.projectSubcontract.findUnique({
+    const incluir = {
+      items: { orderBy: [{ orderIndex: 'asc' as const }, { createdAt: 'asc' as const }] },
+      project: { select: { id: true, name: true, code: true } },
+      provider: { select: { id: true, name: true } },
+    };
+    let sc = await prisma.projectSubcontract.findUnique({
       where: { projectId_providerId: { projectId, providerId: id } },
-      include: {
-        items: { orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }] },
-        project: { select: { id: true, name: true, code: true } },
-        provider: { select: { id: true, name: true } },
-      },
+      include: incluir,
     });
-    if (!sc) throw new NotFoundError('Este proveedor no tiene ese trabajo registrado');
+    // Si el proyecto se le derivó al proveedor (o tiene rubros/gastos suyos) pero
+    // todavía no existe el "trabajo", se crea vacío al entrar: así se le pueden
+    // cargar los rubros sin tener que registrarlo aparte.
+    if (!sc) {
+      const [proyecto, rubro, gasto] = await Promise.all([
+        prisma.project.findFirst({
+          where: { id: projectId, deletedAt: null },
+          select: { id: true, subcontractorId: true },
+        }),
+        prisma.rubro.findFirst({
+          where: { projectId, subcontractorId: id, deletedAt: null },
+          select: { id: true },
+        }),
+        prisma.gasto.findFirst({
+          where: { projectId, providerId: id, deletedAt: null },
+          select: { id: true },
+        }),
+      ]);
+      if (!proyecto) throw new NotFoundError('Proyecto no encontrado');
+      const relacionado = proyecto.subcontractorId === id || !!rubro || !!gasto;
+      if (!relacionado) throw new NotFoundError('Este proveedor no tiene ese trabajo registrado');
+      sc = await prisma.projectSubcontract.create({
+        data: { projectId, providerId: id, amount: 0, createdBy: req.user?.id ?? null },
+        include: incluir,
+      });
+    }
     const paidAgg = await prisma.gasto.aggregate({
       where: { providerId: id, projectId, deletedAt: null },
       _sum: { amount: true },
