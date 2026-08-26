@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateChequeModal } from '@/components/forms/CreateChequeModal';
 import { CreateChequeGroupModal } from '@/components/forms/CreateChequeGroupModal';
@@ -20,13 +20,13 @@ import type {
   ChequeGroupDetail,
 } from '@/types';
 
-type Vista = 'resumen' | 'cheques' | 'calendario' | 'maquinas' | 'cuentas';
+type Vista = 'resumen' | 'cheques' | 'calendario' | 'financiamientos' | 'cuentas';
 
 const TABS: { id: Vista; label: string }[] = [
   { id: 'resumen', label: 'Resumen' },
   { id: 'cheques', label: 'Cheques' },
   { id: 'calendario', label: 'Calend.' },
-  { id: 'maquinas', label: 'Máquinas' },
+  { id: 'financiamientos', label: 'Financ.' },
   { id: 'cuentas', label: 'Cuentas' },
 ];
 
@@ -54,7 +54,15 @@ export default function ChequesPage() {
   const [rev, setRev] = useState(0); // fuerza refresco de las vistas
 
   const { data: chequeras } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
-  const refresh = () => setRev((r) => r + 1);
+  const { mutate } = useSWRConfig();
+  // Tras cualquier cambio se invalida TODO lo que cuelga de /cheques, para que
+  // un cheque recién creado aparezca de inmediato en la lista y en el resumen.
+  const refresh = () => {
+    mutate((key) => typeof key === 'string' && key.startsWith('/cheques'), undefined, {
+      revalidate: true,
+    });
+    setRev((r) => r + 1);
+  };
 
   const irACheques = (chequeraId = '') => {
     setFiltroChequera(chequeraId);
@@ -106,7 +114,7 @@ export default function ChequesPage() {
               key={rev}
               onVerCheques={() => irACheques()}
               onVerCalendario={() => setVista('calendario')}
-              onVerMaquinas={() => setVista('maquinas')}
+              onVerMaquinas={() => setVista('financiamientos')}
             />
           )}
           {vista === 'cheques' && (
@@ -123,7 +131,7 @@ export default function ChequesPage() {
           {vista === 'calendario' && (
             <ChequesCalendar key={rev} canWrite={canWrite} onChanged={refresh} />
           )}
-          {vista === 'maquinas' && <MaquinasTab key={rev} canWrite={canWrite} onChanged={refresh} />}
+          {vista === 'financiamientos' && <FinanciamientosTab key={rev} canWrite={canWrite} onChanged={refresh} chequeras={chequeras ?? []} />}
           {vista === 'cuentas' && <CuentasTab key={rev} onVerCheques={irACheques} />}
         </>
       )}
@@ -333,7 +341,15 @@ function FilaCheque({
 
 // ---------------- Máquinas ----------------
 
-function MaquinasTab({ canWrite, onChanged }: { canWrite: boolean; onChanged: () => void }) {
+function FinanciamientosTab({
+  canWrite,
+  onChanged,
+  chequeras,
+}: {
+  canWrite: boolean;
+  onChanged: () => void;
+  chequeras: Chequera[];
+}) {
   const { data, isLoading, mutate } = useSWR<ChequeGroupSummary[]>('/cheques/groups', apiGet);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -362,13 +378,13 @@ function MaquinasTab({ canWrite, onChanged }: { canWrite: boolean; onChanged: ()
         </div>
         <div className="mt-1 text-xs text-ink-tertiary">
           {restantes} {restantes === 1 ? 'cuota restante' : 'cuotas restantes'} en {activas}{' '}
-          {activas === 1 ? 'máquina' : 'máquinas'}
+          {activas === 1 ? 'financiamiento' : 'financiamientos'}
           {pagadas > 0 && ` · ${pagadas} ya pagada${pagadas === 1 ? '' : 's'}`}
         </div>
       </div>
 
       {grupos.map((g) => (
-        <MaquinaFila
+        <FinanciamientoFila
           key={g.id}
           grupo={g}
           abierta={abierta === g.id}
@@ -392,12 +408,13 @@ function MaquinasTab({ canWrite, onChanged }: { canWrite: boolean; onChanged: ()
         open={showCreate}
         onClose={() => setShowCreate(false)}
         onSaved={refresh}
+        chequeras={chequeras}
       />
     </div>
   );
 }
 
-function MaquinaFila({
+function FinanciamientoFila({
   grupo: g,
   abierta,
   onToggle,
@@ -420,7 +437,7 @@ function MaquinaFila({
 
   if (editando) {
     return (
-      <RenombrarMaquina
+      <RenombrarFinanciamiento
         grupo={g}
         onClose={() => setEditando(false)}
         onSaved={() => {
@@ -559,7 +576,7 @@ function CuotaFila({
 }
 
 /** Cambiar el nombre (y la chequera) de una máquina/financiamiento. */
-function RenombrarMaquina({
+function RenombrarFinanciamiento({
   grupo: g,
   onClose,
   onSaved,
@@ -595,7 +612,7 @@ function RenombrarMaquina({
   return (
     <div className="border-b border-surface-border py-3">
       <div className="mb-1 text-[10px] uppercase tracking-[.06em] text-ink-secondary">
-        Nombre de la máquina
+        Nombre del financiamiento
       </div>
       <input
         value={name}

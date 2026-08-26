@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import type { Chequera } from '@/types';
 
@@ -11,6 +12,25 @@ import type { Chequera } from '@/types';
  */
 export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string) => void }) {
   const { data, isLoading } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
+  const [bajando, setBajando] = useState(false);
+
+  // Libro de cheques en Excel: una hoja por chequera.
+  async function descargarExcel() {
+    setBajando(true);
+    try {
+      const blob = await apiFetchBlob('/cheques/export');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Cheques CREACOM ${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBajando(false);
+    }
+  }
 
   if (isLoading) return <div className="py-6 text-sm text-ink-secondary">Cargando…</div>;
 
@@ -18,6 +38,13 @@ export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string
 
   return (
     <div>
+      <button
+        onClick={descargarExcel}
+        disabled={bajando}
+        className="mb-3 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand disabled:opacity-50"
+      >
+        {bajando ? 'Generando…' : '⬇ Descargar Excel (una hoja por chequera)'}
+      </button>
       {libretas.map((c) => (
         <button
           key={c.id}

@@ -202,8 +202,8 @@ async function main() {
 
   // ---------- Rol viewer (solo lectura) ----------
   // Ve TODA la información del sistema pero no puede crear/editar/eliminar nada.
-  // Solo permisos *.read (de negocio) + exportar (descargar PDF/Excel = ver).
-  // No incluye users.* (no entra al Directorio).
+  // Solo lectura: ve TODO el sistema (incluido Directorio, Cheques y Soporte),
+  // pero sin ningún permiso de escritura.
   const viewer = await prisma.role.upsert({
     where: { name: 'viewer' },
     update: {},
@@ -214,24 +214,13 @@ async function main() {
     },
   });
 
-  const viewerPermNames = [
-    'projects.read',
-    'rubros.read',
-    'gastos.read',
-    'planillas.read',
-    'planillas.export',
-    'ingresos.read',
-    'payment_orders.read',
-    'providers.read',
-    'employees.read',
-    'payroll.read',
-    'proformas.read',
-    'proformas.export',
-    'clients.read',
-    'attendance.read',
-    'bitacora.read',
-  ];
-  for (const p of allPermissions.filter((x) => viewerPermNames.includes(x.name))) {
+  // El viewer ve TODO el sistema pero no edita nada: se le dan todos los
+  // permisos de lectura y de exportación (descargar = ver). Se calcula solo,
+  // así que cualquier módulo nuevo queda incluido sin tocar esta lista.
+  const viewerPerms = allPermissions.filter(
+    (x) => x.action === 'read' || x.action === 'export',
+  );
+  for (const p of viewerPerms) {
     await prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId: viewer.id, permissionId: p.id } },
       update: {},

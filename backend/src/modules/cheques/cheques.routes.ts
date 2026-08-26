@@ -10,6 +10,7 @@ import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
 import { ChequesService, CHEQUE_STATUSES } from './cheques.service';
+import { exportChequesExcel } from './cheques.excel';
 
 const chequeBodySchema = z.object({
   issueDate: calendarDateSchema.nullish(),
@@ -141,7 +142,16 @@ chequesRouter.delete(
   }),
 );
 
-// --- Financiamientos de maquinaria ---
+// Libro de cheques en Excel: una hoja por chequera con todos sus cheques.
+chequesRouter.get(
+  '/export',
+  requirePermission(PERMISSIONS.CHEQUES_READ),
+  asyncHandler(async (_req, res) => {
+    await exportChequesExcel(res);
+  }),
+);
+
+// --- Financiamientos ---
 
 chequesRouter.get(
   '/groups',
@@ -164,6 +174,18 @@ const groupSchema = z.object({
   name: z.string().min(1).max(120),
   source: z.string().max(120).nullish(),
   notes: z.string().max(500).nullish(),
+  chequeraId: z.string().max(40).nullish(),
+  // Cuotas una por una (nº de cheque, fecha de cobro y monto editables).
+  cuotas: z
+    .array(
+      z.object({
+        number: z.string().max(40).nullish(),
+        dueDate: calendarDateSchema,
+        amount: z.coerce.number().nonnegative(),
+      }),
+    )
+    .max(120)
+    .nullish(),
   generate: z
     .object({
       count: z.coerce.number().int().min(1).max(120),

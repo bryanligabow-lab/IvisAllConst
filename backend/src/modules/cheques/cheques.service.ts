@@ -354,6 +354,10 @@ export class ChequesService {
       name: string;
       source?: string | null;
       notes?: string | null;
+      chequeraId?: string | null;
+      // Lista explícita de cuotas: cada una con su nº de cheque, su fecha de
+      // cobro y su monto (se pueden editar una por una antes de crear).
+      cuotas?: { number?: string | null; dueDate: Date; amount: number }[] | null;
       generate?: {
         count: number;
         amount: number;
@@ -371,7 +375,24 @@ export class ChequesService {
         createdBy: userId ?? null,
       },
     });
-    if (input.generate && input.generate.count > 0) {
+    // Cuotas explícitas: cada una con su número, fecha y monto.
+    if (input.cuotas && input.cuotas.length > 0) {
+      await prisma.cheque.createMany({
+        data: input.cuotas.map((c, i) => ({
+          issueDate: c.dueDate,
+          dueDate: c.dueDate,
+          number: (c.number ?? '').trim(),
+          beneficiary: input.name.trim(),
+          bank: input.source?.trim() || null,
+          chequeraId: input.chequeraId ?? null,
+          amount: c.amount,
+          status: 'PENDIENTE',
+          groupId: group.id,
+          installment: i + 1,
+          createdBy: userId ?? null,
+        })),
+      });
+    } else if (input.generate && input.generate.count > 0) {
       const { count, amount, firstDate, firstNumber } = input.generate;
       const data = Array.from({ length: count }, (_, i) => {
         const dt = new Date(firstDate);
@@ -382,6 +403,7 @@ export class ChequesService {
           number: firstNumber != null ? String(firstNumber + i) : '',
           beneficiary: input.name.trim(),
           bank: input.source?.trim() || null,
+          chequeraId: input.chequeraId ?? null,
           amount,
           status: 'PENDIENTE',
           groupId: group.id,
