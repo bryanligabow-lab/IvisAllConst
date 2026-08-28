@@ -285,6 +285,24 @@ async function main() {
     create: { userId: adminUser.id, roleId: superAdmin.id },
   });
 
+  // ---------- Correos que reciben los avisos de cheques ----------
+  // Los pidió la gerencia: aviso semanal + un día antes + el día del cobro.
+  // Se pueden pausar o quitar desde Cheques → Cuentas → Correos.
+  const chequeMails = [
+    { email: 'elderconstantine@gmail.com', name: 'Gabriel Constantine' },
+    { email: 'maydalunap@gmail.com', name: 'Mayda Luna' },
+    { email: 'finanzas@creacomsa.com', name: 'Finanzas CREACOM' },
+  ];
+  for (const m of chequeMails) {
+    const yaEsta = await prisma.notificationRecipient.findFirst({
+      where: { email: m.email, scope: 'CHEQUES' },
+    });
+    if (yaEsta) continue;
+    await prisma.notificationRecipient.create({
+      data: { email: m.email, name: m.name, scope: 'CHEQUES', createdBy: adminUser.id },
+    });
+  }
+
   // ---------- Proyectos demo ----------
   // Only seed demo projects when explicitly requested. In production we want
   // the system to ship empty.

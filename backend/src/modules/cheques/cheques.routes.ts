@@ -175,6 +175,12 @@ const groupSchema = z.object({
   source: z.string().max(120).nullish(),
   notes: z.string().max(500).nullish(),
   chequeraId: z.string().max(40).nullish(),
+  // Avisos por correo de ESTE financiamiento: a quiénes y cada cuándo.
+  notifyEmails: z.array(z.string().email().max(200)).max(20).nullish(),
+  notifyWeekly: z.coerce.boolean().optional(),
+  notifyMonthly: z.coerce.boolean().optional(),
+  notifyDayBefore: z.coerce.boolean().optional(),
+  notifyOnDue: z.coerce.boolean().optional(),
   // Cuotas una por una (nº de cheque, fecha de cobro y monto editables).
   cuotas: z
     .array(

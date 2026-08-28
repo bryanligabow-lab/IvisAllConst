@@ -10,12 +10,20 @@ import { NotFoundError, UnauthorizedError } from '../../utils/errors';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { NotificationsService } from './notifications.service';
+import { ChequesNotifications, type ChequeAvisoKind } from '../cheques/cheques.notifications';
 import { isMailConfigured, verifyMail, sendMail } from '../../shared/email/mailer';
 
-// Correos que reciben los informes de estado de las planillas.
+// Correos que reciben los informes. Hay dos listas separadas: la de planillas
+// (informe diario de estados) y la de cheques (avisos de cobro).
+const SCOPES = ['PLANILLAS', 'CHEQUES'] as const;
+function scopeOf(value: unknown): string {
+  return SCOPES.includes(String(value) as (typeof SCOPES)[number]) ? String(value) : 'PLANILLAS';
+}
+
 const createSchema = z.object({
   email: z.string().email().max(200),
   name: z.string().max(120).optional(),
+  scope: z.enum(SCOPES).optional(),
 });
 const updateSchema = z.object({
   email: z.string().email().max(200).optional(),
@@ -29,9 +37,9 @@ notificationsRouter.use(authenticate);
 notificationsRouter.get(
   '/recipients',
   requirePermission(PERMISSIONS.INGRESOS_READ),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     const recipients = await prisma.notificationRecipient.findMany({
-      where: { deletedAt: null, scope: 'PLANILLAS' },
+      where: { deletedAt: null, scope: scopeOf(req.query.scope) },
       orderBy: { createdAt: 'asc' },
     });
     return success(res, recipients);
@@ -48,7 +56,7 @@ notificationsRouter.post(
       data: {
         email: req.body.email.trim().toLowerCase(),
         name: req.body.name?.trim() || null,
-        scope: 'PLANILLAS',
+        scope: scopeOf(req.body.scope),
         createdBy: req.user.id,
       },
     });
@@ -117,6 +125,42 @@ notificationsRouter.post(
     }
     const r = await NotificationsService.sendDailyReport();
     return success(res, r);
+  }),
+);
+
+// Vista previa del aviso (sin enviar nada): para revisar cómo se ve el correo.
+notificationsRouter.get(
+  '/cheques/preview',
+  requirePermission(PERMISSIONS.CHEQUES_READ),
+  asyncHandler(async (req, res) => {
+    const kind = (['SEMANA', 'MES', 'MANANA', 'HOY'].includes(String(req.query.kind))
+      ? String(req.query.kind)
+      : 'SEMANA') as ChequeAvisoKind;
+    const armado = await ChequesNotifications.preview(kind, 'Gabriel');
+    if (!armado) return success(res, { empty: true, kind });
+    return success(res, { kind, ...armado });
+  }),
+);
+
+// Avisos de cheques: manda AHORA el resumen semanal (o el de mañana/hoy).
+// Con { email } va solo a ese correo, como prueba.
+const chequeAvisoSchema = z.object({
+  kind: z.enum(['SEMANA', 'MES', 'MANANA', 'HOY']).optional(),
+  email: z.string().email().optional(),
+});
+notificationsRouter.post(
+  '/cheques/send',
+  requirePermission(PERMISSIONS.CHEQUES_WRITE),
+  validate(chequeAvisoSchema),
+  asyncHandler(async (req, res) => {
+    const kind = (req.body.kind ?? 'SEMANA') as ChequeAvisoKind;
+    if (req.body.email) {
+      const armado = await ChequesNotifications.preview(kind);
+      if (!armado) return success(res, { sent: 0, empty: true });
+      const r = await sendMail({ to: req.body.email, subject: armado.subject, html: armado.html });
+      return success(res, { ...r, sent: r.ok ? 1 : 0, to: req.body.email });
+    }
+    return success(res, await ChequesNotifications.enviar(kind));
   }),
 );
 

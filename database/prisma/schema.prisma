@@ -1001,6 +1001,13 @@ model ChequeGroup {
   name        String    // máquina / financiamiento (MIXER 3, VOLQUETA…)
   source      String?   // banco/fuente que paga (CREACOM GUAYAQUIL, PAVIMENTACIÓN…)
   notes       String?
+  // Avisos por correo de ESTE financiamiento: a quién y cuándo. Se eligen al
+  // crearlo (o editándolo) para no tener que reescribirlos cada vez.
+  notifyEmails    String[] @map("notify_emails")
+  notifyWeekly    Boolean  @default(false) @map("notify_weekly")
+  notifyMonthly   Boolean  @default(false) @map("notify_monthly")
+  notifyDayBefore Boolean  @default(true)  @map("notify_day_before")
+  notifyOnDue     Boolean  @default(true)  @map("notify_on_due")
   createdBy   String?   @map("created_by")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")

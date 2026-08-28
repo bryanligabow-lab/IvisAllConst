@@ -4,6 +4,8 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { apiGet, apiFetchBlob } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
+import { NotificationRecipientsModal } from '@/components/forms/NotificationRecipientsModal';
+import { useAuthStore } from '@/stores/authStore';
 import type { Chequera } from '@/types';
 
 /**
@@ -13,6 +15,8 @@ import type { Chequera } from '@/types';
 export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string) => void }) {
   const { data, isLoading } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
   const [bajando, setBajando] = useState(false);
+  const [correos, setCorreos] = useState(false);
+  const canWrite = useAuthStore().can('cheques.write');
 
   // Libro de cheques en Excel: una hoja por chequera.
   async function descargarExcel() {
@@ -41,9 +45,15 @@ export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string
       <button
         onClick={descargarExcel}
         disabled={bajando}
-        className="mb-3 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand disabled:opacity-50"
+        className="mb-2 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand disabled:opacity-50"
       >
         {bajando ? 'Generando…' : '⬇ Descargar Excel (una hoja por chequera)'}
+      </button>
+      <button
+        onClick={() => setCorreos(true)}
+        className="mb-3 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand"
+      >
+        ✉️ Correos de aviso
       </button>
       {libretas.map((c) => (
         <button
@@ -70,6 +80,13 @@ export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string
         El próximo folio se calcula del número de cheque más alto usado en esa chequera. Los que
         aparecen en <strong>Sin asignar</strong> son filas del Excel que venían sin banco.
       </p>
+
+      <NotificationRecipientsModal
+        open={correos}
+        onClose={() => setCorreos(false)}
+        canManage={canWrite}
+        scope="CHEQUES"
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { AppShell } from '@/components/layouts/AppShell';
 import { CreateChequeModal } from '@/components/forms/CreateChequeModal';
@@ -9,6 +9,7 @@ import { ChequesCalendar } from '@/components/ui/ChequesCalendar';
 import { ResumenTab } from '@/components/cheques/ResumenTab';
 import { CuentasTab } from '@/components/cheques/CuentasTab';
 import { ChequeDetalle } from '@/components/cheques/ChequeDetalle';
+import { AvisosField } from '@/components/cheques/AvisosField';
 import { apiGet, apiPost, apiPatch } from '@/lib/api';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
@@ -18,6 +19,7 @@ import type {
   Chequera,
   ChequeGroupSummary,
   ChequeGroupDetail,
+  ChequeGroupAvisos,
 } from '@/types';
 
 type Vista = 'resumen' | 'cheques' | 'calendario' | 'financiamientos' | 'cuentas';
@@ -354,11 +356,16 @@ function FinanciamientosTab({
   const [abierta, setAbierta] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const [verCerrados, setVerCerrados] = useState(false);
+
   const grupos = data ?? [];
   const saldo = grupos.reduce((s, g) => s + g.saldo, 0);
   const restantes = grupos.reduce((s, g) => s + g.faltan, 0);
-  const activas = grupos.filter((g) => g.faltan > 0).length;
-  const pagadas = grupos.filter((g) => g.faltan === 0).length;
+  // Arriba solo los que siguen vivos; los ya culminados van al final.
+  const activos = grupos.filter((g) => g.faltan > 0);
+  const cerrados = grupos.filter((g) => g.faltan === 0);
+  const activas = activos.length;
+  const pagadas = cerrados.length;
 
   const refresh = () => {
     mutate();
@@ -383,16 +390,50 @@ function FinanciamientosTab({
         </div>
       </div>
 
-      {grupos.map((g) => (
+      {activos.map((g) => (
         <FinanciamientoFila
           key={g.id}
           grupo={g}
+          chequeras={chequeras}
           abierta={abierta === g.id}
           onToggle={() => setAbierta(abierta === g.id ? null : g.id)}
           canWrite={canWrite}
           onChanged={refresh}
         />
       ))}
+
+      {activos.length === 0 && (
+        <div className="py-8 text-center text-sm text-ink-tertiary">
+          No hay financiamientos activos.
+        </div>
+      )}
+
+      {/* Culminados: abajo, plegados, para que no estorben a los activos. */}
+      {cerrados.length > 0 && (
+        <div className="mt-5">
+          <button
+            onClick={() => setVerCerrados((v) => !v)}
+            className="flex w-full items-center justify-between border-y-2 border-surface-border py-2.5 text-[10px] font-bold uppercase tracking-[.08em] text-ink-secondary"
+          >
+            <span>
+              Culminados ({cerrados.length})
+            </span>
+            <span className="text-ink-tertiary">{verCerrados ? 'Ocultar ▲' : 'Ver ▼'}</span>
+          </button>
+          {verCerrados &&
+            cerrados.map((g) => (
+              <FinanciamientoFila
+                key={g.id}
+                grupo={g}
+                chequeras={chequeras}
+                abierta={abierta === g.id}
+                onToggle={() => setAbierta(abierta === g.id ? null : g.id)}
+                canWrite={canWrite}
+                onChanged={refresh}
+              />
+            ))}
+        </div>
+      )}
 
       {canWrite && (
         <button
@@ -416,12 +457,14 @@ function FinanciamientosTab({
 
 function FinanciamientoFila({
   grupo: g,
+  chequeras,
   abierta,
   onToggle,
   canWrite,
   onChanged,
 }: {
   grupo: ChequeGroupSummary;
+  chequeras: Chequera[];
   abierta: boolean;
   onToggle: () => void;
   canWrite: boolean;
@@ -437,7 +480,7 @@ function FinanciamientoFila({
 
   if (editando) {
     return (
-      <RenombrarFinanciamiento
+      <EditarFinanciamiento
         grupo={g}
         onClose={() => setEditando(false)}
         onSaved={() => {
@@ -513,6 +556,7 @@ function FinanciamientoFila({
             <CuotaFila
               key={c.id}
               cheque={c}
+              chequeras={chequeras}
               canWrite={canWrite}
               onChanged={() => {
                 mutate();
@@ -528,15 +572,19 @@ function FinanciamientoFila({
 
 function CuotaFila({
   cheque: c,
+  chequeras,
   canWrite,
   onChanged,
 }: {
   cheque: Cheque;
+  chequeras: Chequera[];
   canWrite: boolean;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const cobrado = c.status === 'COBRADO';
+  // De qué chequera sale esta cuota (lo pidió la gerencia: ver dónde se cobra).
+  const chequera = chequeras.find((q) => q.id === c.chequeraId)?.corto ?? null;
 
   async function toggle() {
     setBusy(true);
@@ -556,6 +604,7 @@ function CuotaFila({
       </span>
       <span className="min-w-0 flex-1 truncate text-ink-tertiary">
         {c.number ? `#${c.number}` : ''}
+        {chequera && <span className="ml-1 text-[10px]">· {chequera}</span>}
       </span>
       <span className="w-[76px] shrink-0 text-right font-semibold">{formatCurrency(c.amount)}</span>
       {canWrite ? (
@@ -575,8 +624,8 @@ function CuotaFila({
   );
 }
 
-/** Cambiar el nombre (y la chequera) de una máquina/financiamiento. */
-function RenombrarFinanciamiento({
+/** Editar un financiamiento: nombre, fuente y a quién avisarle por correo. */
+function EditarFinanciamiento({
   grupo: g,
   onClose,
   onSaved,
@@ -585,10 +634,24 @@ function RenombrarFinanciamiento({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { data: detalle } = useSWR<ChequeGroupDetail>(`/cheques/groups/${g.id}`, apiGet);
   const [name, setName] = useState(g.name);
   const [source, setSource] = useState(g.source ?? '');
+  const [avisos, setAvisos] = useState<ChequeGroupAvisos | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Los avisos vienen en el detalle; se cargan una vez llega.
+  useEffect(() => {
+    if (!detalle || avisos) return;
+    setAvisos({
+      notifyEmails: detalle.notifyEmails ?? [],
+      notifyWeekly: detalle.notifyWeekly ?? false,
+      notifyMonthly: detalle.notifyMonthly ?? false,
+      notifyDayBefore: detalle.notifyDayBefore ?? true,
+      notifyOnDue: detalle.notifyOnDue ?? true,
+    });
+  }, [detalle, avisos]);
 
   async function guardar() {
     if (!name.trim()) {
@@ -601,6 +664,7 @@ function RenombrarFinanciamiento({
       await apiPatch(`/cheques/groups/${g.id}`, {
         name: name.trim(),
         source: source.trim() || null,
+        ...(avisos ?? {}),
       });
       onSaved();
     } catch {
@@ -631,6 +695,13 @@ function RenombrarFinanciamiento({
         maxLength={120}
         className="input mb-2 w-full text-sm"
       />
+
+      {avisos && (
+        <div className="mb-2">
+          <AvisosField value={avisos} onChange={setAvisos} />
+        </div>
+      )}
+
       {err && <div className="mb-2 text-xs text-danger">{err}</div>}
       <div className="flex gap-2">
         <button onClick={guardar} disabled={busy} className="btn-primary text-xs disabled:opacity-50">

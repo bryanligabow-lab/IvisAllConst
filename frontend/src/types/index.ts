@@ -439,7 +439,16 @@ export interface ChequeGroupSummary {
   nextDue: string | null;
 }
 
-export interface ChequeGroupDetail {
+/** Avisos por correo de un financiamiento: a quiénes y cada cuándo. */
+export interface ChequeGroupAvisos {
+  notifyEmails: string[];
+  notifyWeekly: boolean;
+  notifyMonthly: boolean;
+  notifyDayBefore: boolean;
+  notifyOnDue: boolean;
+}
+
+export interface ChequeGroupDetail extends ChequeGroupAvisos {
   id: string;
   name: string;
   source: string | null;

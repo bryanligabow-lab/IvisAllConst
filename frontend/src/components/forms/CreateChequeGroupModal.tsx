@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import type { Chequera } from '@/types';
+import { AvisosField, AVISOS_POR_DEFECTO } from '@/components/cheques/AvisosField';
+import type { Chequera, ChequeGroupAvisos } from '@/types';
 
 interface Props {
   open: boolean;
@@ -41,6 +42,7 @@ export function CreateChequeGroupModal({ open, onClose, onSaved, chequeras = [] 
   const [firstDate, setFirstDate] = useState('');
   const [firstNumber, setFirstNumber] = useState('');
   const [cuotas, setCuotas] = useState<Cuota[]>([]);
+  const [avisos, setAvisos] = useState<ChequeGroupAvisos>(AVISOS_POR_DEFECTO);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +55,7 @@ export function CreateChequeGroupModal({ open, onClose, onSaved, chequeras = [] 
     setFirstDate('');
     setFirstNumber('');
     setCuotas([]);
+    setAvisos(AVISOS_POR_DEFECTO);
     setError(null);
   }, [open]);
 
@@ -97,6 +100,7 @@ export function CreateChequeGroupModal({ open, onClose, onSaved, chequeras = [] 
         name: name.trim(),
         chequeraId: chequeraId || null,
         source: chequera?.corto ?? null,
+        ...avisos,
         cuotas: cuotas.map((c) => ({
           number: c.number.trim() || null,
           dueDate: c.dueDate,
@@ -259,6 +263,8 @@ export function CreateChequeGroupModal({ open, onClose, onSaved, chequeras = [] 
             </div>
           </div>
         )}
+
+        <AvisosField value={avisos} onChange={setAvisos} />
 
         {error && <div className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</div>}
 

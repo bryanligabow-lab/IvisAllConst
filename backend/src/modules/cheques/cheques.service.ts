@@ -32,6 +32,31 @@ function effectiveDue(c: { dueDate?: Date | null; issueDate?: Date | null }): Da
   return c.dueDate ?? c.issueDate ?? null;
 }
 
+/** Avisos por correo del financiamiento: a quiénes y cada cuándo. */
+interface GroupNotifyInput {
+  notifyEmails?: string[] | null;
+  notifyWeekly?: boolean;
+  notifyMonthly?: boolean;
+  notifyDayBefore?: boolean;
+  notifyOnDue?: boolean;
+}
+
+function avisosData(input: GroupNotifyInput) {
+  return {
+    ...(input.notifyEmails !== undefined
+      ? {
+          notifyEmails: (input.notifyEmails ?? [])
+            .map((e) => e.trim().toLowerCase())
+            .filter(Boolean),
+        }
+      : {}),
+    ...(input.notifyWeekly !== undefined ? { notifyWeekly: input.notifyWeekly } : {}),
+    ...(input.notifyMonthly !== undefined ? { notifyMonthly: input.notifyMonthly } : {}),
+    ...(input.notifyDayBefore !== undefined ? { notifyDayBefore: input.notifyDayBefore } : {}),
+    ...(input.notifyOnDue !== undefined ? { notifyOnDue: input.notifyOnDue } : {}),
+  };
+}
+
 interface ChequeInput {
   issueDate?: Date | null;
   dueDate?: Date | null;
@@ -294,7 +319,7 @@ export class ChequesService {
       },
       orderBy: { name: 'asc' },
     });
-    return groups.map((g) => {
+    const resumen = groups.map((g) => {
       const total = g.cheques.reduce((s, c) => s + c.amount, 0);
       const pagadas = g.cheques.filter((c) => c.status === 'COBRADO');
       const pendientes = g.cheques.filter((c) => c.status !== 'COBRADO' && c.status !== 'ANULADO');
@@ -317,6 +342,19 @@ export class ChequesService {
         saldo,
         nextDue,
       };
+    });
+    // Primero los activos (y entre ellos, el que se cobra antes); los ya
+    // culminados quedan al final, que es como se muestran en la pantalla.
+    return resumen.sort((a, b) => {
+      const aVivo = a.faltan > 0;
+      const bVivo = b.faltan > 0;
+      if (aVivo !== bVivo) return aVivo ? -1 : 1;
+      if (aVivo && bVivo) {
+        const ta = a.nextDue ? new Date(a.nextDue).getTime() : Number.MAX_SAFE_INTEGER;
+        const tb = b.nextDue ? new Date(b.nextDue).getTime() : Number.MAX_SAFE_INTEGER;
+        if (ta !== tb) return ta - tb;
+      }
+      return a.name.localeCompare(b.name);
     });
   }
 
@@ -341,6 +379,11 @@ export class ChequesService {
       name: g.name,
       source: g.source,
       notes: g.notes,
+      notifyEmails: g.notifyEmails,
+      notifyWeekly: g.notifyWeekly,
+      notifyMonthly: g.notifyMonthly,
+      notifyDayBefore: g.notifyDayBefore,
+      notifyOnDue: g.notifyOnDue,
       cheques: g.cheques,
       total,
       montoPagado,
@@ -350,7 +393,7 @@ export class ChequesService {
 
   // Crea un financiamiento y (opcional) genera N cuotas mensuales automáticas.
   static async createGroup(
-    input: {
+    input: GroupNotifyInput & {
       name: string;
       source?: string | null;
       notes?: string | null;
@@ -372,6 +415,7 @@ export class ChequesService {
         name: input.name.trim(),
         source: input.source?.trim() || null,
         notes: input.notes?.trim() || null,
+        ...avisosData(input),
         createdBy: userId ?? null,
       },
     });
@@ -416,7 +460,7 @@ export class ChequesService {
     return this.getGroup(group.id);
   }
 
-  static async updateGroup(id: string, input: { name?: string; source?: string | null; notes?: string | null }) {
+  static async updateGroup(id: string, input: GroupNotifyInput & { name?: string; source?: string | null; notes?: string | null }) {
     const g = await prisma.chequeGroup.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
     if (!g) throw new NotFoundError('Financiamiento no encontrado');
     await prisma.chequeGroup.update({
@@ -425,6 +469,7 @@ export class ChequesService {
         ...(input.name !== undefined ? { name: input.name.trim() } : {}),
         ...(input.source !== undefined ? { source: input.source?.trim() || null } : {}),
         ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+        ...avisosData(input),
       },
     });
     return this.getGroup(id);

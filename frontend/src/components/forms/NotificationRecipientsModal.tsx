@@ -12,15 +12,36 @@ interface Recipient {
   active: boolean;
 }
 
+type Scope = 'PLANILLAS' | 'CHEQUES';
+
 interface Props {
   open: boolean;
   onClose: () => void;
   canManage: boolean;
+  /** Qué lista se administra: los informes de planillas o los avisos de cheques. */
+  scope?: Scope;
 }
 
-// Administra los correos que reciben los informes de estado de las planillas.
-export function NotificationRecipientsModal({ open, onClose, canManage }: Props) {
-  const { data, mutate } = useSWR<Recipient[]>(open ? '/notifications/recipients' : null, apiGet);
+const COPY: Record<Scope, { title: string; intro: string; boton: string }> = {
+  PLANILLAS: {
+    title: 'Correos para informes de planillas',
+    intro:
+      'Estos correos recibirán el <strong>informe diario</strong> del estado de las planillas (cuántas presentadas, en contraloría, por cobrar, etc.).',
+    boton: 'Enviar informe ahora',
+  },
+  CHEQUES: {
+    title: 'Correos para avisos de cheques',
+    intro:
+      'Estos correos reciben tres avisos automáticos: el <strong>resumen semanal</strong> de los cheques por cubrir (lunes 7:00 a. m.), una <strong>alerta el día antes</strong> del cobro y otra <strong>el mismo día</strong> del cobro.',
+    boton: 'Enviar resumen semanal ahora',
+  },
+};
+
+// Administra los correos que reciben los informes automáticos del sistema.
+export function NotificationRecipientsModal({ open, onClose, canManage, scope = 'PLANILLAS' }: Props) {
+  const copy = COPY[scope];
+  const listKey = `/notifications/recipients?scope=${scope}`;
+  const { data, mutate } = useSWR<Recipient[]>(open ? listKey : null, apiGet);
   const { data: mailStatus } = useSWR<{ configured: boolean }>(
     open ? '/notifications/mail-status' : null,
     apiGet,
@@ -36,14 +57,17 @@ export function NotificationRecipientsModal({ open, onClose, canManage }: Props)
     setSending(true);
     setSendMsg(null);
     try {
-      const r = (await apiPost('/notifications/send-report', {})) as {
-        sent?: boolean;
+      const r = (await apiPost(
+        scope === 'CHEQUES' ? '/notifications/cheques/send' : '/notifications/send-report',
+        scope === 'CHEQUES' ? { kind: 'SEMANA' } : {},
+      )) as {
+        sent?: boolean | number;
         recipients?: number;
         skipped?: boolean;
         error?: string;
       };
       if (r.skipped) setSendMsg('El envío aún no está activo (falta la contraseña del correo).');
-      else if (r.sent) setSendMsg(`✓ Informe enviado a ${r.recipients} correo(s).`);
+      else if (r.sent) setSendMsg(`✓ Enviado a ${r.recipients ?? r.sent} correo(s).`);
       else setSendMsg(r.error ? `No se pudo enviar: ${r.error}` : 'No hay correos activos.');
     } catch (err) {
       setSendMsg(err instanceof ApiClientError ? err.message : 'No se pudo enviar');
@@ -61,6 +85,7 @@ export function NotificationRecipientsModal({ open, onClose, canManage }: Props)
       await apiPost('/notifications/recipients', {
         email: email.trim(),
         name: name.trim() || undefined,
+        scope,
       });
       setEmail('');
       setName('');
@@ -83,12 +108,12 @@ export function NotificationRecipientsModal({ open, onClose, canManage }: Props)
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Correos para informes de planillas">
+    <Modal open={open} onClose={onClose} title={copy.title}>
       <div className="space-y-4">
-        <p className="text-xs text-ink-secondary">
-          Estos correos recibirán el <strong>informe diario</strong> del estado de las planillas
-          (cuántas presentadas, en contraloría, por cobrar, etc.) una vez se active el envío.
-        </p>
+        <p
+          className="text-xs text-ink-secondary"
+          dangerouslySetInnerHTML={{ __html: copy.intro }}
+        />
 
         {canManage && (
           <form onSubmit={add} className="rounded-lg border border-surface-border p-3">
@@ -186,7 +211,7 @@ export function NotificationRecipientsModal({ open, onClose, canManage }: Props)
                 disabled={sending}
                 className="btn-secondary text-xs disabled:opacity-50"
               >
-                {sending ? 'Enviando…' : 'Enviar informe ahora'}
+                {sending ? 'Enviando…' : copy.boton}
               </button>
               {sendMsg && <span className="text-ink-secondary">{sendMsg}</span>}
             </div>
