@@ -136,7 +136,11 @@ notificationsRouter.get(
     const kind = (['SEMANA', 'MES', 'MANANA', 'HOY'].includes(String(req.query.kind))
       ? String(req.query.kind)
       : 'SEMANA') as ChequeAvisoKind;
-    const armado = await ChequesNotifications.preview(kind, 'Gabriel');
+    // Con ?chequeId= se previsualiza el aviso de emisión de ese cheque.
+    const chequeId = typeof req.query.chequeId === 'string' ? req.query.chequeId : null;
+    const armado = chequeId
+      ? await ChequesNotifications.previewEmision(chequeId)
+      : await ChequesNotifications.preview(kind, 'Gabriel');
     if (!armado) return success(res, { empty: true, kind });
     return success(res, { kind, ...armado });
   }),

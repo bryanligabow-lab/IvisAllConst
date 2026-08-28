@@ -9,7 +9,9 @@ import { success } from '../../utils/apiResponse';
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
+import { logger } from '../../utils/logger';
 import { ChequesService, CHEQUE_STATUSES } from './cheques.service';
+import { ChequesNotifications } from './cheques.notifications';
 import { exportChequesExcel } from './cheques.excel';
 
 const chequeBodySchema = z.object({
@@ -80,7 +82,15 @@ chequesRouter.post(
   requirePermission(PERMISSIONS.CHEQUES_WRITE),
   validate(chequeBodySchema),
   asyncHandler(async (req, res) => {
-    return success(res, await ChequesService.create(req.body, req.user?.id), 201);
+    const creado = await ChequesService.create(req.body, req.user?.id);
+    // Aviso de emisión: sale aparte para no demorar (ni tumbar) el guardado.
+    void ChequesNotifications.avisoEmision(creado.id, req.user?.id).catch((err: Error) => {
+      logger.error('No se pudo enviar el aviso de emisión del cheque', {
+        chequeId: creado.id,
+        error: (err as Error).message,
+      });
+    });
+    return success(res, creado, 201);
   }),
 );
 

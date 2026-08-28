@@ -194,16 +194,45 @@ export class ChequesNotifications {
       </table>`;
   }
 
-  private static envoltura(saludo: string, cuerpo: string): string {
+  /**
+   * Papelería común de todos los correos: membrete, título, cuerpo, despedida y
+   * pie. Se mantiene el mismo formato en los cuatro avisos para que la
+   * comunicación se vea de la empresa y no de un script.
+   */
+  private static envoltura(titulo: string, saludo: string, cuerpo: string): string {
     return `
-    <div style="font-family:Arial,Helvetica,sans-serif;color:${TINTA};max-width:720px;margin:0 auto">
-      <h2 style="color:${RED};margin:0 0 4px">CREACOM — Control de cheques</h2>
-      <p style="font-size:14px;margin:16px 0 6px">${saludo}</p>
-      ${cuerpo}
-      <p style="font-size:11px;color:${GRIS};margin-top:22px">
-        Este aviso lo envía el sistema CREACOM automáticamente. Si un cheque ya se cobró,
-        márcalo en la aplicación para que deje de aparecer.
-      </p>
+    <div style="background:#f5f3f1;padding:24px 12px;font-family:Arial,Helvetica,sans-serif">
+      <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e5e1dc">
+        <div style="background:${RED};padding:18px 24px">
+          <div style="color:#ffffff;font-size:19px;font-weight:bold;letter-spacing:.04em">CREACOM S.A.</div>
+          <div style="color:#ffffff;opacity:.85;font-size:11px;letter-spacing:.12em;text-transform:uppercase">
+            Innovación · Proyectos · Servicios
+          </div>
+        </div>
+        <div style="padding:24px">
+          <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${GRIS}">
+            Control de cheques
+          </div>
+          <h1 style="font-size:20px;color:${TINTA};margin:4px 0 18px">${titulo}</h1>
+          <p style="font-size:14px;color:${TINTA};margin:0 0 12px">${saludo}</p>
+          ${cuerpo}
+          <p style="font-size:14px;color:${TINTA};margin:22px 0 0">
+            Quedamos atentos a cualquier consulta.
+          </p>
+          <p style="font-size:14px;color:${TINTA};margin:14px 0 0">
+            Atentamente,<br />
+            <strong>Departamento de Administración y Finanzas</strong><br />
+            CREACOM S.A.
+          </p>
+        </div>
+        <div style="border-top:1px solid #e5e1dc;padding:14px 24px;background:#faf8f7">
+          <p style="font-size:11px;color:${GRIS};margin:0">
+            Mensaje generado automáticamente por el sistema de control de cheques de CREACOM S.A.
+            Si algún cheque ya fue cobrado, le agradecemos actualizar su estado en el sistema para
+            mantener la información al día. Por favor no responda a este correo.
+          </p>
+        </div>
+      </div>
     </div>`;
   }
 
@@ -218,37 +247,40 @@ export class ChequesNotifications {
     nombre?: string | null,
     atrasados: ChequePendiente[] = [],
   ): { subject: string; html: string } | null {
-    const saludo = nombre ? `Estimado/a ${nombre}:` : 'Estimados:';
+    const saludo = nombre ? `Estimado/a ${nombre}:` : 'Estimados señores:';
     const total = lista.reduce((s, c) => s + c.amount, 0);
     const n = lista.length;
-    const cuantos = n === 1 ? 'un cheque' : `${n} cheques`;
+    const cuantos = n === 1 ? 'un (1) cheque' : `${n} cheques`;
+    const p = (t: string) => `<p style="font-size:14px;color:${TINTA};margin:0 0 10px">${t}</p>`;
 
     if (kind === 'SEMANA' || kind === 'MES') {
-      const periodo = kind === 'SEMANA' ? 'esta semana' : 'este mes';
+      const periodo = kind === 'SEMANA' ? 'la presente semana' : 'el presente mes';
+      const titulo =
+        kind === 'SEMANA' ? 'Cheques programados para la semana' : 'Cheques programados para el mes';
       const cuerpo =
         n === 0
-          ? `<p style="font-size:14px">${
-              periodo[0].toUpperCase() + periodo.slice(1)
-            } <strong>no hay cheques programados</strong> para cobro.</p>`
-          : `<p style="font-size:14px">${
-              periodo[0].toUpperCase() + periodo.slice(1)
-            } tienes <strong>${n}</strong> ${
-              n === 1 ? 'cheque' : 'cheques'
-            } por cubrir, por un total de <strong style="color:${RED}">${money(total)}</strong>:</p>
-             ${this.tabla(lista)}`;
+          ? p(
+              `Por medio del presente le informamos que para ${periodo} <strong>no existen cheques programados</strong> para cobro.`,
+            )
+          : p(
+              `Por medio del presente le informamos que para ${periodo} se encuentran programados <strong>${cuantos}</strong>, por un valor total de <strong style="color:${RED}">${money(total)}</strong>. A continuación el detalle:`,
+            ) + this.tabla(lista);
       const extra =
         atrasados.length > 0
-          ? `<p style="font-size:14px;margin-top:22px">Además siguen <strong>pendientes de cobro</strong> ${
-              atrasados.length
-            } ${atrasados.length === 1 ? 'cheque con fecha pasada' : 'cheques con fecha pasada'}:</p>
-             ${this.tabla(atrasados.slice(0, 30))}`
+          ? `<div style="margin-top:22px">${p(
+              `Adicionalmente, ${
+                atrasados.length === 1
+                  ? 'permanece pendiente de cobro un (1) cheque con fecha anterior a la actual'
+                  : `permanecen pendientes de cobro ${atrasados.length} cheques con fecha anterior a la actual`
+              }:`,
+            )}${this.tabla(atrasados.slice(0, 30))}</div>`
           : '';
       return {
         subject:
           n === 0
-            ? `CREACOM · Sin cheques por cubrir ${periodo}`
-            : `CREACOM · Cheques por cubrir ${periodo} (${money(total)})`,
-        html: this.envoltura(saludo, cuerpo + extra),
+            ? `CREACOM S.A. · Sin cheques programados para ${kind === 'SEMANA' ? 'la semana' : 'el mes'}`
+            : `CREACOM S.A. · Cheques programados para ${kind === 'SEMANA' ? 'la semana' : 'el mes'} — ${money(total)}`,
+        html: this.envoltura(titulo, saludo, cuerpo + extra),
       };
     }
 
@@ -256,14 +288,155 @@ export class ChequesNotifications {
     const dia = fechaLarga(sumarDias(hoyEcuador(), kind === 'MANANA' ? 1 : 0));
     const frase =
       kind === 'MANANA'
-        ? `Te recordamos que <strong>mañana (${dia})</strong> se cubre${n === 1 ? '' : 'n'} ${cuantos} por <strong style="color:${RED}">${money(total)}</strong>.`
-        : `<strong>Hoy (${dia})</strong> se cobra${n === 1 ? '' : 'n'} ${cuantos} por <strong style="color:${RED}">${money(total)}</strong>.`;
+        ? `Por medio del presente le recordamos que <strong>mañana ${dia}</strong> se hará efectivo el cobro de <strong>${cuantos}</strong>, por un valor total de <strong style="color:${RED}">${money(total)}</strong>. Le agradecemos mantener la provisión de fondos correspondiente.`
+        : `Por medio del presente le informamos que <strong>hoy ${dia}</strong> se hace efectivo el cobro de <strong>${cuantos}</strong>, por un valor total de <strong style="color:${RED}">${money(total)}</strong>.`;
     return {
       subject:
         kind === 'MANANA'
-          ? `CREACOM · Mañana se cubre${n === 1 ? '' : 'n'} ${cuantos} (${money(total)})`
-          : `CREACOM · Hoy se cobra${n === 1 ? '' : 'n'} ${cuantos} (${money(total)})`,
-      html: this.envoltura(saludo, `<p style="font-size:14px">${frase}</p>${this.tabla(lista)}`),
+          ? `CREACOM S.A. · Recordatorio: cobro de cheques mañana — ${money(total)}`
+          : `CREACOM S.A. · Cheques con cobro el día de hoy — ${money(total)}`,
+      html: this.envoltura(
+        kind === 'MANANA' ? 'Recordatorio de cobro para mañana' : 'Cheques con cobro el día de hoy',
+        saludo,
+        p(frase) + this.tabla(lista),
+      ),
+    };
+  }
+
+  // ---------- Aviso de emisión (al cargar un cheque) ----------
+
+  /**
+   * Avisa que se emitió un cheque: de qué chequera salió, por cuánto y con qué
+   * detalle. Se dispara al registrar un cheque en el sistema.
+   */
+  private static async armarEmision(
+    chequeId: string,
+    userId?: string | null,
+  ): Promise<{
+    subject: string;
+    cuerpo: string;
+    emails: Map<string, string | null>;
+  } | null> {
+    const c = await prisma.cheque.findFirst({
+      where: { id: chequeId, deletedAt: null },
+      select: {
+        number: true,
+        beneficiary: true,
+        amount: true,
+        issueDate: true,
+        dueDate: true,
+        notes: true,
+        chequeraId: true,
+        installment: true,
+        groupId: true,
+        group: { select: { name: true, notifyEmails: true } },
+      },
+    });
+    if (!c) return null;
+
+    const [chequera, autor] = await Promise.all([
+      c.chequeraId
+        ? prisma.chequera.findFirst({
+            where: { id: c.chequeraId },
+            select: { corto: true, empresa: true, banco: true },
+          })
+        : null,
+      userId
+        ? prisma.user.findFirst({
+            where: { id: userId },
+            select: { firstName: true, lastName: true, email: true },
+          })
+        : null,
+    ]);
+    const registradoPor = autor
+      ? [autor.firstName, autor.lastName].filter(Boolean).join(' ') || autor.email
+      : null;
+    const nombreChequera = chequera
+      ? `${chequera.corto} (${chequera.empresa} — ${chequera.banco})`
+      : 'Sin chequera asignada';
+
+    const filas: [string, string][] = [
+      ['Chequera', nombreChequera],
+      ['Número de cheque', c.number ? `#${c.number}` : 'Sin número'],
+      ['Beneficiario', c.beneficiary ?? 'Sin beneficiario registrado'],
+      ['Valor', money(c.amount)],
+      ['Fecha de emisión', c.issueDate ? fechaCorta(c.issueDate) : 'No registrada'],
+      ['Fecha prevista de cobro', c.dueDate ? fechaCorta(c.dueDate) : 'No registrada'],
+    ];
+    if (c.group?.name) {
+      filas.push([
+        'Financiamiento',
+        `${c.group.name}${c.installment ? ` — cuota ${c.installment}` : ''}`,
+      ]);
+    }
+    filas.push(['Detalle', c.notes?.trim() || 'Sin detalle adicional']);
+    if (registradoPor) filas.push(['Registrado por', registradoPor]);
+
+    const detalle = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin:4px 0 0">
+        ${filas
+          .map(
+            ([k, v], i) => `
+          <tr>
+            <td style="padding:9px 12px;border-bottom:1px solid #eee;background:#faf8f7;width:200px;color:${GRIS};vertical-align:top">${k}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid #eee;${
+              i === 3 ? `font-weight:bold;color:${RED};font-size:15px` : ''
+            }">${v}</td>
+          </tr>`,
+          )
+          .join('')}
+      </table>`;
+
+    // A la lista general de cheques y, si el cheque pertenece a un
+    // financiamiento, también a los correos de ese financiamiento.
+    const emails = new Map<string, string | null>();
+    for (const r of await this.recipients()) emails.set(r.email.toLowerCase(), r.name);
+    for (const e of c.group?.notifyEmails ?? []) {
+      const key = e.trim().toLowerCase();
+      if (key && !emails.has(key)) emails.set(key, null);
+    }
+    return {
+      subject: `CREACOM S.A. · Emisión de cheque ${c.number ? `#${c.number} ` : ''}— ${money(c.amount)}`,
+      cuerpo: `<p style="font-size:14px;color:${TINTA};margin:0 0 12px">
+           Por medio del presente le informamos que se ha registrado la emisión de un cheque
+           con cargo a la chequera <strong>${nombreChequera}</strong>, por un valor de
+           <strong style="color:${RED}">${money(c.amount)}</strong>. A continuación el detalle:
+         </p>${detalle}`,
+      emails,
+    };
+  }
+
+  /** Manda el aviso de emisión a quien corresponda. */
+  static async avisoEmision(
+    chequeId: string,
+    userId?: string | null,
+  ): Promise<{ sent: number; recipients: number; skipped?: boolean; error?: string }> {
+    const armado = await this.armarEmision(chequeId, userId);
+    if (!armado) return { sent: 0, recipients: 0, error: 'Cheque no encontrado' };
+    if (armado.emails.size === 0) return { sent: 0, recipients: 0, error: 'No hay correos activos' };
+
+    let sent = 0;
+    let error: string | undefined;
+    for (const [email, name] of armado.emails) {
+      const saludo = name ? `Estimado/a ${name.split(' ')[0]}:` : 'Estimados señores:';
+      const html = this.envoltura('Emisión de cheque', saludo, armado.cuerpo);
+      const r = await sendMail({ to: email, subject: armado.subject, html });
+      if (r.ok) sent += 1;
+      else if (r.skipped) return { sent, recipients: armado.emails.size, skipped: true };
+      else if (r.error) error = r.error;
+    }
+    return { sent, recipients: armado.emails.size, error };
+  }
+
+  /** Vista previa del aviso de emisión (no envía nada). */
+  static async previewEmision(
+    chequeId: string,
+  ): Promise<{ subject: string; html: string } | null> {
+    const armado = await this.armarEmision(chequeId);
+    if (!armado) return null;
+    return {
+      subject: armado.subject,
+      html: this.envoltura('Emisión de cheque', 'Estimado/a Gabriel:', armado.cuerpo),
     };
   }
 
