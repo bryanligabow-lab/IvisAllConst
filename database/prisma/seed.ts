@@ -289,7 +289,7 @@ async function main() {
   // Los pidió la gerencia: aviso semanal + un día antes + el día del cobro.
   // Se pueden pausar o quitar desde Cheques → Cuentas → Correos.
   const chequeMails = [
-    { email: 'elderconstantine@gmail.com', name: 'Gabriel Constantine' },
+    { email: 'elderconstantine@hotmail.com', name: 'Gabriel Constantine' },
     { email: 'maydalunap@gmail.com', name: 'Mayda Luna' },
     { email: 'finanzas@creacomsa.com', name: 'Finanzas CREACOM' },
   ];
