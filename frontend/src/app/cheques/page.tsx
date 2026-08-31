@@ -256,6 +256,7 @@ function ChequesTab({
         <FilaCheque
           key={c.id}
           cheque={c}
+          chequeras={chequeras}
           canWrite={canWrite}
           onOpen={() => onOpen(c)}
           onChanged={() => {
@@ -280,17 +281,21 @@ function ChequesTab({
 
 function FilaCheque({
   cheque: c,
+  chequeras,
   canWrite,
   onOpen,
   onChanged,
 }: {
   cheque: Cheque;
+  chequeras: Chequera[];
   canWrite: boolean;
   onOpen: () => void;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const due = c.dueDate ?? c.issueDate;
+  // La chequera va en la propia fila: se pidió verla sin abrir el cheque.
+  const chequera = chequeras.find((q) => q.id === c.chequeraId)?.corto ?? null;
 
   async function marcar(e: React.MouseEvent) {
     e.stopPropagation();
@@ -318,6 +323,7 @@ function FilaCheque({
           {c.status === 'COBRADO'
             ? `cobrado ${formatCalendarDate(c.cashDate ?? due)}`
             : `cobro ${formatCalendarDate(due)}`}
+          {chequera && <span className="text-ink-tertiary"> · {chequera}</span>}
         </div>
       </div>
       <div className="shrink-0 text-right">

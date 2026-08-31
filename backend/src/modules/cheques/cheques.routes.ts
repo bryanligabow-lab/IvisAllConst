@@ -59,6 +59,30 @@ chequesRouter.get(
   }),
 );
 
+// Nueva chequera (empresa + banco).
+const chequeraSchema = z.object({
+  empresa: z.string().min(1).max(80),
+  banco: z.string().min(1).max(80),
+  corto: z.string().max(120).nullish(),
+});
+chequesRouter.post(
+  '/chequeras',
+  requirePermission(PERMISSIONS.CHEQUES_WRITE),
+  validate(chequeraSchema),
+  asyncHandler(async (req, res) => {
+    return success(res, await ChequesService.createChequera(req.body), 201);
+  }),
+);
+
+chequesRouter.patch(
+  '/chequeras/:id',
+  requirePermission(PERMISSIONS.CHEQUES_WRITE),
+  validate(chequeraSchema.partial()),
+  asyncHandler(async (req, res) => {
+    return success(res, await ChequesService.updateChequera(req.params.id, req.body));
+  }),
+);
+
 // Crea las chequeras y asigna la suya a los cheques que aún no la tienen.
 chequesRouter.post(
   '/chequeras/sync',

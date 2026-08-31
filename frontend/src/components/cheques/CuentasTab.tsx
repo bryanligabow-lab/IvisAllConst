@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { apiGet, apiFetchBlob } from '@/lib/api';
+import { apiGet, apiPost, apiFetchBlob, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
 import { NotificationRecipientsModal } from '@/components/forms/NotificationRecipientsModal';
+import { Modal, Field } from '@/components/ui/Modal';
 import { useAuthStore } from '@/stores/authStore';
 import type { Chequera } from '@/types';
 
@@ -13,9 +14,10 @@ import type { Chequera } from '@/types';
  * próximo número de cheque disponible.
  */
 export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string) => void }) {
-  const { data, isLoading } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
+  const { data, isLoading, mutate } = useSWR<Chequera[]>('/cheques/chequeras', apiGet);
   const [bajando, setBajando] = useState(false);
   const [correos, setCorreos] = useState(false);
+  const [nueva, setNueva] = useState(false);
   const canWrite = useAuthStore().can('cheques.write');
 
   // Libro de cheques en Excel: una hoja por chequera.
@@ -51,10 +53,18 @@ export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string
       </button>
       <button
         onClick={() => setCorreos(true)}
-        className="mb-3 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand"
+        className="mb-2 w-full border-2 border-surface-border py-2.5 text-xs font-bold uppercase tracking-[.04em] text-ink-secondary hover:border-brand/60 hover:text-brand"
       >
         ✉️ Correos de aviso
       </button>
+      {canWrite && (
+        <button
+          onClick={() => setNueva(true)}
+          className="mb-3 w-full bg-brand py-2.5 text-xs font-bold uppercase tracking-[.04em] text-white"
+        >
+          + Nueva chequera
+        </button>
+      )}
       {libretas.map((c) => (
         <button
           key={c.id}
@@ -87,6 +97,14 @@ export function CuentasTab({ onVerCheques }: { onVerCheques: (chequeraId: string
         canManage={canWrite}
         scope="CHEQUES"
       />
+      <NuevaChequeraModal
+        open={nueva}
+        onClose={() => setNueva(false)}
+        onSaved={() => {
+          setNueva(false);
+          void mutate();
+        }}
+      />
     </div>
   );
 }
@@ -107,5 +125,81 @@ function Celda({
         {valor}
       </div>
     </div>
+  );
+}
+
+/** Alta de una chequera: empresa + banco. */
+function NuevaChequeraModal({
+  open,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [empresa, setEmpresa] = useState('');
+  const [banco, setBanco] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!empresa.trim() || !banco.trim()) {
+      setError('Pon la empresa y el banco');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await apiPost('/cheques/chequeras', { empresa: empresa.trim(), banco: banco.trim() });
+      setEmpresa('');
+      setBanco('');
+      onSaved();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'No se pudo crear la chequera');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nueva chequera">
+      <form onSubmit={submit} className="space-y-3">
+        <Field label="Empresa" required hint="La empresa dueña de la cuenta.">
+          <input
+            value={empresa}
+            onChange={(e) => setEmpresa(e.target.value)}
+            required
+            maxLength={80}
+            className="input"
+            placeholder="Ej. Creacom, Pavimentación, Sumac"
+          />
+        </Field>
+        <Field label="Banco" required>
+          <input
+            value={banco}
+            onChange={(e) => setBanco(e.target.value)}
+            required
+            maxLength={80}
+            className="input"
+            placeholder="Ej. Banco de Guayaquil, BanEcuador"
+          />
+        </Field>
+        <p className="text-[11px] text-ink-tertiary">
+          Se mostrará como <strong>{(empresa.trim() || 'Empresa') + ' · ' + (banco.trim() || 'Banco')}</strong>{' '}
+          y quedará disponible al cargar cheques y financiamientos.
+        </p>
+        {error && <div className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</div>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn-secondary">
+            Cancelar
+          </button>
+          <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
+            {saving ? 'Creando…' : 'Crear chequera'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

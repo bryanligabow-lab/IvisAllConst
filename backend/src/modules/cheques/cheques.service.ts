@@ -580,6 +580,57 @@ export class ChequesService {
     return { chequeras: CHEQUERAS_SEED.length, asignados };
   }
 
+  /**
+   * Crea una chequera nueva (empresa + banco). El id es un slug legible que se
+   * saca del nombre; si ya existe se le añade un sufijo para no pisar la otra.
+   */
+  static async createChequera(input: { empresa: string; banco: string; corto?: string | null }) {
+    const empresa = input.empresa.trim();
+    const banco = input.banco.trim();
+    const corto = input.corto?.trim() || `${empresa} · ${banco}`;
+
+    const slug = (t: string) =>
+      t
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 24);
+    const base = `${slug(empresa)}-${slug(banco)}`.replace(/^-|-$/g, '') || 'chequera';
+    let id = base;
+    for (let i = 2; await prisma.chequera.findFirst({ where: { id } }); i += 1) {
+      id = `${base}-${i}`;
+    }
+
+    // Va antes de "Sin asignar" (99) y detrás de las que ya existen.
+    const ultima = await prisma.chequera.findFirst({
+      where: { deletedAt: null, orderIndex: { lt: 90 } },
+      orderBy: { orderIndex: 'desc' },
+      select: { orderIndex: true },
+    });
+    return prisma.chequera.create({
+      data: { id, corto, empresa, banco, orderIndex: (ultima?.orderIndex ?? 0) + 1 },
+    });
+  }
+
+  /** Renombrar una chequera (empresa, banco o cómo se muestra). */
+  static async updateChequera(
+    id: string,
+    input: { empresa?: string; banco?: string; corto?: string | null },
+  ) {
+    const q = await prisma.chequera.findFirst({ where: { id, deletedAt: null } });
+    if (!q) throw new NotFoundError('Chequera no encontrada');
+    return prisma.chequera.update({
+      where: { id },
+      data: {
+        ...(input.empresa !== undefined ? { empresa: input.empresa.trim() } : {}),
+        ...(input.banco !== undefined ? { banco: input.banco.trim() } : {}),
+        ...(input.corto !== undefined && input.corto?.trim() ? { corto: input.corto.trim() } : {}),
+      },
+    });
+  }
+
   /** Chequeras con sus cifras: emitidos, pendiente y próximo folio. */
   static async chequeras() {
     const [libretas, cheques] = await Promise.all([
