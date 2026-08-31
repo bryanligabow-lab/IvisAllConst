@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import { logger } from '../../utils/logger';
 
 /**
  * Envío de correo por SMTP. Se configura por variables de entorno:
@@ -40,23 +41,60 @@ export interface SendMailInput {
   text?: string;
 }
 
-/** Envía un correo. Devuelve {skipped:true} si no hay SMTP configurado. */
+/** Versión en texto plano a partir del HTML (los correos solo-HTML caen en spam). */
+function htmlAAlternativaTexto(html: string): string {
+  return html
+    .replace(/<\/(p|div|tr|h1|h2|h3|table)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<td[^>]*>/gi, '  ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&mdash;/g, '—')
+    .replace(/&middot;/g, '·')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Envía un correo. Devuelve {skipped:true} si no hay SMTP configurado.
+ * Se registra la respuesta del servidor (aceptados, rechazados y el texto del
+ * 250) porque "no lanzó error" NO es lo mismo que "llegó": sin esto no había
+ * forma de distinguir un correo entregado de uno que el relay se tragó.
+ */
 export async function sendMail(
   input: SendMailInput,
-): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+): Promise<{ ok: boolean; skipped?: boolean; error?: string; messageId?: string }> {
   const t = getTransporter();
   if (!t) return { ok: false, skipped: true };
   try {
-    await t.sendMail({
+    const info = await t.sendMail({
       from: mailFrom(),
       to: input.to,
       subject: input.subject,
       html: input.html,
-      text: input.text,
+      text: input.text ?? htmlAAlternativaTexto(input.html),
+      replyTo: process.env.SMTP_USER,
     });
-    return { ok: true };
+    logger.info('SMTP entrega', {
+      to: Array.isArray(input.to) ? input.to.join(',') : input.to,
+      accepted: (info.accepted ?? []).length,
+      rejected: (info.rejected ?? []).map(String).join(',') || 'ninguno',
+      response: info.response,
+      messageId: info.messageId,
+    });
+    return { ok: true, messageId: info.messageId };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'error de envío' };
+    const error = err instanceof Error ? err.message : 'error de envío';
+    logger.error('SMTP error', {
+      to: Array.isArray(input.to) ? input.to.join(',') : input.to,
+      error,
+    });
+    return { ok: false, error };
   }
 }
 
