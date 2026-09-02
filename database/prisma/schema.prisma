@@ -355,6 +355,9 @@ model Gasto {
   providerId     String?   @map("provider_id")
   employeeId     String?   @map("employee_id")
   kind           String    @default("EXPENSE") // EXPENSE | PAYROLL | THIRD_PARTY
+  // Desglose del rol de pagos cuando kind = PAYROLL (sueldo, horas extras,
+  // fondos de reserva, aporte IESS). Se guarda para poder rehacer el rol.
+  payrollDetail  Json?     @map("payroll_detail")
   paymentMethod  String?   @map("payment_method")
   createdBy      String    @map("created_by")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -602,6 +605,10 @@ model Employee {
   cedula        String?   @unique
   position      String?
   monthlySalary Float     @default(0) @map("monthly_salary")
+  // Afiliado al IESS → se le descuenta el aporte personal (9,45 %).
+  iessAffiliated Boolean  @default(false) @map("iess_affiliated")
+  // Recibe fondos de reserva mensualizados (8,33 %).
+  reserveFunds   Boolean  @default(false) @map("reserve_funds")
   email         String?
   phone         String?
   hireDate      DateTime? @map("hire_date")

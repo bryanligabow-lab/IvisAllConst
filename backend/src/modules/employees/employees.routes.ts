@@ -12,12 +12,16 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/e
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
+import { calcularNomina, resumenNomina } from '../../shared/utils/payroll.util';
 
 const createSchema = z.object({
   fullName: z.string().min(1).max(200),
   cedula: z.string().max(40).optional().nullable(),
   position: z.string().max(200).optional().nullable(),
   monthlySalary: z.coerce.number().nonnegative().default(0),
+  // Afiliado al IESS (descuento 9,45 %) y fondos de reserva (+8,33 %).
+  iessAffiliated: z.coerce.boolean().optional(),
+  reserveFunds: z.coerce.boolean().optional(),
   email: z.string().email().max(200).optional().or(z.literal('')),
   phone: z.string().max(40).optional().nullable(),
   hireDate: calendarDateSchema.optional().nullable(),
@@ -33,6 +37,15 @@ const payrollSchema = z.object({
   projectId: z.string().uuid(),
   rubroId: z.string().uuid(),
   amount: z.coerce.number().positive(),
+  // Desglose del rol: si viene, el total se recalcula aquí (no se confía en
+  // lo que mande el navegador) salvo que se pida un monto manual.
+  baseSalary: z.coerce.number().nonnegative().optional(),
+  supplementaryHours: z.coerce.number().nonnegative().max(400).optional(),
+  extraordinaryHours: z.coerce.number().nonnegative().max(400).optional(),
+  reserveFunds: z.coerce.boolean().optional(),
+  iessAffiliated: z.coerce.boolean().optional(),
+  otherDeductions: z.coerce.number().nonnegative().optional(),
+  manualAmount: z.coerce.boolean().optional(),
   period: z.string().min(1).max(40),
   paymentMethod: z.enum([
     'CASH',
@@ -172,6 +185,8 @@ employeesRouter.post(
         cedula: req.body.cedula || null,
         position: req.body.position || null,
         monthlySalary: req.body.monthlySalary ?? 0,
+        iessAffiliated: req.body.iessAffiliated ?? false,
+        reserveFunds: req.body.reserveFunds ?? false,
         email: req.body.email || null,
         phone: req.body.phone || null,
         hireDate: req.body.hireDate || null,
@@ -234,15 +249,31 @@ employeesRouter.post(
     });
     if (!rubro) throw new BadRequestError('El rubro no pertenece al proyecto');
 
+    // Rol de pagos: sueldo + horas extras + fondos de reserva − aporte IESS.
+    // Se recalcula en el servidor con las mismas fórmulas que muestra el form.
+    const desglose = calcularNomina({
+      baseSalary: req.body.baseSalary ?? employee.monthlySalary,
+      supplementaryHours: req.body.supplementaryHours,
+      extraordinaryHours: req.body.extraordinaryHours,
+      reserveFunds: req.body.reserveFunds ?? employee.reserveFunds,
+      iessAffiliated: req.body.iessAffiliated ?? employee.iessAffiliated,
+      otherDeductions: req.body.otherDeductions,
+    });
+    // Con montoManual se respeta lo que se escribió (anticipos, liquidaciones).
+    const monto = req.body.manualAmount ? req.body.amount : desglose.total;
+    if (monto <= 0) throw new BadRequestError('El pago debe ser mayor que cero');
+
+    const base = req.body.description || `Nómina ${req.body.period} — ${employee.fullName}`;
     const gasto = await prisma.gasto.create({
       data: {
         projectId: req.body.projectId,
         rubroId: req.body.rubroId,
         employeeId: employee.id,
-        description: req.body.description || `Nómina ${req.body.period} — ${employee.fullName}`,
-        amount: req.body.amount,
+        description: req.body.manualAmount ? base : `${base} · ${resumenNomina(desglose)}`,
+        amount: monto,
         gastoDate: req.body.paidAt ?? new Date(),
         kind: 'PAYROLL',
+        payrollDetail: req.body.manualAmount ? undefined : { period: req.body.period, ...desglose },
         paymentMethod: req.body.paymentMethod,
         createdBy: req.user.id,
       },

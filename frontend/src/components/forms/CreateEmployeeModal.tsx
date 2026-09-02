@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
+import { formatCurrency } from '@/lib/format';
+import { PORCENTAJE_APORTE_IESS, PORCENTAJE_FONDOS_RESERVA } from '@/lib/payroll';
 import type { Project } from '@/types';
 
 export interface Employee {
@@ -12,6 +14,8 @@ export interface Employee {
   cedula: string | null;
   position: string | null;
   monthlySalary: number;
+  iessAffiliated?: boolean;
+  reserveFunds?: boolean;
   email: string | null;
   phone: string | null;
   hireDate: string | null;
@@ -34,6 +38,8 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
   const [cedula, setCedula] = useState('');
   const [position, setPosition] = useState('');
   const [monthlySalary, setMonthlySalary] = useState('');
+  const [iessAffiliated, setIessAffiliated] = useState(false);
+  const [reserveFunds, setReserveFunds] = useState(false);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -42,6 +48,7 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
   const [submitting, setSubmitting] = useState(false);
 
   const { data: projects } = useSWR<Project[]>('/projects', apiGet);
+  const sueldo = Number(monthlySalary) || 0;
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +56,8 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
     setCedula(initial?.cedula ?? '');
     setPosition(initial?.position ?? '');
     setMonthlySalary(initial ? String(initial.monthlySalary) : '');
+    setIessAffiliated(initial?.iessAffiliated ?? false);
+    setReserveFunds(initial?.reserveFunds ?? false);
     setEmail(initial?.email ?? '');
     setPhone(initial?.phone ?? '');
     setProjectId(initial?.projectId ?? '');
@@ -66,6 +75,8 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
         cedula: cedula || undefined,
         position: position || undefined,
         monthlySalary: monthlySalary ? Number(monthlySalary) : 0,
+        iessAffiliated,
+        reserveFunds,
         email: email || undefined,
         phone: phone || undefined,
         projectId: projectId || null,
@@ -133,6 +144,40 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
               <option value="INACTIVE">Inactivo</option>
             </select>
           </Field>
+        </div>
+
+        {/* IESS y fondos de reserva: se aplican solos al registrar el pago. */}
+        <div className="space-y-2 rounded-lg border border-surface-border bg-surface-muted/30 p-3">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={iessAffiliated}
+              onChange={(e) => setIessAffiliated(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Asegurado/a al IESS
+              <span className="block text-xs text-ink-tertiary">
+                Se le descuenta el aporte personal del <strong>9,45 %</strong>
+                {sueldo > 0 && ` (${formatCurrency(sueldo * PORCENTAJE_APORTE_IESS)} sobre este sueldo)`}
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={reserveFunds}
+              onChange={(e) => setReserveFunds(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Recibe fondos de reserva
+              <span className="block text-xs text-ink-tertiary">
+                Se le suma el <strong>8,33 %</strong>
+                {sueldo > 0 && ` (${formatCurrency(sueldo * PORCENTAJE_FONDOS_RESERVA)} sobre este sueldo)`}
+              </span>
+            </span>
+          </label>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
