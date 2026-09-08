@@ -52,6 +52,36 @@ export function NotificationRecipientsModal({ open, onClose, canManage, scope = 
   const [error, setError] = useState<string | null>(null);
   const [sendMsg, setSendMsg] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // Prueba a UN correo: sirve para ver si el servidor lo acepta (p. ej. cuando
+  // un Outlook/Hotmail se está tragando los avisos).
+  const [probando, setProbando] = useState<string | null>(null);
+  const [pruebaMsg, setPruebaMsg] = useState<Record<string, string>>({});
+
+  async function probar(dest: string) {
+    setProbando(dest);
+    setPruebaMsg((m) => ({ ...m, [dest]: '' }));
+    try {
+      const r = (await apiPost(
+        scope === 'CHEQUES' ? '/notifications/cheques/send' : '/notifications/send-report',
+        scope === 'CHEQUES' ? { kind: 'SEMANA', email: dest } : { email: dest },
+      )) as { ok?: boolean; skipped?: boolean; error?: string; messageId?: string };
+      setPruebaMsg((m) => ({
+        ...m,
+        [dest]: r.skipped
+          ? 'Envío no configurado'
+          : r.ok
+            ? '✓ Aceptado por el servidor de correo'
+            : `No salió: ${r.error ?? 'error desconocido'}`,
+      }));
+    } catch (err) {
+      setPruebaMsg((m) => ({
+        ...m,
+        [dest]: err instanceof ApiClientError ? err.message : 'No se pudo enviar',
+      }));
+    } finally {
+      setProbando(null);
+    }
+  }
 
   async function sendNow() {
     setSending(true);
@@ -160,6 +190,9 @@ export function NotificationRecipientsModal({ open, onClose, canManage, scope = 
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-ink-primary">{r.email}</div>
                 {r.name && <div className="text-xs text-ink-secondary">{r.name}</div>}
+                {pruebaMsg[r.email] && (
+                  <div className="mt-0.5 text-[11px] text-ink-tertiary">{pruebaMsg[r.email]}</div>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className={r.active ? 'badge-ok' : 'badge-muted'}>
@@ -167,6 +200,14 @@ export function NotificationRecipientsModal({ open, onClose, canManage, scope = 
                 </span>
                 {canManage && (
                   <>
+                    <button
+                      onClick={() => probar(r.email)}
+                      disabled={probando === r.email}
+                      className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted disabled:opacity-50"
+                      title="Mandar una prueba solo a este correo"
+                    >
+                      {probando === r.email ? 'Enviando…' : 'Probar'}
+                    </button>
                     <button
                       onClick={() => toggle(r)}
                       className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted"
@@ -204,6 +245,12 @@ export function NotificationRecipientsModal({ open, onClose, canManage, scope = 
               se enviará solo cada día.
             </p>
           )}
+          <p className="mt-2 text-ink-tertiary">
+            ¿Alguien no los recibe? Usa <strong>Probar</strong> en su fila. Si el servidor lo
+            acepta y aun así no le llega, casi siempre está en su carpeta de{' '}
+            <strong>correo no deseado</strong> — sobre todo en Hotmail y Outlook: hay que marcarlo
+            como deseado y agregar el remitente a contactos.
+          </p>
           {canManage && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
