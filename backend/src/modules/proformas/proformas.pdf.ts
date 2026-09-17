@@ -6,6 +6,7 @@ import fs from 'fs';
 import { prisma } from '../../config/database';
 import { NotFoundError } from '../../utils/errors';
 import { toRenderableImage } from '../../shared/utils/image.util';
+import { textoParaPdf } from '../../shared/utils/text.util';
 import { buildAttachment } from './proforma-filename';
 import { computeProformaTotals } from './proforma-totals';
 
@@ -35,6 +36,36 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     },
   });
   if (!p) throw new NotFoundError('Proforma no encontrada');
+
+  // Todo el texto que escribió el usuario se limpia antes de dibujarse: un
+  // tabulador pegado desde Excel desordenaba las letras del rubro en el PDF.
+  const campos = [
+    'clientName',
+    'clientRuc',
+    'clientAddress',
+    'clientResponsible',
+    'projectLabel',
+    'creditTerm',
+    'paymentTerms',
+    'validity',
+    'deliveryTime',
+    'topClients',
+    'signerName',
+    'signerTitle',
+    'notes',
+  ] as const;
+  const editable = p as unknown as Record<string, unknown>;
+  for (const campo of campos) {
+    const valor = editable[campo];
+    if (typeof valor === 'string') editable[campo] = textoParaPdf(valor);
+  }
+  for (const it of p.items) {
+    it.description = textoParaPdf(it.description);
+    it.unit = textoParaPdf(it.unit);
+  }
+  for (const img of p.images) {
+    if (img.caption) img.caption = textoParaPdf(img.caption);
+  }
 
   const doc = new PDFDocument({
     size: 'A4',

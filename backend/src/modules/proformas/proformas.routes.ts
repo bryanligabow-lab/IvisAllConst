@@ -14,6 +14,7 @@ import { calendarDateSchema } from '../../shared/utils/date.util';
 import { exportProformaExcel } from './proformas.excel';
 import { exportProformaPdf } from './proformas.pdf';
 import { computeProformaTotals } from './proforma-totals';
+import { limpiarTexto } from '../../shared/utils/text.util';
 
 const itemSchema = z.object({
   quantity: z.coerce.number().nonnegative(),
@@ -239,8 +240,9 @@ proformasRouter.post(
           create: req.body.items.map((it: z.infer<typeof itemSchema>, idx: number) => ({
             orderIndex: idx,
             quantity: it.quantity,
-            unit: it.unit,
-            description: it.description,
+            // Limpio al guardar: lo pegado desde Excel trae tabuladores invisibles.
+            unit: limpiarTexto(it.unit),
+            description: limpiarTexto(it.description),
             unitPrice: it.unitPrice,
             vatPercent: it.vatPercent ?? null,
             vatType: it.vatType ?? null,
@@ -297,8 +299,9 @@ proformasRouter.patch(
             proformaId: req.params.id,
             orderIndex: idx,
             quantity: it.quantity,
-            unit: it.unit,
-            description: it.description,
+            // Limpio al guardar: lo pegado desde Excel trae tabuladores invisibles.
+            unit: limpiarTexto(it.unit),
+            description: limpiarTexto(it.description),
             unitPrice: it.unitPrice,
             vatPercent: it.vatPercent ?? null,
             vatType: it.vatType ?? null,
