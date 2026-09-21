@@ -87,14 +87,17 @@ export async function exportPlanillaExcel(planillaId: string, res: Response): Pr
   if (fs.existsSync(LOGO_PATH)) {
     try {
       const logoId = wb.addImage({ filename: LOGO_PATH, extension: 'png' });
-      // 400×250 del original → 168×105 para que entre en las primeras filas.
-      sheet.addImage(logoId, { tl: { col: 0.2, row: 0.2 }, ext: { width: 168, height: 105 } });
+      // 400×250 del original → 152×95 px. Las filas 1-4 miden ~107 px en
+      // total (ver alturas abajo), así que el logo NO invade la fila de datos.
+      sheet.addImage(logoId, { tl: { col: 0.15, row: 0.15 }, ext: { width: 152, height: 95 } });
     } catch {
       // si el logo falla, el membrete de texto igual sale
     }
   }
   sheet.getRow(1).height = 26;
   sheet.getRow(2).height = 18;
+  sheet.getRow(3).height = 16;
+  sheet.getRow(4).height = 20;
 
   sheet.mergeCells('C1:G1');
   sheet.getCell('C1').value = 'CREACOM S.A.';
