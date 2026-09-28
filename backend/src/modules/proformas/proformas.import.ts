@@ -37,7 +37,7 @@ const COLUMNAS: { campo: keyof RubroImportado | 'total'; claves: string[] }[] = 
 ];
 
 // Filas que NO son rubros (los totales del documento original).
-const NO_ES_RUBRO = /^(sub\s*total|subtotal|iva|total|son:|observaci)/i;
+const NO_ES_RUBRO = /^(sub\s*total|subtotal|iva|total|son:|observaci|[↑←→•])/i;
 
 function normalizar(v: unknown): string {
   return String(v ?? '')
@@ -265,10 +265,11 @@ export async function exportImportTemplate(res: Response): Promise<void> {
     r.font = { color: { argb: 'FF9A9A9A' }, italic: true };
   }
 
+  // La nota se escribe FUERA de las columnas de datos (a partir de la G) para
+  // que, si alguien sube la plantilla sin borrarla, no se lea como un rubro.
   const nota = hoja.addRow([]);
-  nota.getCell(1).value = '↑ Borra estas 4 filas de ejemplo y escribe las tuyas debajo del encabezado.';
-  hoja.mergeCells(nota.number, 1, nota.number, 5);
-  nota.getCell(1).font = { italic: true, color: { argb: RED } };
+  nota.getCell(7).value = '↑ Borra las 4 filas de ejemplo y escribe las tuyas debajo del encabezado.';
+  nota.getCell(7).font = { italic: true, bold: true, color: { argb: RED } };
 
   // ---------- Instrucciones ----------
   const guia = wb.addWorksheet('Cómo llenarla');
