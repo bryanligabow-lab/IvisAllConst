@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
+import { leerRubrosDeArchivo, type RubroImportado } from '@/lib/importRubros';
 import { CreateClientModal, type Client } from '@/components/forms/CreateClientModal';
 import { CreateProductModal } from '@/components/forms/CreateProductModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
@@ -58,6 +59,18 @@ function isValidImage(img: ImageItem): boolean {
   return Boolean(img.dataBase64 && img.dataBase64.length > 10 && /^image\//.test(img.mimeType));
 }
 
+/** Pasa un rubro leído del archivo al formato que usa el formulario. */
+function aItemDeFormulario(it: RubroImportado, ivaGeneral: string): Item {
+  return {
+    quantity: String(it.quantity),
+    unit: it.unit || 'GBL',
+    description: it.description,
+    unitPrice: String(it.unitPrice),
+    vatMode: it.vatMode ?? ivaGeneral,
+    itemImages: [],
+  };
+}
+
 interface Item {
   quantity: string;
   unit: string;
@@ -108,6 +121,8 @@ interface Props {
   onClose: () => void;
   initial?: ProformaEditData | null; // si viene → edición
   onCreated: (id: string) => void;
+  /** Rubros que vienen de un archivo: reemplazan la lista al abrir. */
+  rubrosIniciales?: RubroImportado[] | null;
 }
 
 const DEFAULT_TOP_CLIENTS = `GAD Canton El Empalme.
@@ -196,7 +211,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export function CreateProformaModal({ open, onClose, initial, onCreated }: Props) {
+export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosIniciales }: Props) {
   const isEdit = !!initial;
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [clientId, setClientId] = useState('');
@@ -224,6 +239,10 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Subida de rubros desde Excel/CSV
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const [leyendo, setLeyendo] = useState(false);
+  const [avisosImport, setAvisosImport] = useState<string[]>([]);
 
   const { data: clients, mutate: mutateClients } = useSWR<Client[]>('/clients', apiGet);
   const { data: projects } = useSWR<Project[]>('/projects', apiGet);
@@ -376,7 +395,17 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
     setTopClients(DEFAULT_TOP_CLIENTS);
     setSignerName('Gabriel Constantine L.');
     setSignerTitle('Gerente General');
-    setItems([{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }]);
+    // Si la proforma se abrió desde un archivo, entra ya con esos rubros.
+    setItems(
+      rubrosIniciales && rubrosIniciales.length > 0
+        ? rubrosIniciales.map((it) => aItemDeFormulario(it, '15'))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
+    );
+    setAvisosImport(
+      rubrosIniciales && rubrosIniciales.length > 0
+        ? [`Se cargaron ${rubrosIniciales.length} rubro(s) del archivo. Revísalos antes de crear.`]
+        : [],
+    );
     setImages([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
@@ -495,6 +524,35 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
       { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, itemImages: [] },
     ]);
   }
+  /** Lee un Excel/CSV y agrega sus rubros a la lista (o la reemplaza si está vacía). */
+  async function subirArchivo(file: File) {
+    setLeyendo(true);
+    setError(null);
+    setAvisosImport([]);
+    try {
+      const r = await leerRubrosDeArchivo(file);
+      if (r.items.length === 0) {
+        setError(r.avisos[0] ?? 'No se encontraron rubros en el archivo.');
+        return;
+      }
+      setItems((curr) => {
+        const nuevos = r.items.map((it) => aItemDeFormulario(it, ivaPercent));
+        // Si solo está la línea vacía inicial, se reemplaza.
+        const soloVacia = curr.length === 1 && !curr[0].description && !curr[0].unitPrice;
+        return soloVacia ? nuevos : [...curr, ...nuevos];
+      });
+      setAvisosImport([
+        `Se cargaron ${r.items.length} rubro(s) de "${file.name}". Revísalos antes de crear.`,
+        ...r.avisos,
+      ]);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'No se pudo leer el archivo');
+    } finally {
+      setLeyendo(false);
+      if (archivoRef.current) archivoRef.current.value = '';
+    }
+  }
+
   function removeItem(idx: number) {
     setItems((c) => (c.length === 1 ? c : c.filter((_, i) => i !== idx)));
   }
@@ -800,10 +858,48 @@ export function CreateProformaModal({ open, onClose, initial, onCreated }: Props
             <div className="text-xs font-semibold uppercase tracking-wider text-ink-secondary">
               Ítems
             </div>
-            <button type="button" onClick={addItem} className="btn-secondary text-xs">
-              + Añadir línea
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                ref={archivoRef}
+                type="file"
+                accept=".xlsx,.xlsm,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void subirArchivo(f);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => archivoRef.current?.click()}
+                disabled={leyendo}
+                className="btn-secondary text-xs disabled:opacity-50"
+                title="Cargar los rubros desde un Excel o CSV"
+              >
+                {leyendo ? 'Leyendo…' : '⬆ Subir desde archivo'}
+              </button>
+              <button type="button" onClick={addItem} className="btn-secondary text-xs">
+                + Añadir línea
+              </button>
+            </div>
           </div>
+
+          {avisosImport.length > 0 && (
+            <div className="mb-2 rounded-md border border-surface-border bg-surface-muted/50 px-3 py-2 text-xs text-ink-secondary">
+              {avisosImport.map((a, i) => (
+                <div key={i} className={i === 0 ? 'font-semibold text-ink-primary' : ''}>
+                  {a}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setAvisosImport([])}
+                className="mt-1 text-[11px] underline"
+              >
+                ocultar
+              </button>
+            </div>
+          )}
           <div className="space-y-2">
             {items.map((it, idx) => (
               <div

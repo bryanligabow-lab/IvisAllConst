@@ -15,6 +15,7 @@ import { exportProformaExcel } from './proformas.excel';
 import { exportProformaPdf } from './proformas.pdf';
 import { computeProformaTotals } from './proforma-totals';
 import { limpiarTexto } from '../../shared/utils/text.util';
+import { exportImportTemplate, parsearRubros } from './proformas.import';
 
 const itemSchema = z.object({
   quantity: z.coerce.number().nonnegative(),
@@ -99,6 +100,37 @@ function applyDefaults<T extends Record<string, unknown>>(body: T): T {
 
 export const proformasRouter = Router();
 proformasRouter.use(authenticate);
+
+// Plantilla de cómo debe venir ordenada la data para poder subirla.
+proformasRouter.get(
+  '/import-template',
+  requirePermission(PERMISSIONS.PROFORMAS_READ),
+  asyncHandler(async (_req, res) => {
+    await exportImportTemplate(res);
+  }),
+);
+
+// Lee los rubros de un Excel/CSV y los devuelve para llenar el formulario.
+// NO guarda nada: la proforma se crea después, cuando el usuario confirma.
+const importSchema = z.object({
+  filename: z.string().max(260),
+  fileBase64: z.string().min(10),
+});
+proformasRouter.post(
+  '/parse-items',
+  requirePermission(PERMISSIONS.PROFORMAS_WRITE),
+  validate(importSchema),
+  asyncHandler(async (req, res) => {
+    const buffer = Buffer.from(req.body.fileBase64, 'base64');
+    if (buffer.length > 8 * 1024 * 1024) {
+      throw new BadRequestError('El archivo pesa más de 8 MB');
+    }
+    if (!/\.(xlsx|xlsm|csv)$/i.test(req.body.filename)) {
+      throw new BadRequestError('Sube un Excel (.xlsx) o un CSV. Si tienes un PDF, pasa los rubros a la plantilla.');
+    }
+    return success(res, await parsearRubros(buffer, req.body.filename));
+  }),
+);
 
 proformasRouter.get(
   '/',

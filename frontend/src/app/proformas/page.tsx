@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
@@ -13,6 +13,11 @@ import { ROUTES } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { downloadProforma } from '@/lib/downloadProforma';
 import { ConvertProformaModal } from '@/components/forms/ConvertProformaModal';
+import {
+  descargarPlantillaRubros,
+  leerRubrosDeArchivo,
+  type RubroImportado,
+} from '@/lib/importRubros';
 
 interface ProformaListItem {
   id: string;
@@ -51,6 +56,38 @@ export default function ProformasPage() {
   const canConvert = can('projects.create');
   const [converting, setConverting] = useState<ProformaListItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  // Subida de rubros desde un archivo (Excel/CSV) → abre el formulario lleno.
+  const archivoRef = useRef<HTMLInputElement>(null);
+  const [leyendo, setLeyendo] = useState(false);
+  const [rubrosDeArchivo, setRubrosDeArchivo] = useState<RubroImportado[] | null>(null);
+  const [errorImport, setErrorImport] = useState<string | null>(null);
+
+  async function bajarPlantilla() {
+    try {
+      await descargarPlantillaRubros();
+    } catch {
+      setErrorImport('No se pudo descargar la plantilla.');
+    }
+  }
+
+  async function subirArchivo(file: File) {
+    setLeyendo(true);
+    setErrorImport(null);
+    try {
+      const r = await leerRubrosDeArchivo(file);
+      if (r.items.length === 0) {
+        setErrorImport(r.avisos[0] ?? 'No se encontraron rubros en el archivo.');
+        return;
+      }
+      setRubrosDeArchivo(r.items);
+      setShowCreate(true);
+    } catch (err) {
+      setErrorImport(err instanceof Error ? err.message : 'No se pudo leer el archivo');
+    } finally {
+      setLeyendo(false);
+      if (archivoRef.current) archivoRef.current.value = '';
+    }
+  }
   const [editing, setEditing] = useState<ProformaEditData | null>(null);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; number: string; clientName: string } | null>(null);
@@ -91,16 +128,53 @@ export default function ProformasPage() {
           <Link href={ROUTES.PRODUCTOS} className="btn-secondary">
             📦 Productos
           </Link>
+          <button
+            onClick={() => void bajarPlantilla()}
+            className="btn-secondary"
+            title="Cómo debe estar ordenada la data para poder subirla"
+          >
+            ⬇ Plantilla
+          </button>
           {canWrite && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
-              + Nueva proforma
-            </button>
+            <>
+              <input
+                ref={archivoRef}
+                type="file"
+                accept=".xlsx,.xlsm,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void subirArchivo(f);
+                }}
+              />
+              <button
+                onClick={() => archivoRef.current?.click()}
+                disabled={leyendo}
+                className="btn-secondary disabled:opacity-50"
+                title="Crear una proforma a partir de un Excel o CSV"
+              >
+                {leyendo ? 'Leyendo…' : '⬆ Subir desde archivo'}
+              </button>
+              <button onClick={() => { setRubrosDeArchivo(null); setShowCreate(true); }} className="btn-primary">
+                + Nueva proforma
+              </button>
+            </>
           )}
         </div>
       </div>
 
+      {errorImport && (
+        <div className="mb-3 rounded-md bg-danger-soft px-3 py-2 text-xs text-danger">
+          {errorImport}{' '}
+          <button onClick={() => setErrorImport(null)} className="underline">
+            cerrar
+          </button>
+        </div>
+      )}
+
       <CreateProformaModal
         open={showCreate}
+        rubrosIniciales={rubrosDeArchivo}
         onClose={() => setShowCreate(false)}
         onCreated={(id) => {
           mutate();
