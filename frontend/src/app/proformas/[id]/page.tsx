@@ -46,6 +46,7 @@ interface ProformaDetail {
     quantity: number;
     unit: string;
     description: string;
+    textAlign?: string | null;
     unitPrice: number;
     vatPercent?: number | null;
     vatType?: string | null;
@@ -53,6 +54,15 @@ interface ProformaDetail {
 }
 
 const downloadExport = downloadProforma;
+
+/** Misma regla que usa el PDF: '' / null = automática (varias líneas → izquierda). */
+function alineacionClase(textAlign: string | null | undefined, description: string): string {
+  const v = (textAlign ?? '').toUpperCase();
+  if (v === 'LEFT') return 'text-left';
+  if (v === 'RIGHT') return 'text-right';
+  if (v === 'CENTER') return 'text-center';
+  return description.includes('\n') ? 'text-left' : 'text-center';
+}
 
 export default function ProformaDetailPage() {
   const params = useParams<{ id: string }>();
@@ -163,7 +173,12 @@ export default function ProformaDetailPage() {
                 <tr key={it.id} className="border-t border-surface-border">
                   <td className="px-3 py-2 text-center">{it.quantity}</td>
                   <td className="px-3 py-2 text-center">{it.unit}</td>
-                  <td className="whitespace-pre-line px-3 py-2 text-left">{it.description}</td>
+                  {/* Se muestra con la MISMA alineación con la que saldrá en el PDF. */}
+                  <td
+                    className={`whitespace-pre-line px-3 py-2 ${alineacionClase(it.textAlign, it.description)}`}
+                  >
+                    {it.description}
+                  </td>
                   <td className="px-3 py-2 text-right">${formatCurrency(it.unitPrice).replace('$','').trim()}</td>
                   <td className="px-3 py-2 text-right font-medium">${formatCurrency(it.quantity * it.unitPrice).replace('$','').trim()}</td>
                 </tr>

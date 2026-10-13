@@ -6,6 +6,7 @@ import { toRenderableImage } from '../../shared/utils/image.util';
 import { limpiarTexto } from '../../shared/utils/text.util';
 import { buildAttachment } from './proforma-filename';
 import { computeProformaTotals } from './proforma-totals';
+import { alineacionDe } from './proforma-align';
 
 const RED = 'FFC73E2C';
 const WHITE = 'FFFFFFFF';
@@ -117,8 +118,13 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
     sheet.getCell(row, 1).value = it.quantity;
     sheet.getCell(row, 2).value = limpiarTexto(it.unit);
     sheet.mergeCells(row, 3, row, 5);
-    sheet.getCell(row, 3).value = limpiarTexto(it.description);
-    sheet.getCell(row, 3).alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' };
+    const detalle = limpiarTexto(it.description);
+    sheet.getCell(row, 3).value = detalle;
+    sheet.getCell(row, 3).alignment = {
+      wrapText: true,
+      vertical: 'middle',
+      horizontal: alineacionDe(it.textAlign, detalle),
+    };
     sheet.getCell(row, 6).value = it.unitPrice;
     sheet.getCell(row, 6).numFmt = '"$"#,##0.00';
     sheet.getCell(row, 7).value = total;
@@ -131,7 +137,7 @@ export async function exportProformaExcel(id: string, res: Response): Promise<vo
       c.border = { bottom: { style: 'thin', color: { argb: 'FFE5E1DC' } } };
     });
     // Crecer la fila si la descripción tiene varias líneas (Enter dentro del rubro).
-    const lineCount = limpiarTexto(it.description).split('\n').length;
+    const lineCount = detalle.split('\n').length;
     if (lineCount > 1) sheet.getRow(row).height = Math.min(lineCount * 15 + 4, 240);
     row += 1;
   }

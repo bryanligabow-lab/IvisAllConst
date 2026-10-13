@@ -9,6 +9,7 @@ import { toRenderableImage } from '../../shared/utils/image.util';
 import { textoParaPdf } from '../../shared/utils/text.util';
 import { buildAttachment } from './proforma-filename';
 import { computeProformaTotals } from './proforma-totals';
+import { alineacionDe } from './proforma-align';
 
 const RED = '#C73E2C';
 const DARK = '#1A1A1A';
@@ -233,12 +234,12 @@ export async function exportProformaPdf(id: string, res: Response): Promise<void
     const cellY = rowY + rowH / 2 - 5;
     doc.text(String(it.quantity), colX[0], cellY, { width: colWidths[0], align: 'center' });
     doc.text(it.unit, colX[1], cellY, { width: colWidths[1], align: 'center' });
-    // El detalle va centrado (horizontal y verticalmente dentro de la fila) para
-    // que quede alineado con la imagen del rubro y con el resto de columnas.
+    // El detalle va centrado verticalmente en la fila; en horizontal manda lo
+    // que eligió el usuario (o el automático: centrado si es una sola línea).
     const detailY = rowY + Math.max(6, (rowH - detailH) / 2);
     doc.text(it.description, colX[2] + 4, detailY, {
       width: textW - 8,
-      align: 'center',
+      align: alineacionDe(it.textAlign, it.description),
     });
 
     // Imagen(es) del rubro, al lado de la descripción, CENTRADAS verticalmente

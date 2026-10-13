@@ -67,6 +67,7 @@ function aItemDeFormulario(it: RubroImportado, ivaGeneral: string): Item {
     description: it.description,
     unitPrice: String(it.unitPrice),
     vatMode: it.vatMode ?? ivaGeneral,
+    textAlign: '',
     itemImages: [],
   };
 }
@@ -77,6 +78,8 @@ interface Item {
   description: string;
   unitPrice: string;
   vatMode: string; // IVA de este rubro: '15' | '0' | 'NO_OBJETO' | 'EXENTO'
+  // Alineación del detalle en el PDF/Excel: '' (automática) | 'LEFT' | 'CENTER' | 'RIGHT'
+  textAlign: string;
   itemImages: ImageItem[]; // imágenes del rubro (salen al lado de la descripción, hasta 3)
 }
 
@@ -106,6 +109,7 @@ export interface ProformaEditData {
     unitPrice: number;
     vatPercent?: number | null;
     vatType?: string | null;
+    textAlign?: string | null;
   }>;
   images: Array<{
     id: string;
@@ -128,6 +132,15 @@ interface Props {
 const DEFAULT_TOP_CLIENTS = `GAD Canton El Empalme.
 Ambiesa S.A.
 Ministerio de Educación, coordinacion zonal`;
+
+// Alineación del detalle en el PDF/Excel. '' = automática: una línea va
+// centrada (el formato de siempre) y varias líneas, a la izquierda.
+const ALIGN_OPTIONS = [
+  { value: '', icon: 'Auto', title: 'Automática: centrada si es una línea, a la izquierda si son varias' },
+  { value: 'LEFT', icon: '⬅', title: 'Alinear a la izquierda' },
+  { value: 'CENTER', icon: '⬌', title: 'Centrar' },
+  { value: 'RIGHT', icon: '➡', title: 'Alinear a la derecha' },
+];
 
 const MAX_IMAGES = 6;
 const MAX_ITEM_IMAGES = 3; // imágenes por rubro (el PDF las dibuja al lado, hasta 3)
@@ -234,7 +247,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
   const [signerName, setSignerName] = useState('Gabriel Constantine L.');
   const [signerTitle, setSignerTitle] = useState('Gerente General');
   const [items, setItems] = useState<Item[]>([
-    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] },
+    { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', textAlign: '', itemImages: [] },
   ]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -283,6 +296,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
         description: it.description,
         unitPrice: it.unitPrice,
         vatMode: it.vatMode,
+        textAlign: it.textAlign,
       })),
     }),
     [
@@ -333,8 +347,13 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
     setSignerTitle(draft.signerTitle ?? '');
     setItems(
       draft.items && draft.items.length > 0
-        ? draft.items.map((it) => ({ ...it, vatMode: it.vatMode ?? '15', itemImages: [] }))
-        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
+        ? draft.items.map((it) => ({
+            ...it,
+            vatMode: it.vatMode ?? '15',
+            textAlign: it.textAlign ?? '',
+            itemImages: [],
+          }))
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', textAlign: '', itemImages: [] }],
     );
     setDraftDismissed(true);
   }
@@ -370,9 +389,10 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
               description: it.description,
               unitPrice: String(it.unitPrice),
               vatMode: vatModeFrom(it.vatPercent, it.vatType, String(initial.ivaPercent ?? 15)),
+              textAlign: it.textAlign ?? '',
               itemImages: [],
             }))
-          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
+          : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', textAlign: '', itemImages: [] }],
       );
       setImages([]);
       // Cargar las imágenes existentes (binario) para no perderlas al guardar.
@@ -399,7 +419,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
     setItems(
       rubrosIniciales && rubrosIniciales.length > 0
         ? rubrosIniciales.map((it) => aItemDeFormulario(it, '15'))
-        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', itemImages: [] }],
+        : [{ quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: '15', textAlign: '', itemImages: [] }],
     );
     setAvisosImport(
       rubrosIniciales && rubrosIniciales.length > 0
@@ -521,7 +541,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
   function addItem() {
     setItems((c) => [
       ...c,
-      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, itemImages: [] },
+      { quantity: '1', unit: 'GBL', description: '', unitPrice: '', vatMode: ivaPercent, textAlign: '', itemImages: [] },
     ]);
   }
   /** Lee un Excel/CSV y agrega sus rubros a la lista (o la reemplaza si está vacía). */
@@ -683,6 +703,7 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
           unit: it.unit,
           description: it.description,
           unitPrice: Number(it.unitPrice),
+          textAlign: it.textAlign || null,
           vatPercent: vatRate(it.vatMode),
           vatType:
             it.vatMode === 'NO_OBJETO' || it.vatMode === 'EXENTO' ? it.vatMode : null,
@@ -992,6 +1013,26 @@ export function CreateProformaModal({ open, onClose, initial, onCreated, rubrosI
                       <option value={it.vatMode}>IVA {vatRate(it.vatMode)}%</option>
                     )}
                   </select>
+
+                  <span className="ml-2">Alinear:</span>
+                  <div className="flex overflow-hidden rounded-md border border-surface-border">
+                    {ALIGN_OPTIONS.map((o) => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => updateItem(idx, { textAlign: o.value })}
+                        title={o.title}
+                        aria-pressed={it.textAlign === o.value}
+                        className={`px-2 py-1 text-xs ${
+                          it.textAlign === o.value
+                            ? 'bg-brand text-white'
+                            : 'text-ink-secondary hover:bg-surface-muted'
+                        }`}
+                      >
+                        {o.icon}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Imágenes del rubro — salen al lado de la descripción en el PDF (varias) */}

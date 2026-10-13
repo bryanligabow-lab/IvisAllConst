@@ -745,6 +745,9 @@ model ProformaItem {
   vatPercent  Float?   @map("vat_percent")
   // Tipo especial de IVA: NO_OBJETO | EXENTO (null = IVA normal según vatPercent).
   vatType     String?  @map("vat_type")
+  // Alineación del detalle en el PDF/Excel: LEFT | CENTER | RIGHT.
+  // null = automático (una línea va centrada; varias líneas, a la izquierda).
+  textAlign   String?  @map("text_align")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
