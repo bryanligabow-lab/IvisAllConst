@@ -77,17 +77,50 @@ const updateSchema = createSchema.partial().extend({
   items: z.array(itemSchema).optional(),
 });
 
+/**
+ * Siguiente número libre de la serie.
+ *
+ * Antes miraba la ÚLTIMA proforma creada y le sumaba 1. Eso se rompe en cuanto
+ * entra una proforma con un número adelantado (p. ej. una vieja que se carga
+ * con el número que trae su documento): el contador vuelve a caer sobre un
+ * número ya usado y, como `number` es único, la creación falla con "Registro
+ * duplicado" y el usuario queda trabado sin poder hacer nada.
+ *
+ * Ahora se toma el número MÁS ALTO de la serie y se avanza hasta encontrar uno
+ * que de verdad esté libre.
+ */
+/** ¿El error es "ya existe una proforma con ese número"? (unique de Prisma) */
+function esNumeroRepetido(err: unknown): boolean {
+  const e = err as { code?: string; meta?: { target?: unknown } };
+  if (e?.code !== 'P2002') return false;
+  const target = e.meta?.target;
+  const campos = Array.isArray(target) ? target.map(String) : [String(target ?? '')];
+  return campos.some((c) => c.toLowerCase().includes('number'));
+}
+
 async function nextProformaNumber(): Promise<string> {
-  const last = await prisma.proforma.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { number: true },
-  });
-  if (!last) return '001-001';
-  const m = /(\d+)-(\d+)/.exec(last.number);
-  if (!m) return '001-001';
-  const series = m[1];
-  const next = String(parseInt(m[2], 10) + 1).padStart(3, '0');
-  return `${series}-${next}`;
+  const proformas = await prisma.proforma.findMany({ select: { number: true } });
+  if (proformas.length === 0) return '001-001';
+
+  const usados = new Set(proformas.map((p) => p.number));
+  let serie = '001';
+  let mayor = 0;
+  for (const { number } of proformas) {
+    const m = /(\d+)-(\d+)/.exec(number);
+    if (!m) continue;
+    const n = parseInt(m[2], 10);
+    if (n > mayor) {
+      mayor = n;
+      serie = m[1];
+    }
+  }
+
+  for (let n = mayor + 1; n < mayor + 1000; n += 1) {
+    const candidato = `${serie}-${String(n).padStart(3, '0')}`;
+    if (!usados.has(candidato)) return candidato;
+  }
+  // Tope de seguridad: no debería llegar aquí nunca.
+  return `${serie}-${Date.now()}`;
 }
 
 function applyDefaults<T extends Record<string, unknown>>(body: T): T {
@@ -220,7 +253,8 @@ proformasRouter.post(
   validate(createSchema),
   asyncHandler(async (req, res) => {
     if (!req.user) throw new UnauthorizedError();
-    const number = req.body.number ?? (await nextProformaNumber());
+    let number: string = req.body.number ?? (await nextProformaNumber());
+    const numeroPedidoPorElUsuario = Boolean(req.body.number);
     const body = applyDefaults(req.body);
 
     // Snapshot client info if clientId provided
@@ -248,9 +282,7 @@ proformasRouter.post(
 
     const images = (body.images as z.infer<typeof imageSchema>[] | undefined) ?? [];
 
-    const created = await prisma.proforma.create({
-      data: {
-        number,
+    const datosProforma = {
         date: body.date ?? new Date(),
         clientId: (body.clientId as string | null) || null,
         clientName: clientFields.clientName,
@@ -293,22 +325,43 @@ proformasRouter.post(
             filename: img.filename || null,
           })),
         },
-      },
-      include: {
-        items: { orderBy: { orderIndex: 'asc' } },
-        images: {
-          orderBy: { orderIndex: 'asc' },
-          select: {
-            id: true,
-            mimeType: true,
-            caption: true,
-            filename: true,
-            orderIndex: true,
-            itemIndex: true,
-          },
+    };
+
+    const incluir = {
+      items: { orderBy: { orderIndex: 'asc' } },
+      images: {
+        orderBy: { orderIndex: 'asc' },
+        select: {
+          id: true,
+          mimeType: true,
+          caption: true,
+          filename: true,
+          orderIndex: true,
+          itemIndex: true,
         },
       },
-    });
+    } as const;
+
+    // Si el número ya estaba tomado (dos personas creando a la vez, o un
+    // número adelantado cargado a mano), se reintenta con el siguiente libre
+    // en vez de devolver "Registro duplicado" y dejar al usuario trabado.
+    let created;
+    for (let intento = 0; ; intento += 1) {
+      try {
+        created = await prisma.proforma.create({
+          data: { ...datosProforma, number },
+          include: incluir,
+        });
+        break;
+      } catch (err) {
+        if (!esNumeroRepetido(err)) throw err;
+        if (numeroPedidoPorElUsuario) {
+          throw new BadRequestError(`Ya existe una proforma con el número ${number}`);
+        }
+        if (intento >= 5) throw err;
+        number = await nextProformaNumber();
+      }
+    }
 
     return success(res, created, 201);
   }),
