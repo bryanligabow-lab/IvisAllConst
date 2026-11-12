@@ -6,7 +6,13 @@ import { Modal, Field } from '@/components/ui/Modal';
 import { apiGet, apiPost, ApiClientError } from '@/lib/api';
 import { PAYMENT_METHODS } from '@/lib/constants';
 import { formatCurrency } from '@/lib/format';
-import { calcularNomina, HORAS_MES } from '@/lib/payroll';
+import {
+  calcularNomina,
+  HORAS_MES,
+  sueldoDelPeriodo,
+  ETIQUETA_FRECUENCIA,
+  esFrecuencia,
+} from '@/lib/payroll';
 import type { PaymentMethodValue, Project, ProjectSummary } from '@/types';
 import type { Employee } from './CreateEmployeeModal';
 
@@ -29,6 +35,8 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
   const [reserveFunds, setReserveFunds] = useState(false);
   const [iessAffiliated, setIessAffiliated] = useState(false);
   const [otherDeductions, setOtherDeductions] = useState('');
+  // Anticipos pendientes del empleado, para descontarlos en este rol.
+  const [anticiposElegidos, setAnticiposElegidos] = useState<string[]>([]);
   // Si escribe el total a mano, deja de recalcularse (anticipos, liquidaciones).
   const [manualAmount, setManualAmount] = useState(false);
   const [period, setPeriod] = useState(() => {
@@ -49,6 +57,15 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
   );
 
   const employee = employees?.find((e) => e.id === employeeId);
+  const frecuencia = esFrecuencia(employee?.payFrequency) ? employee.payFrequency : 'MONTHLY';
+  const { data: datosAnticipos } = useSWR<{
+    advances: Array<{ id: string; amount: number; advanceDate: string; notes: string | null }>;
+    pendiente: number;
+  }>(employeeId ? `/employees/${employeeId}/advances?pending=1` : null, apiGet);
+  const anticiposPendientes = datosAnticipos?.advances ?? [];
+  const totalAnticipos = anticiposPendientes
+    .filter((a) => anticiposElegidos.includes(a.id))
+    .reduce((s, a) => s + a.amount, 0);
 
   useEffect(() => {
     if (!open) return;
@@ -62,6 +79,7 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
     setReserveFunds(false);
     setIessAffiliated(false);
     setOtherDeductions('');
+    setAnticiposElegidos([]);
     setManualAmount(false);
     setPaymentMethod('');
     setDescription('');
@@ -72,7 +90,10 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
   // Al elegir empleado se precarga su sueldo y si tiene IESS / fondos.
   useEffect(() => {
     if (!employee) return;
-    setBaseSalary(String(employee.monthlySalary));
+    // El sueldo del período depende de si cobra semanal, quincenal o mensual.
+    const frec = esFrecuencia(employee.payFrequency) ? employee.payFrequency : 'MONTHLY';
+    setBaseSalary(String(sueldoDelPeriodo(employee.monthlySalary, frec)));
+    setAnticiposElegidos([]);
     setIessAffiliated(Boolean(employee.iessAffiliated));
     setReserveFunds(Boolean(employee.reserveFunds));
     setManualAmount(false);
@@ -80,6 +101,8 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
 
   const desglose = calcularNomina({
     baseSalary: Number(baseSalary) || 0,
+    monthlySalary: employee?.monthlySalary ?? (Number(baseSalary) || 0),
+    advances: totalAnticipos,
     supplementaryHours: Number(supplementaryHours) || 0,
     extraordinaryHours: Number(extraordinaryHours) || 0,
     reserveFunds,
@@ -112,6 +135,7 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
         reserveFunds,
         iessAffiliated,
         otherDeductions: Number(otherDeductions) || 0,
+        advanceIds: anticiposElegidos,
         manualAmount,
         period,
         paymentMethod,
@@ -196,7 +220,10 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
               className="input"
             />
           </Field>
-          <Field label="Sueldo del período ($)" required>
+          <Field
+            label={`Sueldo del período ($) · ${ETIQUETA_FRECUENCIA[frecuencia]}`}
+            required
+          >
             <input
               type="number"
               step="0.01"
@@ -265,7 +292,38 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
             </span>
           </label>
 
-          <Field label="Otros descuentos ($)" hint="Anticipos, préstamos, multas…">
+          {/* Anticipos pendientes: se marcan y se descuentan de este rol. */}
+          {employeeId && anticiposPendientes.length > 0 && (
+            <div className="rounded-md border border-surface-border bg-surface p-2">
+              <div className="mb-1 text-xs font-semibold text-ink-secondary">
+                Anticipos pendientes de descontar
+              </div>
+              {anticiposPendientes.map((a) => (
+                <label key={a.id} className="flex items-center gap-2 py-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={anticiposElegidos.includes(a.id)}
+                    onChange={(e) =>
+                      setAnticiposElegidos((curr) =>
+                        e.target.checked ? [...curr, a.id] : curr.filter((x) => x !== a.id),
+                      )
+                    }
+                  />
+                  <span className="flex-1">
+                    {new Date(a.advanceDate).toLocaleDateString('es-EC', { timeZone: 'UTC' })}
+                    {a.notes ? ` · ${a.notes}` : ''}
+                  </span>
+                  <span className="font-semibold text-danger">−{formatCurrency(a.amount)}</span>
+                </label>
+              ))}
+              <p className="mt-1 text-[11px] text-ink-tertiary">
+                Al registrar el pago, los que marques quedan descontados y ya no vuelven a
+                aparecer.
+              </p>
+            </div>
+          )}
+
+          <Field label="Otros descuentos ($)" hint="Préstamos, multas…">
             <input
               type="number"
               step="0.01"
@@ -297,6 +355,9 @@ export function PayrollPaymentModal({ open, onClose, projectId: initialProject, 
             )}
             {desglose.iessAmount > 0 && (
               <Linea label="Aporte IESS (9,45 %)" valor={-desglose.iessAmount} resta />
+            )}
+            {desglose.advancesAmount > 0 && (
+              <Linea label="Anticipos entregados" valor={-desglose.advancesAmount} resta />
             )}
             {desglose.otherDeductions > 0 && (
               <Linea label="Otros descuentos" valor={-desglose.otherDeductions} resta />

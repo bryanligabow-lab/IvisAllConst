@@ -12,7 +12,14 @@ import { NotFoundError, UnauthorizedError, BadRequestError } from '../../utils/e
 import { PERMISSIONS } from '../../shared/constants/roles.constants';
 import { idParamSchema } from '../../shared/dto/id-param.dto';
 import { calendarDateSchema } from '../../shared/utils/date.util';
-import { calcularNomina, resumenNomina } from '../../shared/utils/payroll.util';
+import {
+  calcularNomina,
+  resumenNomina,
+  sueldoDelPeriodo,
+  esFrecuencia,
+  type FrecuenciaPago,
+} from '../../shared/utils/payroll.util';
+import { exportRolDePagos } from './rol-pagos.pdf';
 
 const createSchema = z.object({
   fullName: z.string().min(1).max(200),
@@ -22,6 +29,8 @@ const createSchema = z.object({
   // Afiliado al IESS (descuento 9,45 %) y fondos de reserva (+8,33 %).
   iessAffiliated: z.coerce.boolean().optional(),
   reserveFunds: z.coerce.boolean().optional(),
+  // Cada cuánto se le paga (el sueldo guardado sigue siendo el mensual).
+  payFrequency: z.enum(['WEEKLY', 'BIWEEKLY', 'MONTHLY']).optional(),
   email: z.string().email().max(200).optional().or(z.literal('')),
   phone: z.string().max(40).optional().nullable(),
   hireDate: calendarDateSchema.optional().nullable(),
@@ -45,6 +54,8 @@ const payrollSchema = z.object({
   reserveFunds: z.coerce.boolean().optional(),
   iessAffiliated: z.coerce.boolean().optional(),
   otherDeductions: z.coerce.number().nonnegative().optional(),
+  // Anticipos pendientes que se descuentan en este rol.
+  advanceIds: z.array(z.string().uuid()).max(50).optional(),
   manualAmount: z.coerce.boolean().optional(),
   period: z.string().min(1).max(40),
   paymentMethod: z.enum([
@@ -187,6 +198,7 @@ employeesRouter.post(
         monthlySalary: req.body.monthlySalary ?? 0,
         iessAffiliated: req.body.iessAffiliated ?? false,
         reserveFunds: req.body.reserveFunds ?? false,
+        payFrequency: req.body.payFrequency ?? 'MONTHLY',
         email: req.body.email || null,
         phone: req.body.phone || null,
         hireDate: req.body.hireDate || null,
@@ -232,6 +244,95 @@ employeesRouter.delete(
   }),
 );
 
+// ---------- Anticipos ----------
+// Un anticipo es plata entregada a cuenta del sueldo. Queda PENDIENTE hasta
+// que se descuenta en un rol de pagos.
+
+const advanceSchema = z.object({
+  amount: z.coerce.number().positive(),
+  advanceDate: calendarDateSchema.optional(),
+  notes: z.string().max(300).optional().nullable(),
+});
+
+// Anticipos de un empleado. Con ?pending=1 solo los que faltan descontar.
+employeesRouter.get(
+  '/:id/advances',
+  requirePermission(PERMISSIONS.PAYROLL_READ),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    const advances = await prisma.employeeAdvance.findMany({
+      where: {
+        employeeId: req.params.id,
+        deletedAt: null,
+        ...(req.query.pending === '1' ? { appliedGastoId: null } : {}),
+      },
+      orderBy: { advanceDate: 'desc' },
+    });
+    const pendiente = advances
+      .filter((a) => !a.appliedGastoId)
+      .reduce((s, a) => s + a.amount, 0);
+    return success(res, { advances, pendiente });
+  }),
+);
+
+employeesRouter.post(
+  '/:id/advances',
+  requirePermission(PERMISSIONS.PAYROLL_WRITE),
+  validate(idParamSchema, 'params'),
+  validate(advanceSchema),
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new UnauthorizedError();
+    const employee = await prisma.employee.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundError('Empleado no encontrado');
+    const created = await prisma.employeeAdvance.create({
+      data: {
+        employeeId: employee.id,
+        amount: req.body.amount,
+        advanceDate: req.body.advanceDate ?? new Date(),
+        notes: req.body.notes || null,
+        createdBy: req.user.id,
+      },
+    });
+    return success(res, created, 201);
+  }),
+);
+
+// Solo se puede borrar un anticipo que AÚN no se descontó en un rol.
+employeesRouter.delete(
+  '/advances/:id',
+  requirePermission(PERMISSIONS.PAYROLL_WRITE),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    const advance = await prisma.employeeAdvance.findFirst({
+      where: { id: req.params.id, deletedAt: null },
+    });
+    if (!advance) throw new NotFoundError('Anticipo no encontrado');
+    if (advance.appliedGastoId) {
+      throw new BadRequestError(
+        'Este anticipo ya se descontó en un rol de pagos; no se puede eliminar.',
+      );
+    }
+    await prisma.employeeAdvance.update({
+      where: { id: advance.id },
+      data: { deletedAt: new Date() },
+    });
+    return success(res, { message: 'Anticipo eliminado' });
+  }),
+);
+
+// Rol de pagos en PDF de un pago ya registrado.
+employeesRouter.get(
+  '/payroll/:id/rol',
+  requirePermission(PERMISSIONS.PAYROLL_READ),
+  validate(idParamSchema, 'params'),
+  asyncHandler(async (req, res) => {
+    await exportRolDePagos(req.params.id, res);
+  }),
+);
+
 // Registrar un pago de nómina → crea un Gasto kind=PAYROLL
 employeesRouter.post(
   '/payroll-payment',
@@ -249,34 +350,80 @@ employeesRouter.post(
     });
     if (!rubro) throw new BadRequestError('El rubro no pertenece al proyecto');
 
-    // Rol de pagos: sueldo + horas extras + fondos de reserva − aporte IESS.
-    // Se recalcula en el servidor con las mismas fórmulas que muestra el form.
+    // Anticipos a descontar: tienen que ser de ESTE empleado y seguir pendientes.
+    const idsAnticipos = req.body.advanceIds ?? [];
+    let anticipos: { id: string; amount: number }[] = [];
+    if (idsAnticipos.length > 0) {
+      anticipos = await prisma.employeeAdvance.findMany({
+        where: {
+          id: { in: idsAnticipos },
+          employeeId: employee.id,
+          appliedGastoId: null,
+          deletedAt: null,
+        },
+        select: { id: true, amount: true },
+      });
+      if (anticipos.length !== idsAnticipos.length) {
+        throw new BadRequestError(
+          'Alguno de los anticipos ya se descontó antes o no es de este empleado. Vuelve a abrir el formulario.',
+        );
+      }
+    }
+    const totalAnticipos = anticipos.reduce((acc, a) => acc + a.amount, 0);
+
+    // Rol de pagos: sueldo del período + horas extras + fondos de reserva
+    // − aporte IESS − anticipos. Se recalcula aquí con las mismas fórmulas
+    // que muestra el formulario (no se confía en lo que mande el navegador).
+    const frecuencia: FrecuenciaPago = esFrecuencia(employee.payFrequency)
+      ? employee.payFrequency
+      : 'MONTHLY';
     const desglose = calcularNomina({
-      baseSalary: req.body.baseSalary ?? employee.monthlySalary,
+      baseSalary: req.body.baseSalary ?? sueldoDelPeriodo(employee.monthlySalary, frecuencia),
+      monthlySalary: employee.monthlySalary,
       supplementaryHours: req.body.supplementaryHours,
       extraordinaryHours: req.body.extraordinaryHours,
       reserveFunds: req.body.reserveFunds ?? employee.reserveFunds,
       iessAffiliated: req.body.iessAffiliated ?? employee.iessAffiliated,
+      advances: totalAnticipos,
       otherDeductions: req.body.otherDeductions,
     });
-    // Con montoManual se respeta lo que se escribió (anticipos, liquidaciones).
+    // Con montoManual se respeta lo que se escribió (liquidaciones, ajustes).
     const monto = req.body.manualAmount ? req.body.amount : desglose.total;
-    if (monto <= 0) throw new BadRequestError('El pago debe ser mayor que cero');
+    if (monto <= 0) {
+      throw new BadRequestError(
+        totalAnticipos > 0
+          ? 'Con esos anticipos el pago queda en cero o negativo. Descuenta menos anticipos o ajusta el monto a mano.'
+          : 'El pago debe ser mayor que cero',
+      );
+    }
 
     const base = req.body.description || `Nómina ${req.body.period} — ${employee.fullName}`;
-    const gasto = await prisma.gasto.create({
-      data: {
-        projectId: req.body.projectId,
-        rubroId: req.body.rubroId,
-        employeeId: employee.id,
-        description: req.body.manualAmount ? base : `${base} · ${resumenNomina(desglose)}`,
-        amount: monto,
-        gastoDate: req.body.paidAt ?? new Date(),
-        kind: 'PAYROLL',
-        payrollDetail: req.body.manualAmount ? undefined : { period: req.body.period, ...desglose },
-        paymentMethod: req.body.paymentMethod,
-        createdBy: req.user.id,
-      },
+    // El gasto y el marcado de los anticipos van juntos: si algo falla, no
+    // queda un anticipo descontado sin su rol (ni al revés).
+    const gasto = await prisma.$transaction(async (tx) => {
+      const creado = await tx.gasto.create({
+        data: {
+          projectId: req.body.projectId,
+          rubroId: req.body.rubroId,
+          employeeId: employee.id,
+          description: req.body.manualAmount ? base : `${base} · ${resumenNomina(desglose)}`,
+          amount: monto,
+          gastoDate: req.body.paidAt ?? new Date(),
+          kind: 'PAYROLL',
+          payrollDetail: req.body.manualAmount
+            ? undefined
+            : { period: req.body.period, payFrequency: frecuencia, ...desglose },
+          paymentMethod: req.body.paymentMethod,
+          createdBy: req.user!.id,
+        },
+      });
+      if (anticipos.length > 0) {
+        await tx.employeeAdvance.updateMany({
+          where: { id: { in: anticipos.map((a) => a.id) }, appliedGastoId: null },
+          data: { appliedGastoId: creado.id, appliedAt: new Date() },
+        });
+      }
+      return creado;
     });
 
     return success(res, gasto, 201);

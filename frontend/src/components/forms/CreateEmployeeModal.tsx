@@ -5,7 +5,11 @@ import useSWR from 'swr';
 import { Modal, Field } from '@/components/ui/Modal';
 import { apiGet, apiPatch, apiPost, ApiClientError } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import { PORCENTAJE_APORTE_IESS, PORCENTAJE_FONDOS_RESERVA } from '@/lib/payroll';
+import {
+  PORCENTAJE_APORTE_IESS,
+  PORCENTAJE_FONDOS_RESERVA,
+  sueldoDelPeriodo,
+} from '@/lib/payroll';
 import type { Project } from '@/types';
 
 export interface Employee {
@@ -16,6 +20,7 @@ export interface Employee {
   monthlySalary: number;
   iessAffiliated?: boolean;
   reserveFunds?: boolean;
+  payFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
   email: string | null;
   phone: string | null;
   hireDate: string | null;
@@ -38,6 +43,7 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
   const [cedula, setCedula] = useState('');
   const [position, setPosition] = useState('');
   const [monthlySalary, setMonthlySalary] = useState('');
+  const [payFrequency, setPayFrequency] = useState<'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('MONTHLY');
   const [iessAffiliated, setIessAffiliated] = useState(false);
   const [reserveFunds, setReserveFunds] = useState(false);
   const [email, setEmail] = useState('');
@@ -56,6 +62,7 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
     setCedula(initial?.cedula ?? '');
     setPosition(initial?.position ?? '');
     setMonthlySalary(initial ? String(initial.monthlySalary) : '');
+    setPayFrequency(initial?.payFrequency ?? 'MONTHLY');
     setIessAffiliated(initial?.iessAffiliated ?? false);
     setReserveFunds(initial?.reserveFunds ?? false);
     setEmail(initial?.email ?? '');
@@ -75,6 +82,7 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
         cedula: cedula || undefined,
         position: position || undefined,
         monthlySalary: monthlySalary ? Number(monthlySalary) : 0,
+        payFrequency,
         iessAffiliated,
         reserveFunds,
         email: email || undefined,
@@ -145,6 +153,28 @@ export function CreateEmployeeModal({ open, onClose, initial, onSaved }: Props) 
             </select>
           </Field>
         </div>
+
+        {/* Cada cuánto se le paga. El sueldo que se guarda es SIEMPRE el mensual. */}
+        <Field
+          label="¿Cada cuánto se le paga?"
+          hint={
+            sueldo > 0
+              ? `Le tocan ${formatCurrency(sueldoDelPeriodo(sueldo, payFrequency))} por ${
+                  payFrequency === 'WEEKLY' ? 'semana' : payFrequency === 'BIWEEKLY' ? 'quincena' : 'mes'
+                }. El sueldo de arriba siempre es el mensual.`
+              : 'El sueldo de arriba siempre es el mensual; aquí se elige cada cuánto cobra.'
+          }
+        >
+          <select
+            value={payFrequency}
+            onChange={(e) => setPayFrequency(e.target.value as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY')}
+            className="input"
+          >
+            <option value="MONTHLY">Mensual</option>
+            <option value="BIWEEKLY">Quincenal</option>
+            <option value="WEEKLY">Semanal</option>
+          </select>
+        </Field>
 
         {/* IESS y fondos de reserva: se aplican solos al registrar el pago. */}
         <div className="space-y-2 rounded-lg border border-surface-border bg-surface-muted/30 p-3">

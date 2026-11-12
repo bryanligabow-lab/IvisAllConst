@@ -23,9 +23,44 @@ export const RECARGO_EXTRAORDINARIA = 2;
 export const PORCENTAJE_FONDOS_RESERVA = 0.0833;
 export const PORCENTAJE_APORTE_IESS = 0.0945;
 
+/** Cada cuánto se le paga a la persona. El sueldo guardado es siempre el mensual. */
+export type FrecuenciaPago = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+
+/**
+ * Parte del sueldo mensual que corresponde a un período de pago.
+ * Se usa el día de sueldo = mensual / 30 (criterio del Código del Trabajo),
+ * así que la semana son 7 días y la quincena, 15.
+ */
+export const FACTOR_PERIODO: Record<FrecuenciaPago, number> = {
+  WEEKLY: 7 / 30,
+  BIWEEKLY: 15 / 30,
+  MONTHLY: 1,
+};
+
+export const ETIQUETA_FRECUENCIA: Record<FrecuenciaPago, string> = {
+  WEEKLY: 'Semanal',
+  BIWEEKLY: 'Quincenal',
+  MONTHLY: 'Mensual',
+};
+
+export function esFrecuencia(v: unknown): v is FrecuenciaPago {
+  return v === 'WEEKLY' || v === 'BIWEEKLY' || v === 'MONTHLY';
+}
+
+/** Lo que le toca de sueldo en un período, según su frecuencia de pago. */
+export function sueldoDelPeriodo(monthlySalary: number, frecuencia: FrecuenciaPago): number {
+  return Math.round(Math.max(0, Number(monthlySalary) || 0) * FACTOR_PERIODO[frecuencia] * 100) / 100;
+}
+
 export interface NominaInput {
-  /** Sueldo del período (normalmente el mensual del empleado). */
+  /** Sueldo que le toca EN ESTE PERÍODO (ver `sueldoDelPeriodo`). */
   baseSalary: number;
+  /**
+   * Sueldo MENSUAL, solo para el valor de la hora extra (mensual / 240).
+   * La hora no cambia porque se le pague semanal o quincenal. Si no se manda,
+   * se asume que `baseSalary` ya es el mensual (comportamiento anterior).
+   */
+  monthlySalary?: number;
   /** Horas suplementarias trabajadas (recargo 50 %). */
   supplementaryHours?: number;
   /** Horas extraordinarias trabajadas (recargo 100 %). */
@@ -34,7 +69,9 @@ export interface NominaInput {
   reserveFunds?: boolean;
   /** ¿Está afiliado al IESS? (se le descuenta el aporte personal) */
   iessAffiliated?: boolean;
-  /** Otros descuentos (anticipos, préstamos…). */
+  /** Anticipos entregados que se descuentan en este rol. */
+  advances?: number;
+  /** Otros descuentos (préstamos, multas…). */
   otherDeductions?: number;
 }
 
@@ -49,6 +86,7 @@ export interface NominaBreakdown {
   baseAportacion: number;
   reserveFundsAmount: number;
   iessAmount: number;
+  advancesAmount: number;
   otherDeductions: number;
   /** Lo que efectivamente se le paga. */
   total: number;
@@ -58,11 +96,14 @@ const redondear = (n: number) => Math.round(n * 100) / 100;
 
 export function calcularNomina(input: NominaInput): NominaBreakdown {
   const baseSalary = Math.max(0, Number(input.baseSalary) || 0);
+  const mensual = Math.max(0, Number(input.monthlySalary ?? input.baseSalary) || 0);
+  const advances = Math.max(0, Number(input.advances) || 0);
   const supplementaryHours = Math.max(0, Number(input.supplementaryHours) || 0);
   const extraordinaryHours = Math.max(0, Number(input.extraordinaryHours) || 0);
   const otherDeductions = Math.max(0, Number(input.otherDeductions) || 0);
 
-  const hourValue = baseSalary / HORAS_MES;
+  // La hora extra sale SIEMPRE del sueldo mensual, no del monto del período.
+  const hourValue = mensual / HORAS_MES;
   const supplementaryAmount = redondear(hourValue * RECARGO_SUPLEMENTARIA * supplementaryHours);
   const extraordinaryAmount = redondear(hourValue * RECARGO_EXTRAORDINARIA * extraordinaryHours);
   const baseAportacion = redondear(baseSalary + supplementaryAmount + extraordinaryAmount);
@@ -84,8 +125,11 @@ export function calcularNomina(input: NominaInput): NominaBreakdown {
     baseAportacion,
     reserveFundsAmount,
     iessAmount,
+    advancesAmount: redondear(advances),
     otherDeductions: redondear(otherDeductions),
-    total: redondear(baseAportacion + reserveFundsAmount - iessAmount - otherDeductions),
+    total: redondear(
+      baseAportacion + reserveFundsAmount - iessAmount - advances - otherDeductions,
+    ),
   };
 }
 
@@ -101,6 +145,7 @@ export function resumenNomina(b: NominaBreakdown): string {
   }
   if (b.reserveFundsAmount > 0) partes.push(`fondos de reserva ${m(b.reserveFundsAmount)}`);
   if (b.iessAmount > 0) partes.push(`− IESS ${m(b.iessAmount)}`);
+  if (b.advancesAmount > 0) partes.push(`− anticipos ${m(b.advancesAmount)}`);
   if (b.otherDeductions > 0) partes.push(`− otros ${m(b.otherDeductions)}`);
   return partes.join(' · ');
 }

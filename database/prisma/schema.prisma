@@ -609,6 +609,9 @@ model Employee {
   iessAffiliated Boolean  @default(false) @map("iess_affiliated")
   // Recibe fondos de reserva mensualizados (8,33 %).
   reserveFunds   Boolean  @default(false) @map("reserve_funds")
+  // Cada cuánto se le paga: WEEKLY (semanal) | BIWEEKLY (quincenal) | MONTHLY.
+  // El sueldo guardado SIEMPRE es el mensual; el del período se calcula.
+  payFrequency   String   @default("MONTHLY") @map("pay_frequency")
   email         String?
   phone         String?
   hireDate      DateTime? @map("hire_date")
@@ -620,15 +623,39 @@ model Employee {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  project    Project?     @relation(fields: [projectId], references: [id])
-  creator    User         @relation("EmployeeCreatedBy", fields: [createdBy], references: [id])
+  project    Project?          @relation(fields: [projectId], references: [id])
+  creator    User              @relation("EmployeeCreatedBy", fields: [createdBy], references: [id])
   gastos     Gasto[]
   attendance Attendance[]
+  advances   EmployeeAdvance[]
 
   @@index([fullName])
   @@index([projectId])
   @@index([deletedAt])
   @@map("employees")
+}
+
+// Anticipo entregado a un empleado a cuenta de su sueldo. Queda PENDIENTE
+// hasta que se descuenta en un rol de pagos (ahí se guarda en qué gasto).
+model EmployeeAdvance {
+  id             String    @id @default(uuid())
+  employeeId     String    @map("employee_id")
+  amount         Float
+  advanceDate    DateTime  @map("advance_date")
+  notes          String?
+  // Gasto de nómina donde se descontó. null = todavía pendiente de descontar.
+  appliedGastoId String?   @map("applied_gasto_id")
+  appliedAt      DateTime? @map("applied_at")
+  createdBy      String    @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, appliedGastoId])
+  @@index([deletedAt])
+  @@map("employee_advances")
 }
 
 // Asistencia diaria de personal por proyecto (Fase 2 — Nómina).

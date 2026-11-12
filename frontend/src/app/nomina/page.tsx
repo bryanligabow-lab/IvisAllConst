@@ -9,7 +9,8 @@ import {
 } from '@/components/forms/CreateEmployeeModal';
 import { PayrollPaymentModal } from '@/components/forms/PayrollPaymentModal';
 import { AsistenciaPanel } from '@/components/forms/AsistenciaPanel';
-import { apiDelete, apiGet } from '@/lib/api';
+import { apiDelete, apiGet, apiFetchBlob } from '@/lib/api';
+import { AnticiposModal } from '@/components/forms/AnticiposModal';
 import { DeleteConfirmDialog } from '@/components/forms/DeleteConfirmDialog';
 import { formatCurrency, formatCalendarDate } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
@@ -47,6 +48,7 @@ export default function NominaPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
+  const [anticiposDe, setAnticiposDe] = useState<Employee | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Employee | null>(null);
 
   function refresh() {
@@ -129,6 +131,12 @@ export default function NominaPage() {
       />
       <PayrollPaymentModal open={showPay} onClose={() => setShowPay(false)} onCreated={refresh} />
 
+      <AnticiposModal
+        employee={anticiposDe}
+        onClose={() => setAnticiposDe(null)}
+        canWrite={canPayroll}
+      />
+
       <DeleteConfirmDialog
         open={!!pendingDelete}
         onClose={() => setPendingDelete(null)}
@@ -190,6 +198,13 @@ export default function NominaPage() {
                     <td data-label="" className="cell-actions">
                       <div className="flex justify-end gap-1">
                         <button
+                          onClick={() => setAnticiposDe(e)}
+                          className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
+                          title="Anticipos de este empleado"
+                        >
+                          💸
+                        </button>
+                        <button
                           onClick={() => setEditing(e)}
                           className="rounded-md px-2 py-1 text-xs hover:bg-surface-muted"
                           title="Editar"
@@ -249,6 +264,26 @@ function Metric({
 }
 
 function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
+  const [bajandoRol, setBajandoRol] = useState<string | null>(null);
+
+  /** Rol de pagos en PDF de un pago ya registrado. */
+  async function descargarRol(pagoId: string, empleado: string) {
+    setBajandoRol(pagoId);
+    try {
+      const blob = await apiFetchBlob(`/employees/payroll/${pagoId}/rol`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Rol de pagos - ${empleado}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBajandoRol(null);
+    }
+  }
+
   if (!history || history.payments.length === 0) return null;
   return (
     <section className="mt-8">
@@ -272,6 +307,7 @@ function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
               <th>Rubro</th>
               <th>Descripción</th>
               <th className="text-right">Monto</th>
+              <th className="text-right">Rol</th>
             </tr>
           </thead>
           <tbody>
@@ -284,6 +320,18 @@ function PayrollHistorySection({ history }: { history?: PayrollHistory }) {
                 <td data-label="Rubro" className="text-xs">{p.rubro.code}. {p.rubro.name}</td>
                 <td data-label="Descripción" className="text-xs">{p.description}</td>
                 <td data-label="Monto" className="text-right font-semibold">{formatCurrency(Number(p.amount), true)}</td>
+                <td data-label="" className="cell-actions">
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => void descargarRol(p.id, p.employee?.fullName ?? 'empleado')}
+                      disabled={bajandoRol === p.id}
+                      className="rounded-md px-2 py-1 text-xs text-ink-secondary hover:bg-surface-muted disabled:opacity-50"
+                      title="Descargar el rol de pagos en PDF"
+                    >
+                      {bajandoRol === p.id ? '…' : '📄 Rol'}
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
